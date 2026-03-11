@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: edifice-core
+  # 数据库配置
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource  # ✅ 显式指定使用Druid
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:edifice_db}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&connectionTimeZone=Asia/Shanghai&forceConnectionTimeZoneToSession=true&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD}
+    druid:
+      initial-size: 5          # 根据预期并发调整
+      min-idle: 5
+      max-active: 20           # 根据最大并发调整
+      max-wait: 10000          # 生产环境可缩短到10秒
+      filters: stat,wall,log4j2    # 添加日志过滤器
+      connection-properties:
+        druid.stat.mergeSql=true
+        druid.stat.slowSqlMillis=5000
+        druid.stat.logSlowSql=true
+  # Redis 配置
+  data:
+    redis:
+      database: ${REDIS_DATABASE:1}
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 5000
+      password: ${REDIS_PASSWORD:}
+      lettuce:
+        pool:
+          max-active: 4
+          max-wait: 1000ms
+          max-idle: 4
+          min-idle: 0
+
+file:
+  upload-common-url: .  # 文件存储一级目录： /yannqing
+  upload-prefix-url: /upload  # 1. 请求路径前缀：127.0.0.1:8080/upload/**  2. 文件存储二级目录： /yannqing/upload/**
+  upload-image-url: images     # 图片文件存储的三级目录  eg: /yannqing/upload/images/**     对应 url 路径：127.0.0.1:8080/upload/images/**
+  upload-audio-url: audios     # 音频文件存储的三级目录  eg: /yannqing/upload/audios/**     对应 url 路径：127.0.0.1:8080/upload/audios/**
+  storage-type: local  # 文件存储类型: local(本地存储) 或 cos(微信云托管对象存储)
