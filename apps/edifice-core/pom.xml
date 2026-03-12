@@ -38,6 +38,7 @@
         <fastjson.version>2.0.32</fastjson.version>
         <knife4j.version>4.4.0</knife4j.version>
         <jackson.version>2.15.4</jackson.version>
+        <commons-codec.version>1.16.0</commons-codec.version>
         <dotenv.version>3.0.2</dotenv.version>
     </properties>
     <dependencies>
@@ -115,6 +116,11 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>${commons-codec.version}</version>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>

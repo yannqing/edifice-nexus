@@ -1,3 +1,5 @@
+app:
+  url: ${APP_URL:http://localhost:8080}
 spring:
   application:
     name: edifice-core
@@ -33,9 +35,59 @@ spring:
           max-idle: 4
           min-idle: 0
 
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  # 枚举包扫描配置（让 MyBatis-Plus 识别 @EnumValue 注解）
+  type-enums-package: com.qsy.edifice.enums
+  global-config:
+    db-config:
+      logic-delete-field: isDelete # 全局逻辑删除的实体字段名
+      logic-delete-value: 1 # 逻辑已删除值（默认为 1）
+      logic-not-delete-value: 0 # 逻辑未删除值（默认为 0）
+      # 字段策略配置
+      insert-strategy: not_null # 插入时忽略 null 值字段
+      update-strategy: not_null # 更新时忽略 null 值字段
+
+
+# 日志配置
+logging:
+  file:
+    name: logs/application.log  # 日志文件路径
+  level:
+    root: INFO                  # 根日志级别
+    com.resume.core: INFO       # 项目包日志级别
+    org.springframework: WARN   # Spring框架日志级别
+    com.baomidou: WARN          # MyBatis-Plus日志级别
+    org.apache.kafka: WARN
+    org.springframework.kafka: WARN
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB       # 单个文件最大大小
+      max-history: 30           # 保留天数
+      file-name-pattern: logs/application-%d{yyyy-MM-dd}.%i.log  # 归档日志文件名模式
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+  basic:
+    username: admin
+    password: admin123
+
 file:
   upload-common-url: .  # 文件存储一级目录： /yannqing
   upload-prefix-url: /upload  # 1. 请求路径前缀：127.0.0.1:8080/upload/**  2. 文件存储二级目录： /yannqing/upload/**
   upload-image-url: images     # 图片文件存储的三级目录  eg: /yannqing/upload/images/**     对应 url 路径：127.0.0.1:8080/upload/images/**
+  upload-document-url: documents   # 文档文件存储的三级目录  eg: /yannqing/upload/documents/**    对应 url 路径：127.0.0.1:8080/upload/documents/**
   upload-audio-url: audios     # 音频文件存储的三级目录  eg: /yannqing/upload/audios/**     对应 url 路径：127.0.0.1:8080/upload/audios/**
   storage-type: local  # 文件存储类型: local(本地存储) 或 cos(微信云托管对象存储)
+
+
+# JWT配置
+jwt:
+  secret: ${JWT_SECRET:your_jwt_secret_key_here}  # JWT密钥，生产环境请使用环境变量
+  expire-times: ${JWT_EXPIRE_TIMES:your_jwt_expire_times_here}  # Token有效期

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qsy.edifice.mapper.ProjectMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="com.qsy.edifice.domain.entity.Project">
+        <id column="project_id" property="projectId" jdbcType="BIGINT"/>
+        <result column="project_name" property="projectName" jdbcType="VARCHAR"/>
+        <result column="project_code" property="projectCode" jdbcType="VARCHAR"/>
+        <result column="project_type" property="projectType" jdbcType="BIGINT"/>
+        <result column="project_status" property="projectStatus" jdbcType="TINYINT"/>
+        <result column="is_show" property="isShow" jdbcType="TINYINT"/>
+        <result column="project_start_time" property="projectStartTime" jdbcType="TIMESTAMP"/>
+        <result column="project_end_time" property="projectEndTime" jdbcType="TIMESTAMP"/>
+        <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
+        <result column="updated_time" property="updatedTime" jdbcType="TIMESTAMP"/>
+        <result column="is_delete" property="isDelete" jdbcType="TINYINT"/>
+    </resultMap>
+
+    <!-- 基础字段列表 -->
+    <sql id="Base_Column_List">
+        project_id, project_name, project_code, project_type, project_status, is_show,
+        project_start_time, project_end_time, created_time, updated_time, is_delete
+    </sql>
+
+    <!-- 根据项目编码查询项目 -->
+    <select id="selectByProjectCode" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM project
+        WHERE project_code = #{projectCode}
+        AND is_delete = 0
+    </select>
+
+    <!-- 根据项目状态查询项目列表 -->
+    <select id="selectByProjectStatus" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM project
+        WHERE project_status = #{projectStatus}
+        AND is_delete = 0
+    </select>
+
+    <!-- 根据项目类型查询项目列表 -->
+    <select id="selectByProjectType" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM project
+        WHERE project_type = #{projectType}
+        AND is_delete = 0
+    </select>
+</mapper>

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qsy.edifice.mapper.InspectionFormMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="com.qsy.edifice.domain.entity.InspectionForm">
+        <id column="inspection_form_id" property="inspectionFormId" jdbcType="BIGINT"/>
+        <result column="inspection_form_code" property="inspectionFormCode" jdbcType="VARCHAR"/>
+        <result column="project_id" property="projectId" jdbcType="VARCHAR"/>
+        <result column="project_stage_id" property="projectStageId" jdbcType="BIGINT"/>
+        <result column="inspection_form_description" property="inspectionFormDescription" jdbcType="VARCHAR"/>
+        <result column="apply_user_id" property="applyUserId" jdbcType="BIGINT"/>
+        <result column="inspection_form_status" property="inspectionFormStatus" jdbcType="TINYINT"/>
+        <result column="file_ids" property="fileIds" jdbcType="VARCHAR"/>
+        <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
+        <result column="updated_time" property="updatedTime" jdbcType="TIMESTAMP"/>
+        <result column="is_delete" property="isDelete" jdbcType="TINYINT"/>
+    </resultMap>
+
+    <!-- 基础字段列表 -->
+    <sql id="Base_Column_List">
+        inspection_form_id, inspection_form_code, project_id, project_stage_id,
+        inspection_form_description, apply_user_id, inspection_form_status, file_ids,
+        created_time, updated_time, is_delete
+    </sql>
+
+    <!-- 根据验工单编号查询验工单 -->
+    <select id="selectByInspectionFormCode" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM inspection_form
+        WHERE inspection_form_code = #{inspectionFormCode}
+        AND is_delete = 0
+    </select>
+
+    <!-- 根据项目id查询验工单列表 -->
+    <select id="selectByProjectId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM inspection_form
+        WHERE project_id = #{projectId}
+        AND is_delete = 0
+    </select>
+
+    <!-- 根据项目阶段id查询验工单列表 -->
+    <select id="selectByProjectStageId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM inspection_form
+        WHERE project_stage_id = #{projectStageId}
+        AND is_delete = 0
+    </select>
+
+    <!-- 根据申请人id查询验工单列表 -->
+    <select id="selectByApplyUserId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM inspection_form
+        WHERE apply_user_id = #{applyUserId}
+        AND is_delete = 0
+    </select>
+</mapper>

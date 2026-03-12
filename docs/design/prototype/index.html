@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目产值分配核算管理系统 - 仪表盘</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', 'Microsoft YaHei', sans-serif;
+            background-color: #F8FAFC;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .sidebar-item-active {
+            background: #EFF6FF;
+            color: #2563EB;
+            border-right: 4px solid #2563EB;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // 模拟图标组件封装
+        const Icon = ({ name, className = "w-5 h-5" }) => {
+            useEffect(() => { lucide.createIcons(); }, []);
+            return <i data-lucide={name} className={className}></i>;
+        };
+
+        const App = () => {
+            // 核心统计数据
+            const stats = [
+                { label: '在研项目总数', value: '42', change: '+3', icon: 'layers', color: 'text-blue-600' },
+                { label: '本月应计收入', value: '￥85.4万', change: '+12.5%', icon: 'trending-up', color: 'text-emerald-600' },
+                { label: '整体回款率', value: '78.2%', change: '-2.1%', icon: 'pie-chart', color: 'text-amber-600' },
+                { label: '待审批验工单', value: '12', change: '需加急', icon: 'clipboard-check', color: 'text-rose-600' },
+            ];
+
+            // 项目回款看板数据（来自实际Excel数据）
+            const projects = [
+                { id: 1, name: '国家电投通辽智慧热电项目', type: 'A类', manager: '朱勇', amount: '1,400,000', progress: 74, collection: 74, status: '部分回款' },
+                { id: 2, name: '宁夏电投永利煤电工程', type: 'A类', manager: '付雪梅', amount: '1,280,000', progress: 45, collection: 100, status: '已回款' },
+                { id: 3, name: '三峡能源哈密光热项目', type: 'B类', manager: '张鑫', amount: '500,000', progress: 60, collection: 65, status: '部分回款' },
+            ];
+
+            // 待办事项数据
+            const todos = [
+                { id: 1, type: '验工审批', title: '通辽热电项目-阶段3验工单', from: '朱勇', time: '2小时前', urgent: true },
+                { id: 2, type: '产值确认', title: '哈密光热项目产值分配方案', from: '系统', time: '1天前', urgent: false },
+                { id: 3, type: '验工审批', title: '永利煤电-阶段2验工单', from: '付雪梅', time: '2天前', urgent: false },
+            ];
+
+            // 我的项目进度数据（来自实际Excel数据）
+            const myProjects = [
+                { id: 1, name: '国家电投通辽智慧热电项目', category: 'A类', phases: 5, currentPhase: 4, status: '进行中' },
+                { id: 2, name: '三峡能源哈密光热项目', category: 'B类', phases: 5, currentPhase: 3, status: '待验收' },
+                { id: 3, name: '甘肃能化兰州新区热电项目', category: 'A类', phases: 5, currentPhase: 2, status: '进行中' },
+                { id: 4, name: '中国石化长城能化330kV变电站', category: 'C类', phases: 3, currentPhase: 3, status: '已完成' },
+            ];
+
+            // 项目分类统计
+            const categoryStats = [
+                { category: 'A类', name: '全程结算', count: 15, color: 'bg-blue-500' },
+                { category: 'B类', name: '全过程', count: 12, color: 'bg-emerald-500' },
+                { category: 'C类', name: '单项', count: 8, color: 'bg-amber-500' },
+                { category: 'D类', name: '技术咨询', count: 5, color: 'bg-purple-500' },
+                { category: 'E类', name: '零星', count: 2, color: 'bg-rose-500' },
+            ];
+
+            return (
+                <div className="flex min-h-screen">
+                    {/* 左侧导航栏 */}
+                    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen">
+                        <div className="p-6 flex items-center gap-3">
+                            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">R</div>
+                            <span className="font-bold text-slate-800 text-lg tracking-tight">然而信工程管理</span>
+                        </div>
+
+                        <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto">
+                            <div className="sidebar-item-active flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all">
+                                <Icon name="layout-dashboard" /> <span className="font-medium text-sm">工作台</span>
+                            </div>
+
+                            {/* 日常工作 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">日常工作</div>
+                            <a href="my-projects.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="folder-open" /> <span className="font-medium text-sm text-slate-600">我的项目</span>
+                            </a>
+                            <a href="inspection-approval.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="clipboard-check" /> <span className="font-medium text-sm text-slate-600">验工审批</span>
+                                <span className="ml-auto text-xs bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full font-semibold">3</span>
+                            </a>
+                            <a href="timesheet.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="clock" /> <span className="font-medium text-sm text-slate-600">工时填报</span>
+                            </a>
+
+                            {/* 项目管理 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">项目管理</div>
+                            <a href="all-projects.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="briefcase" /> <span className="font-medium text-sm text-slate-600">全部项目</span>
+                            </a>
+                            <a href="inspection-management.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="file-text" /> <span className="font-medium text-sm text-slate-600">验工单管理</span>
+                            </a>
+
+                            {/* 财务管理 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">财务管理</div>
+                            <a href="output-value.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="coins" /> <span className="font-medium text-sm text-slate-600">产值分配</span>
+                            </a>
+                            <a href="collection.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="wallet" /> <span className="font-medium text-sm text-slate-600">回款管理</span>
+                            </a>
+
+                            {/* 报表统计 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">报表统计</div>
+                            <a href="statistics.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="bar-chart-3" /> <span className="font-medium text-sm text-slate-600">统计报表</span>
+                            </a>
+                            <a href="performance.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="user-circle" /> <span className="font-medium text-sm text-slate-600">个人绩效</span>
+                            </a>
+                        </nav>
+
+                        <div className="p-4 border-t border-slate-100 mt-auto">
+                            <div className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl cursor-pointer">
+                                <div className="w-10 h-10 bg-slate-200 rounded-full overflow-hidden">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" />
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                    <p className="text-sm font-semibold text-slate-800 truncate">陈经理</p>
+                                    <p className="text-xs text-slate-400 truncate">管理员</p>
+                                </div>
+                                <Icon name="log-out" className="w-4 h-4 text-slate-400" />
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* 主体内容区 */}
+                    <main className="flex-1 p-8 space-y-8 overflow-y-auto">
+                        {/* 顶部标题与筛选 */}
+                        <div className="flex justify-between items-end">
+                            <div>
+                                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">全局数据仪表盘</h1>
+                                <p className="text-slate-500 text-sm mt-1">欢迎回来，这是截至目前的产值分配与核算概览信息。</p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all flex items-center gap-2">
+                                    <Icon name="calendar" className="w-4 h-4" /> 2024年第一季度
+                                </button>
+                                <button className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center gap-2">
+                                    <Icon name="plus" className="w-4 h-4" /> 创建新项目
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 核心指标统计卡片 */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            {stats.map((item, idx) => (
+                                <div key={idx} className="glass-card p-6 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+                                    <div className="flex justify-between items-start">
+                                        <div className={`p-3 rounded-xl ${item.color.replace('text', 'bg').replace('600', '100')} ${item.color}`}>
+                                            <Icon name={item.icon} />
+                                        </div>
+                                        <span className={`text-xs font-bold px-2 py-1 rounded-lg ${item.change.startsWith('+') ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>
+                                            {item.change}
+                                        </span>
+                                    </div>
+                                    <div className="mt-4">
+                                        <p className="text-sm font-medium text-slate-500">{item.label}</p>
+                                        <h3 className="text-2xl font-bold text-slate-900 mt-1">{item.value}</h3>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            {/* 项目回款与进度列表 */}
+                            <div className="lg:col-span-2 glass-card rounded-2xl p-6 shadow-sm">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-lg font-bold text-slate-800">关键项目回款看板</h3>
+                                    <button className="text-sm text-blue-600 font-medium hover:underline">查看全部</button>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                        <thead>
+                                            <tr className="text-slate-400 text-xs uppercase tracking-wider border-b border-slate-50">
+                                                <th className="pb-4 font-semibold">项目名称</th>
+                                                <th className="pb-4 font-semibold">项目经理</th>
+                                                <th className="pb-4 font-semibold">验收进度</th>
+                                                <th className="pb-4 font-semibold text-center">回款率</th>
+                                                <th className="pb-4 font-semibold text-right">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-sm divide-y divide-slate-50">
+                                            {projects.map(p => (
+                                                <tr key={p.id} className="group hover:bg-slate-50/50 transition-colors">
+                                                    <td className="py-4">
+                                                        <span className="font-semibold text-slate-800 block">{p.name}</span>
+                                                        <span className="text-xs text-slate-400">分类：{p.type} | 金额：￥{p.amount}</span>
+                                                    </td>
+                                                    <td className="py-4 text-slate-600">{p.manager}</td>
+                                                    <td className="py-4">
+                                                        <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-blue-500" style={{ width: `${p.progress}%` }}></div>
+                                                        </div>
+                                                        <span className="text-[10px] text-slate-400 mt-1 block">{p.progress}% 已验收</span>
+                                                    </td>
+                                                    <td className="py-4 text-center text-slate-800 font-medium">{p.collection}%</td>
+                                                    <td className="py-4 text-right">
+                                                        <button className="p-2 text-slate-400 hover:text-blue-600 transition-colors">
+                                                            <Icon name="more-horizontal" className="w-4 h-4" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* 待办事项 */}
+                            <div className="glass-card rounded-2xl p-6 shadow-sm">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-lg font-bold text-slate-800">待办事项</h3>
+                                    <span className="text-xs bg-rose-100 text-rose-600 px-2 py-1 rounded-full font-semibold">3 待处理</span>
+                                </div>
+                                <div className="space-y-3">
+                                    {todos.map(todo => (
+                                        <div key={todo.id} className="flex items-start gap-3 p-3 bg-slate-50/50 rounded-xl hover:bg-slate-100/50 transition-colors cursor-pointer">
+                                            <div className={`p-2 rounded-lg ${todo.urgent ? 'bg-rose-100 text-rose-600' : 'bg-blue-100 text-blue-600'}`}>
+                                                <Icon name={todo.type === '验工审批' ? 'clipboard-check' : 'coins'} className="w-4 h-4" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs text-slate-400">{todo.type}</span>
+                                                    {todo.urgent && <span className="text-xs bg-rose-500 text-white px-1.5 py-0.5 rounded">加急</span>}
+                                                </div>
+                                                <p className="text-sm font-medium text-slate-800 truncate">{todo.title}</p>
+                                                <p className="text-xs text-slate-400 mt-1">来自 {todo.from} · {todo.time}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button className="w-full mt-4 py-2 text-sm text-blue-600 font-medium hover:bg-blue-50 rounded-lg transition-colors">
+                                    查看全部待办
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 第三行：我的项目进度 + 项目分类统计 */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            {/* 我的项目进度 */}
+                            <div className="lg:col-span-2 glass-card rounded-2xl p-6 shadow-sm">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-lg font-bold text-slate-800">我的项目进度</h3>
+                                    <button className="text-sm text-blue-600 font-medium hover:underline">管理项目</button>
+                                </div>
+                                <div className="space-y-4">
+                                    {myProjects.map(project => (
+                                        <div key={project.id} className="p-4 bg-slate-50/50 rounded-xl hover:bg-slate-100/50 transition-colors">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <span className="text-sm font-semibold text-slate-800">{project.name}</span>
+                                                    <span className="ml-2 text-xs text-slate-400">{project.category}</span>
+                                                </div>
+                                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                                    project.status === '已完成' ? 'bg-emerald-100 text-emerald-600' :
+                                                    project.status === '待验收' ? 'bg-amber-100 text-amber-600' :
+                                                    'bg-blue-100 text-blue-600'
+                                                }`}>{project.status}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex-1 flex gap-1">
+                                                    {[...Array(project.phases)].map((_, i) => (
+                                                        <div
+                                                            key={i}
+                                                            className={`h-2 flex-1 rounded-full ${
+                                                                i < project.currentPhase ? 'bg-blue-500' : 'bg-slate-200'
+                                                            }`}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                <span className="text-xs text-slate-500 font-medium whitespace-nowrap">
+                                                    阶段 {project.currentPhase}/{project.phases}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* 项目分类统计 */}
+                            <div className="glass-card rounded-2xl p-6 shadow-sm">
+                                <h3 className="text-lg font-bold text-slate-800 mb-6">项目分类分布</h3>
+                                <div className="space-y-4">
+                                    {categoryStats.map((item, idx) => (
+                                        <div key={idx} className="flex items-center gap-3">
+                                            <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
+                                            <div className="flex-1">
+                                                <div className="flex justify-between text-sm mb-1">
+                                                    <span className="text-slate-600">{item.category} · {item.name}</span>
+                                                    <span className="text-slate-800 font-semibold">{item.count} 个</span>
+                                                </div>
+                                                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                    <div className={`h-full ${item.color}`} style={{ width: `${(item.count / 42) * 100}%` }}></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-6 p-4 bg-slate-50 rounded-xl">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-slate-500">项目总数</span>
+                                        <span className="text-2xl font-bold text-slate-800">42</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 第四行：个人产值统计 + 收入趋势 */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            {/* 个人产值统计 */}
+                            <div className="lg:col-span-2 glass-card rounded-2xl p-6 shadow-sm">
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-lg font-bold text-slate-800">个人产值统计</h3>
+                                    <button className="text-sm text-blue-600 font-medium hover:underline">查看详情</button>
+                                </div>
+                                <div className="grid grid-cols-4 gap-4">
+                                    <div className="p-4 bg-blue-50 rounded-xl text-center">
+                                        <p className="text-xs text-blue-600 font-medium mb-1">本月产值</p>
+                                        <p className="text-xl font-bold text-blue-800">￥1.5万</p>
+                                        <p className="text-xs text-emerald-600 mt-1">+12%</p>
+                                    </div>
+                                    <div className="p-4 bg-emerald-50 rounded-xl text-center">
+                                        <p className="text-xs text-emerald-600 font-medium mb-1">本季产值</p>
+                                        <p className="text-xl font-bold text-emerald-800">￥4.5万</p>
+                                        <p className="text-xs text-emerald-600 mt-1">+8%</p>
+                                    </div>
+                                    <div className="p-4 bg-amber-50 rounded-xl text-center">
+                                        <p className="text-xs text-amber-600 font-medium mb-1">本年产值</p>
+                                        <p className="text-xl font-bold text-amber-800">￥12万</p>
+                                        <p className="text-xs text-emerald-600 mt-1">+15%</p>
+                                    </div>
+                                    <div className="p-4 bg-purple-50 rounded-xl text-center">
+                                        <p className="text-xs text-purple-600 font-medium mb-1">累计产值</p>
+                                        <p className="text-xl font-bold text-purple-800">￥35万</p>
+                                        <p className="text-xs text-slate-400 mt-1">历史总计</p>
+                                    </div>
+                                </div>
+                                <div className="mt-6 pt-4 border-t border-slate-100">
+                                    <div className="flex justify-between items-center text-sm">
+                                        <div className="flex items-center gap-6">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                                                <span className="text-slate-500">管理工作</span>
+                                                <span className="font-semibold text-slate-800">￥0.9万</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                                                <span className="text-slate-500">基础工作</span>
+                                                <span className="font-semibold text-slate-800">￥0.4万</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                                                <span className="text-slate-500">智励工作</span>
+                                                <span className="font-semibold text-slate-800">￥0.2万</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 收入趋势简表 */}
+                            <div className="glass-card rounded-2xl p-6 shadow-sm">
+                                <h3 className="text-lg font-bold text-slate-800 mb-6">收入趋势对比</h3>
+                                <div className="space-y-6">
+                                    {['2024-Q1', '2023-Q4', '2023-Q3'].map((time, idx) => (
+                                        <div key={idx} className="space-y-2">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-slate-500 font-medium">{time}</span>
+                                                <span className="text-slate-900 font-bold">￥{120 - idx * 20}万</span>
+                                            </div>
+                                            <div className="h-2 bg-slate-100 rounded-full flex overflow-hidden">
+                                                <div className="bg-blue-600" style={{ width: `${80 - idx * 10}%` }}></div>
+                                                <div className="bg-emerald-400" style={{ width: '15%' }}></div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <div className="p-4 bg-blue-50 rounded-xl mt-6">
+                                        <div className="flex gap-3">
+                                            <Icon name="zap" className="text-blue-600" />
+                                            <div>
+                                                <p className="text-sm font-bold text-blue-900">系统提示</p>
+                                                <p className="text-xs text-blue-700 mt-1">当前有 2 个项目效益收费已达到修正阈值，建议及时调整预计效益。</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>

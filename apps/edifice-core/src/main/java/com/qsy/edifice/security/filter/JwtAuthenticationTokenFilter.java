@@ -8,6 +8,7 @@ import com.qsy.edifice.utils.JwtUtils;
 import com.qsy.edifice.utils.RedisCache;
 import com.qsy.edifice.utils.ResultUtils;
 import com.qsy.edifice.utils.Tools;
+import jakarta.annotation.Resource;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,15 +16,20 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
 @Slf4j
+@Component
 public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
 
 
     private final RedisCache redisCache;
+
+    @Resource
+    private JwtUtils jwtUtils;
 
     public JwtAuthenticationTokenFilter(RedisCache redisCache) {
         this.redisCache = redisCache;
@@ -56,11 +62,11 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
             try {
                 //验证token的合法性，不抛异常则合法
                 log.info("开始验证 Access Token: {}", token.substring(0, Math.min(50, token.length())) + "...");
-                JwtUtils.tokenVerify(token);
+                jwtUtils.tokenVerify(token);
                 log.info("Access Token 格式验证通过");
 
                 // 验证 Token 类型（确保是 Access Token）
-                String tokenType = JwtUtils.getTokenType(token);
+                String tokenType = jwtUtils.getTokenType(token);
                 if (!"access".equals(tokenType)) {
                     response.setStatus(403);
                     response.setContentType("application/json;charset=UTF-8");
@@ -70,7 +76,7 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
                 }
 
                 //从token中获取到用户的信息，以及对应用户的权限信息
-                SysUser user = JwtUtils.getUserFromToken(token);
+                SysUser user = jwtUtils.getUserFromToken(token);
                 log.info("成功从 Access Token 获取用户信息: {}", user.getUsername());
 
 //                List<String> userAuthorization = JwtUtils.getUserAuthorizationFromToken(token);

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qsy.edifice.mapper.ContractMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="com.qsy.edifice.domain.entity.Contract">
+        <id column="contract_id" property="contractId" jdbcType="BIGINT"/>
+        <result column="contract_name" property="contractName" jdbcType="VARCHAR"/>
+        <result column="contract_code" property="contractCode" jdbcType="VARCHAR"/>
+        <result column="contract_type" property="contractType" jdbcType="TINYINT"/>
+        <result column="contract_amount" property="contractAmount" jdbcType="INTEGER"/>
+        <result column="contract_file" property="contractFile" jdbcType="BIGINT"/>
+        <result column="contract_other_files" property="contractOtherFiles" jdbcType="VARCHAR"/>
+        <result column="base_amount" property="baseAmount" jdbcType="INTEGER"/>
+        <result column="benefit_rules" property="benefitRules" jdbcType="VARCHAR"/>
+        <result column="signing_date" property="signingDate" jdbcType="TIMESTAMP"/>
+        <result column="pre_start_date" property="preStartDate" jdbcType="TIMESTAMP"/>
+        <result column="pre_end_date" property="preEndDate" jdbcType="TIMESTAMP"/>
+        <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
+        <result column="updated_time" property="updatedTime" jdbcType="TIMESTAMP"/>
+        <result column="is_delete" property="isDelete" jdbcType="TINYINT"/>
+    </resultMap>
+
+    <!-- 基础字段列表 -->
+    <sql id="Base_Column_List">
+        contract_id, contract_name, contract_code, contract_type, contract_amount,
+        contract_file, contract_other_files, base_amount, benefit_rules, signing_date,
+        pre_start_date, pre_end_date, created_time, updated_time, is_delete
+    </sql>
+
+    <!-- 根据合同编码查询合同 -->
+    <select id="selectByContractCode" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM contract
+        WHERE contract_code = #{contractCode}
+        AND is_delete = 0
+    </select>
+</mapper>

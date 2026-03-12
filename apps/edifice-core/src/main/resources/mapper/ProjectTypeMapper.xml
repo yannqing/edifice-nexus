@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qsy.edifice.mapper.ProjectTypeMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="com.qsy.edifice.domain.entity.ProjectType">
+        <id column="project_type_id" property="projectTypeId" jdbcType="BIGINT"/>
+        <result column="project_type_name" property="projectTypeName" jdbcType="VARCHAR"/>
+        <result column="project_code" property="projectCode" jdbcType="VARCHAR"/>
+        <result column="project_type_status" property="projectTypeStatus" jdbcType="TINYINT"/>
+        <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
+        <result column="updated_time" property="updatedTime" jdbcType="TIMESTAMP"/>
+        <result column="is_delete" property="isDelete" jdbcType="TINYINT"/>
+    </resultMap>
+
+    <!-- 基础字段列表 -->
+    <sql id="Base_Column_List">
+        project_type_id, project_type_name, project_code, project_type_status,
+        created_time, updated_time, is_delete
+    </sql>
+
+    <!-- 根据项目类型编码查询项目类型 -->
+    <select id="selectByProjectCode" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM project_type
+        WHERE project_code = #{projectCode}
+        AND is_delete = 0
+    </select>
+
+    <!-- 查询所有启用的项目类型 -->
+    <select id="selectAllEnabled" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM project_type
+        WHERE project_type_status = 1
+        AND is_delete = 0
+    </select>
+</mapper>

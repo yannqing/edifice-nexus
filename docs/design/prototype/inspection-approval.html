@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>验工审批 - 项目产值分配核算管理系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', 'Microsoft YaHei', sans-serif;
+            background-color: #F8FAFC;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .sidebar-item-active {
+            background: #EFF6FF;
+            color: #2563EB;
+            border-right: 4px solid #2563EB;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // 模拟图标组件封装
+        const Icon = ({ name, className = "w-5 h-5" }) => {
+            useEffect(() => { lucide.createIcons(); }, []);
+            return <i data-lucide={name} className={className}></i>;
+        };
+
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('pending');
+            const [searchText, setSearchText] = useState('');
+            const [selectedInspection, setSelectedInspection] = useState(null);
+            const [showModal, setShowModal] = useState(false);
+
+            // 验工单数据（来自实际Excel数据）
+            const inspections = [
+                {
+                    id: 1,
+                    code: 'YG202401150001',
+                    projectName: '国家电投通辽智慧热电项目',
+                    projectCode: 'PJ2024-004',
+                    category: 'A类',
+                    phase: '阶段3',
+                    phaseName: '终稿编制',
+                    phaseRatio: '20%',
+                    phaseAmount: 280000,
+                    submitter: '朱勇',
+                    submitterAvatar: 'Zhu',
+                    submitTime: '2024-01-15 14:30',
+                    status: '待初审',
+                    description: '本阶段已完成终稿编制工作，包括：1. 完成全部工程量复核；2. 完成单价分析；3. 编制完成结算报告初稿。',
+                    attachments: ['通辽项目结算报告_v3.pdf', '工程量计算底稿.xlsx', '单价分析表.xlsx'],
+                    urgent: true
+                },
+                {
+                    id: 2,
+                    code: 'YG202401140002',
+                    projectName: '大坝电厂项目',
+                    projectCode: 'PJ2024-013',
+                    category: 'D类',
+                    phase: '阶段1',
+                    phaseName: '方案计划编制',
+                    phaseRatio: '15%',
+                    phaseAmount: 12750,
+                    submitter: '赵华',
+                    submitterAvatar: 'Zhao',
+                    submitTime: '2024-01-14 10:15',
+                    status: '待初审',
+                    description: '已完成项目方案计划编制，包括项目实施计划、人员安排及工作分解。',
+                    attachments: ['大坝电厂实施计划.docx', '工作分解结构.xlsx'],
+                    urgent: false
+                },
+                {
+                    id: 3,
+                    code: 'YG202401130003',
+                    projectName: '内蒙杭锦旗供热管网项目',
+                    projectCode: 'PJ2024-003',
+                    category: 'B类',
+                    phase: '阶段4',
+                    phaseName: '核对',
+                    phaseRatio: '20%',
+                    phaseAmount: 52000,
+                    submitter: '付雪梅',
+                    submitterAvatar: 'Fu',
+                    submitTime: '2024-01-13 16:45',
+                    status: '待终审',
+                    description: '核对阶段工作已完成，与建设单位完成三轮核对，已达成一致意见。',
+                    attachments: ['核对记录表.pdf', '会议纪要.docx', '最终确认函.pdf'],
+                    urgent: false
+                },
+                {
+                    id: 4,
+                    code: 'YG202401100004',
+                    projectName: '三峡能源哈密光热项目',
+                    projectCode: 'PJ2024-007',
+                    category: 'B类',
+                    phase: '阶段2',
+                    phaseName: '过程服务',
+                    phaseRatio: '35%',
+                    phaseAmount: 175000,
+                    submitter: '张鑫',
+                    submitterAvatar: 'Zhang',
+                    submitTime: '2024-01-10 09:30',
+                    status: '已通过',
+                    description: '过程服务阶段已完成，包括变更审核、签证审核等工作。',
+                    attachments: ['哈密光热变更审核汇总.xlsx', '签证审核记录.pdf'],
+                    urgent: false,
+                    approvalHistory: [
+                        { role: '业务部经理', name: '赵经理', result: '通过', time: '2024-01-11 10:00', comment: '材料完整，同意通过' },
+                        { role: '总工程师', name: '钱总工', result: '通过', time: '2024-01-12 14:30', comment: '技术质量合格，同意验收' }
+                    ]
+                },
+                {
+                    id: 5,
+                    code: 'YG202401080005',
+                    projectName: '宁夏机关事务管理局项目',
+                    projectCode: 'PJ2024-006',
+                    category: 'C类',
+                    phase: '阶段2',
+                    phaseName: '成果编制',
+                    phaseRatio: '80%',
+                    phaseAmount: 144000,
+                    submitter: '王强',
+                    submitterAvatar: 'Wang',
+                    submitTime: '2024-01-08 11:20',
+                    status: '已驳回',
+                    description: '成果编制工作已完成。',
+                    attachments: ['结算成果.pdf'],
+                    urgent: false,
+                    approvalHistory: [
+                        { role: '业务部经理', name: '赵经理', result: '驳回', time: '2024-01-09 15:00', comment: '附件材料不完整，缺少计算底稿，请补充后重新提交' }
+                    ]
+                },
+            ];
+
+            // 统计数据
+            const stats = {
+                pending: inspections.filter(i => i.status === '待初审' || i.status === '待终审').length,
+                pendingFirst: inspections.filter(i => i.status === '待初审').length,
+                pendingFinal: inspections.filter(i => i.status === '待终审').length,
+                passed: inspections.filter(i => i.status === '已通过').length,
+                rejected: inspections.filter(i => i.status === '已驳回').length,
+            };
+
+            // 筛选后的验工单
+            const filteredInspections = inspections.filter(i => {
+                if (activeTab === 'pending') return i.status === '待初审' || i.status === '待终审';
+                if (activeTab === 'passed') return i.status === '已通过';
+                if (activeTab === 'rejected') return i.status === '已驳回';
+                return true;
+            }).filter(i => {
+                if (!searchText) return true;
+                return i.projectName.includes(searchText) || i.code.includes(searchText) || i.submitter.includes(searchText);
+            });
+
+            // 状态样式
+            const getStatusStyle = (status) => {
+                switch(status) {
+                    case '待初审': return 'bg-amber-100 text-amber-600';
+                    case '待终审': return 'bg-blue-100 text-blue-600';
+                    case '已通过': return 'bg-emerald-100 text-emerald-600';
+                    case '已驳回': return 'bg-rose-100 text-rose-600';
+                    default: return 'bg-slate-100 text-slate-500';
+                }
+            };
+
+            // 打开详情弹窗
+            const openDetail = (inspection) => {
+                setSelectedInspection(inspection);
+                setShowModal(true);
+            };
+
+            return (
+                <div className="flex min-h-screen">
+                    {/* 左侧导航栏 */}
+                    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen">
+                        <div className="p-6 flex items-center gap-3">
+                            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">R</div>
+                            <span className="font-bold text-slate-800 text-lg tracking-tight">然而信工程管理</span>
+                        </div>
+
+                        <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto">
+                            <a href="index.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="layout-dashboard" /> <span className="font-medium text-sm text-slate-600">工作台</span>
+                            </a>
+
+                            {/* 日常工作 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">日常工作</div>
+                            <a href="my-projects.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="folder-open" /> <span className="font-medium text-sm text-slate-600">我的项目</span>
+                            </a>
+                            <div className="sidebar-item-active flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all">
+                                <Icon name="clipboard-check" /> <span className="font-medium text-sm">验工审批</span>
+                                <span className="ml-auto text-xs bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full font-semibold">{stats.pending}</span>
+                            </div>
+                            <a href="timesheet.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="clock" /> <span className="font-medium text-sm text-slate-600">工时填报</span>
+                            </a>
+
+                            {/* 项目管理 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">项目管理</div>
+                            <a href="all-projects.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="briefcase" /> <span className="font-medium text-sm text-slate-600">全部项目</span>
+                            </a>
+                            <a href="inspection-management.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="file-text" /> <span className="font-medium text-sm text-slate-600">验工单管理</span>
+                            </a>
+
+                            {/* 财务管理 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">财务管理</div>
+                            <a href="output-value.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="coins" /> <span className="font-medium text-sm text-slate-600">产值分配</span>
+                            </a>
+                            <a href="collection.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="wallet" /> <span className="font-medium text-sm text-slate-600">回款管理</span>
+                            </a>
+
+                            {/* 报表统计 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">报表统计</div>
+                            <a href="statistics.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="bar-chart-3" /> <span className="font-medium text-sm text-slate-600">统计报表</span>
+                            </a>
+                            <a href="performance.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="user-circle" /> <span className="font-medium text-sm text-slate-600">个人绩效</span>
+                            </a>
+                        </nav>
+
+                        <div className="p-4 border-t border-slate-100 mt-auto">
+                            <div className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl cursor-pointer">
+                                <div className="w-10 h-10 bg-slate-200 rounded-full overflow-hidden">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" />
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                    <p className="text-sm font-semibold text-slate-800 truncate">陈经理</p>
+                                    <p className="text-xs text-slate-400 truncate">管理员</p>
+                                </div>
+                                <Icon name="log-out" className="w-4 h-4 text-slate-400" />
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* 主体内容区 */}
+                    <main className="flex-1 p-8 space-y-6 overflow-y-auto">
+                        {/* 顶部标题 */}
+                        <div className="flex justify-between items-end">
+                            <div>
+                                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">验工审批</h1>
+                                <p className="text-slate-500 text-sm mt-1">审核项目阶段验工申请，确保工作质量与文档完整性。</p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all flex items-center gap-2">
+                                    <Icon name="filter" className="w-4 h-4" /> 高级筛选
+                                </button>
+                                <button className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all flex items-center gap-2">
+                                    <Icon name="download" className="w-4 h-4" /> 导出
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 统计卡片 */}
+                        <div className="grid grid-cols-4 gap-4">
+                            <div className="glass-card p-4 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
+                                        <Icon name="clock" className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500">待审批</p>
+                                        <p className="text-xl font-bold text-slate-800">{stats.pending}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="glass-card p-4 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                                        <Icon name="user-check" className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500">待初审</p>
+                                        <p className="text-xl font-bold text-slate-800">{stats.pendingFirst}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="glass-card p-4 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+                                        <Icon name="check-circle" className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500">已通过</p>
+                                        <p className="text-xl font-bold text-slate-800">{stats.passed}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="glass-card p-4 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
+                                        <Icon name="x-circle" className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500">已驳回</p>
+                                        <p className="text-xl font-bold text-slate-800">{stats.rejected}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 筛选标签与搜索 */}
+                        <div className="flex items-center gap-4">
+                            <div className="flex bg-white rounded-xl p-1 shadow-sm border border-slate-100">
+                                {[
+                                    { key: 'pending', label: '待审批', count: stats.pending },
+                                    { key: 'passed', label: '已通过', count: stats.passed },
+                                    { key: 'rejected', label: '已驳回', count: stats.rejected },
+                                    { key: 'all', label: '全部', count: inspections.length },
+                                ].map(item => (
+                                    <button
+                                        key={item.key}
+                                        onClick={() => setActiveTab(item.key)}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                                            activeTab === item.key
+                                                ? 'bg-blue-600 text-white shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-700'
+                                        }`}
+                                    >
+                                        {item.label}
+                                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                                            activeTab === item.key
+                                                ? 'bg-blue-500 text-white'
+                                                : 'bg-slate-100 text-slate-500'
+                                        }`}>{item.count}</span>
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="flex-1"></div>
+                            <div className="relative">
+                                <Icon name="search" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="text"
+                                    placeholder="搜索验工单号、项目或发起人..."
+                                    value={searchText}
+                                    onChange={(e) => setSearchText(e.target.value)}
+                                    className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+                        </div>
+
+                        {/* 验工单列表 */}
+                        <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+                            <table className="w-full">
+                                <thead className="bg-slate-50/50">
+                                    <tr className="text-slate-500 text-xs uppercase tracking-wider">
+                                        <th className="text-left py-4 px-6 font-semibold">验工单信息</th>
+                                        <th className="text-left py-4 px-4 font-semibold">项目阶段</th>
+                                        <th className="text-left py-4 px-4 font-semibold">阶段产值</th>
+                                        <th className="text-left py-4 px-4 font-semibold">发起人</th>
+                                        <th className="text-left py-4 px-4 font-semibold">发起时间</th>
+                                        <th className="text-center py-4 px-4 font-semibold">状态</th>
+                                        <th className="text-right py-4 px-6 font-semibold">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {filteredInspections.map(item => (
+                                        <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="py-4 px-6">
+                                                <div className="flex items-center gap-3">
+                                                    {item.urgent && (
+                                                        <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse"></span>
+                                                    )}
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-slate-800">{item.projectName}</p>
+                                                        <p className="text-xs text-slate-400 mt-0.5">{item.code}</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                <span className="text-sm text-slate-600">{item.phase} · {item.phaseName}</span>
+                                                <p className="text-xs text-slate-400 mt-0.5">{item.category} · 产值比例 {item.phaseRatio}</p>
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                <span className="text-sm font-semibold text-slate-800">￥{(item.phaseAmount / 10000).toFixed(2)}万</span>
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-600">
+                                                        {item.submitter[0]}
+                                                    </div>
+                                                    <span className="text-sm text-slate-600">{item.submitter}</span>
+                                                </div>
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                <span className="text-sm text-slate-500">{item.submitTime}</span>
+                                            </td>
+                                            <td className="py-4 px-4 text-center">
+                                                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusStyle(item.status)}`}>
+                                                    {item.status}
+                                                </span>
+                                            </td>
+                                            <td className="py-4 px-6 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => openDetail(item)}
+                                                        className="px-3 py-1.5 text-xs text-slate-600 font-medium bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                                                    >
+                                                        查看详情
+                                                    </button>
+                                                    {(item.status === '待初审' || item.status === '待终审') && (
+                                                        <button
+                                                            onClick={() => openDetail(item)}
+                                                            className="px-3 py-1.5 text-xs text-white font-medium bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                                                        >
+                                                            审批
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+
+                            {/* 空状态 */}
+                            {filteredInspections.length === 0 && (
+                                <div className="py-16 text-center">
+                                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <Icon name="clipboard-check" className="w-8 h-8 text-slate-400" />
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-slate-800 mb-2">暂无验工单</h3>
+                                    <p className="text-sm text-slate-500">当前筛选条件下没有找到验工单</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 分页 */}
+                        {filteredInspections.length > 0 && (
+                            <div className="flex justify-between items-center pt-2">
+                                <p className="text-sm text-slate-500">
+                                    共 <span className="font-semibold text-slate-800">{filteredInspections.length}</span> 条记录
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50" disabled>
+                                        <Icon name="chevron-left" className="w-4 h-4" />
+                                    </button>
+                                    <button className="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg">1</button>
+                                    <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                                        <Icon name="chevron-right" className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {/* 详情/审批弹窗 */}
+                    {showModal && selectedInspection && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-8">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+                                {/* 弹窗头部 */}
+                                <div className="p-6 border-b border-slate-100 flex justify-between items-start">
+                                    <div>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <h2 className="text-xl font-bold text-slate-900">验工单详情</h2>
+                                            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusStyle(selectedInspection.status)}`}>
+                                                {selectedInspection.status}
+                                            </span>
+                                            {selectedInspection.urgent && (
+                                                <span className="text-xs bg-rose-500 text-white px-2 py-0.5 rounded font-medium">加急</span>
+                                            )}
+                                        </div>
+                                        <p className="text-sm text-slate-500">{selectedInspection.code}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowModal(false)}
+                                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                    >
+                                        <Icon name="x" className="w-5 h-5" />
+                                    </button>
+                                </div>
+
+                                {/* 弹窗内容 */}
+                                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                                    {/* 基本信息 */}
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div className="space-y-4">
+                                            <div>
+                                                <p className="text-xs text-slate-400 mb-1">项目名称</p>
+                                                <p className="text-sm font-medium text-slate-800">{selectedInspection.projectName}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-400 mb-1">项目分类</p>
+                                                <p className="text-sm font-medium text-slate-800">{selectedInspection.category}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-400 mb-1">发起人</p>
+                                                <p className="text-sm font-medium text-slate-800">{selectedInspection.submitter}</p>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-4">
+                                            <div>
+                                                <p className="text-xs text-slate-400 mb-1">验工阶段</p>
+                                                <p className="text-sm font-medium text-slate-800">{selectedInspection.phase} · {selectedInspection.phaseName}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-400 mb-1">阶段产值</p>
+                                                <p className="text-sm font-medium text-slate-800">￥{selectedInspection.phaseAmount.toLocaleString()} （{selectedInspection.phaseRatio}）</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-400 mb-1">发起时间</p>
+                                                <p className="text-sm font-medium text-slate-800">{selectedInspection.submitTime}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 验工说明 */}
+                                    <div>
+                                        <p className="text-xs text-slate-400 mb-2">验工说明</p>
+                                        <div className="p-4 bg-slate-50 rounded-xl text-sm text-slate-600 leading-relaxed">
+                                            {selectedInspection.description}
+                                        </div>
+                                    </div>
+
+                                    {/* 验收材料 */}
+                                    <div>
+                                        <p className="text-xs text-slate-400 mb-2">验收材料</p>
+                                        <div className="space-y-2">
+                                            {selectedInspection.attachments.map((file, idx) => (
+                                                <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                                                            <Icon name="file-text" className="w-4 h-4" />
+                                                        </div>
+                                                        <span className="text-sm text-slate-700">{file}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <button className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors">
+                                                            <Icon name="eye" className="w-4 h-4" />
+                                                        </button>
+                                                        <button className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors">
+                                                            <Icon name="download" className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* 审批历史 */}
+                                    {selectedInspection.approvalHistory && (
+                                        <div>
+                                            <p className="text-xs text-slate-400 mb-2">审批记录</p>
+                                            <div className="space-y-3">
+                                                {selectedInspection.approvalHistory.map((record, idx) => (
+                                                    <div key={idx} className="flex gap-4 p-4 bg-slate-50 rounded-xl">
+                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium ${
+                                                            record.result === '通过' ? 'bg-emerald-500' : 'bg-rose-500'
+                                                        }`}>
+                                                            <Icon name={record.result === '通过' ? 'check' : 'x'} className="w-4 h-4" />
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className="text-sm font-medium text-slate-800">{record.name}</span>
+                                                                <span className="text-xs text-slate-400">{record.role}</span>
+                                                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                                                    record.result === '通过' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'
+                                                                }`}>{record.result}</span>
+                                                            </div>
+                                                            <p className="text-sm text-slate-600">{record.comment}</p>
+                                                            <p className="text-xs text-slate-400 mt-1">{record.time}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* 审批表单（仅待审批状态显示） */}
+                                    {(selectedInspection.status === '待初审' || selectedInspection.status === '待终审') && (
+                                        <div className="border-t border-slate-100 pt-6">
+                                            <p className="text-sm font-semibold text-slate-800 mb-4">审批操作</p>
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="text-xs text-slate-500 mb-2 block">审批意见 <span className="text-rose-500">*</span></label>
+                                                    <textarea
+                                                        className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                                        rows="3"
+                                                        placeholder="请输入审批意见..."
+                                                    ></textarea>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 弹窗底部 */}
+                                <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
+                                    <button
+                                        onClick={() => setShowModal(false)}
+                                        className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                                    >
+                                        关闭
+                                    </button>
+                                    {(selectedInspection.status === '待初审' || selectedInspection.status === '待终审') && (
+                                        <>
+                                            <button className="px-4 py-2 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors flex items-center gap-2">
+                                                <Icon name="x" className="w-4 h-4" /> 驳回
+                                            </button>
+                                            <button className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors flex items-center gap-2">
+                                                <Icon name="check" className="w-4 h-4" /> 通过
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>

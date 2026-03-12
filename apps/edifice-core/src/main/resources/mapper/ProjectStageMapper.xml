@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qsy.edifice.mapper.ProjectStageMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="com.qsy.edifice.domain.entity.ProjectStage">
+        <id column="project_stage_id" property="projectStageId" jdbcType="BIGINT"/>
+        <result column="project_id" property="projectId" jdbcType="BIGINT"/>
+        <result column="stage_name" property="stageName" jdbcType="VARCHAR"/>
+        <result column="stage_status" property="stageStatus" jdbcType="TINYINT"/>
+        <result column="stage_output" property="stageOutput" jdbcType="DECIMAL"/>
+        <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
+        <result column="updated_time" property="updatedTime" jdbcType="TIMESTAMP"/>
+        <result column="is_delete" property="isDelete" jdbcType="TINYINT"/>
+    </resultMap>
+
+    <!-- 基础字段列表 -->
+    <sql id="Base_Column_List">
+        project_stage_id, project_id, stage_name, stage_status, stage_output,
+        created_time, updated_time, is_delete
+    </sql>
+
+    <!-- 根据项目id查询项目阶段列表 -->
+    <select id="selectByProjectId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM project_stage
+        WHERE project_id = #{projectId}
+        AND is_delete = 0
+    </select>
+
+    <!-- 根据项目id和阶段状态查询项目阶段列表 -->
+    <select id="selectByProjectIdAndStatus" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM project_stage
+        WHERE project_id = #{projectId}
+        AND stage_status = #{stageStatus}
+        AND is_delete = 0
+    </select>
+</mapper>

@@ -2,20 +2,27 @@ package com.qsy.edifice.security.handler;
 
 import com.alibaba.fastjson2.JSON;
 import com.qsy.edifice.common.Code;
+import com.qsy.edifice.utils.JwtUtils;
 import com.qsy.edifice.utils.RedisCache;
 import com.qsy.edifice.utils.ResultUtils;
+import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.logout.LogoutSuccessHandler;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
 @Slf4j
+@Component
 public class MyLogoutSuccessHandler implements LogoutSuccessHandler {
 
     private final RedisCache redisCache;
+
+    @Resource
+    private JwtUtils jwtUtils;
 
     public MyLogoutSuccessHandler(RedisCache redisCache) {
         this.redisCache = redisCache;
@@ -38,7 +45,7 @@ public class MyLogoutSuccessHandler implements LogoutSuccessHandler {
 
         // 2. 尝试从 token 获取用户ID，然后删除对应的 Refresh Token 和用户 token 映射
         try {
-            com.qsy.edifice.domain.entity.SysUser user = com.qsy.edifice.utils.JwtUtils.getUserFromToken(token);
+            com.qsy.edifice.domain.entity.SysUser user = jwtUtils.getUserFromToken(token);
             if (user != null && user.getUserId() != null) {
                 // 获取用户 token 映射
                 String userTokensJson = redisCache.getCacheObject("user_tokens:" + user.getUserId());

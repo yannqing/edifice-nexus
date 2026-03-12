@@ -10,19 +10,25 @@ import com.qsy.edifice.security.SecurityUser;
 import com.qsy.edifice.utils.JwtUtils;
 import com.qsy.edifice.utils.RedisCache;
 import com.qsy.edifice.utils.ResultUtils;
+import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
+@Component
 public class MyLoginSuccessHandler implements AuthenticationSuccessHandler {
 
+
+    @Resource
+    private JwtUtils jwtUtils;
 
     private final RedisCache redisCache;
 
@@ -51,8 +57,8 @@ public class MyLoginSuccessHandler implements AuthenticationSuccessHandler {
         List<SysRole> roles = securityUser.getSysRole();
 
         // 生成双 token（Access Token + Refresh Token）
-        String accessToken = JwtUtils.generateAccessToken(userInfo, JSON.toJSONString(roles));
-        String refreshToken = JwtUtils.generateRefreshToken(String.valueOf(user.getUserId()));
+        String accessToken = jwtUtils.generateAccessToken(userInfo, JSON.toJSONString(roles));
+        String refreshToken = jwtUtils.generateRefreshToken(String.valueOf(user.getUserId()));
 
         // 将双 token 存储到 Redis
         // Access Token: 7天过期

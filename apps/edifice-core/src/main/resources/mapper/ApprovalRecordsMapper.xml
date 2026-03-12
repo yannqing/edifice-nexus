@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qsy.edifice.mapper.ApprovalRecordsMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="com.qsy.edifice.domain.entity.ApprovalRecords">
+        <id column="approval_record_id" property="approvalRecordId" jdbcType="BIGINT"/>
+        <result column="approval_record_type" property="approvalRecordType" jdbcType="TINYINT"/>
+        <result column="inspection_form_id" property="inspectionFormId" jdbcType="BIGINT"/>
+        <result column="approver" property="approver" jdbcType="BIGINT"/>
+        <result column="approval_description" property="approvalDescription" jdbcType="VARCHAR"/>
+        <result column="inspection_form_status" property="inspectionFormStatus" jdbcType="TINYINT"/>
+        <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
+        <result column="updated_time" property="updatedTime" jdbcType="TIMESTAMP"/>
+        <result column="is_delete" property="isDelete" jdbcType="TINYINT"/>
+    </resultMap>
+
+    <!-- 基础字段列表 -->
+    <sql id="Base_Column_List">
+        approval_record_id, approval_record_type, inspection_form_id, approver,
+        approval_description, inspection_form_status, created_time, updated_time, is_delete
+    </sql>
+
+    <!-- 根据业务id查询审批记录列表 -->
+    <select id="selectByInspectionFormId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM approval_records
+        WHERE inspection_form_id = #{inspectionFormId}
+        AND is_delete = 0
+    </select>
+
+    <!-- 根据审批人id查询审批记录列表 -->
+    <select id="selectByApproverId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM approval_records
+        WHERE approver = #{approver}
+        AND is_delete = 0
+    </select>
+
+    <!-- 根据审批类型查询审批记录列表 -->
+    <select id="selectByApprovalRecordType" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM approval_records
+        WHERE approval_record_type = #{approvalRecordType}
+        AND is_delete = 0
+    </select>
+</mapper>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qsy.edifice.mapper.ProjectStageTemplateMapper">
+
+    <!-- 结果映射 -->
+    <resultMap id="BaseResultMap" type="com.qsy.edifice.domain.entity.ProjectStageTemplate">
+        <id column="stage_id" property="stageId" jdbcType="BIGINT"/>
+        <result column="stage_name" property="stageName" jdbcType="VARCHAR"/>
+        <result column="stage_output" property="stageOutput" jdbcType="DECIMAL"/>
+        <result column="stage_status" property="stageStatus" jdbcType="TINYINT"/>
+        <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
+        <result column="updated_time" property="updatedTime" jdbcType="TIMESTAMP"/>
+        <result column="is_delete" property="isDelete" jdbcType="TINYINT"/>
+    </resultMap>
+
+    <!-- 基础字段列表 -->
+    <sql id="Base_Column_List">
+        stage_id, stage_name, stage_output, stage_status,
+        created_time, updated_time, is_delete
+    </sql>
+
+    <!-- 查询所有启用的阶段模版 -->
+    <select id="selectAllEnabled" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM project_stage_template
+        WHERE stage_status = 1
+        AND is_delete = 0
+    </select>
+</mapper>

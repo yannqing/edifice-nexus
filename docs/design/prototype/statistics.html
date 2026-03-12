@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>统计报表 - 项目产值分配核算管理系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', 'Microsoft YaHei', sans-serif;
+            background-color: #F8FAFC;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .sidebar-item-active {
+            background: #EFF6FF;
+            color: #2563EB;
+            border-right: 4px solid #2563EB;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // 模拟图标组件封装
+        const Icon = ({ name, className = "w-5 h-5" }) => {
+            useEffect(() => { lucide.createIcons(); }, []);
+            return <i data-lucide={name} className={className}></i>;
+        };
+
+        const App = () => {
+            const [activeReport, setActiveReport] = useState('project');
+            const [dateRange, setDateRange] = useState('month');
+
+            // 项目产值统计数据（来自实际Excel数据）
+            const projectStats = [
+                { id: 1, name: '国家电投通辽智慧热电项目', category: 'A类', contractAmount: 1400000, completedAmount: 1039525, outputValue: 769048, profit: 270477, profitRate: 26.0 },
+                { id: 2, name: '三峡能源哈密光热项目', category: 'B类', contractAmount: 500000, completedAmount: 300000, outputValue: 195000, profit: 105000, profitRate: 35.0 },
+                { id: 3, name: '内蒙杭锦旗供热管网项目', category: 'B类', contractAmount: 260000, completedAmount: 208000, outputValue: 176800, profit: 31200, profitRate: 15.0 },
+                { id: 4, name: '中国石化长城能化330kV变电站', category: 'C类', contractAmount: 120000, completedAmount: 120000, outputValue: 120000, profit: 0, profitRate: 0 },
+                { id: 5, name: '大坝电厂项目', category: 'D类', contractAmount: 85000, completedAmount: 12750, outputValue: 0, profit: 12750, profitRate: 100 },
+            ];
+
+            // 回款分析数据
+            const collectionStats = [
+                { month: '2024-01', expected: 500000, actual: 400000, rate: 80, overdue: 100000 },
+                { month: '2024-02', expected: 600000, actual: 550000, rate: 92, overdue: 50000 },
+                { month: '2024-03', expected: 450000, actual: 380000, rate: 84, overdue: 70000 },
+            ];
+
+            // 人员产值排行数据（来自实际Excel数据）
+            const personnelRanking = [
+                { rank: 1, name: '朱勇', department: '造价部', projectCount: 8, outputValue: 285000, avgValue: 35625, trend: 'up' },
+                { rank: 2, name: '付雪梅', department: '造价部', projectCount: 6, outputValue: 218000, avgValue: 36333, trend: 'up' },
+                { rank: 3, name: '张鑫', department: '咨询部', projectCount: 5, outputValue: 176000, avgValue: 35200, trend: 'down' },
+                { rank: 4, name: '李明', department: '造价部', projectCount: 4, outputValue: 125000, avgValue: 31250, trend: 'up' },
+                { rank: 5, name: '王强', department: '咨询部', projectCount: 3, outputValue: 95000, avgValue: 31667, trend: 'stable' },
+            ];
+
+            // 项目分类统计
+            const categoryStats = [
+                { category: 'A类', name: '全程结算', count: 15, contractTotal: 1800000, completedTotal: 1200000, percentage: 35.7 },
+                { category: 'B类', name: '全过程', count: 12, contractTotal: 2400000, completedTotal: 960000, percentage: 28.6 },
+                { category: 'C类', name: '单项', count: 8, contractTotal: 640000, completedTotal: 480000, percentage: 19.0 },
+                { category: 'D类', name: '技术咨询', count: 5, contractTotal: 750000, completedTotal: 150000, percentage: 11.9 },
+                { category: 'E类', name: '零星', count: 2, contractTotal: 60000, completedTotal: 30000, percentage: 4.8 },
+            ];
+
+            // 总体统计
+            const overallStats = [
+                { label: '项目总数', value: '42', icon: 'layers', color: 'text-blue-600', bgColor: 'bg-blue-50' },
+                { label: '合同总额', value: '￥565.0万', icon: 'file-text', color: 'text-purple-600', bgColor: 'bg-purple-50' },
+                { label: '已完成产值', value: '￥282.0万', icon: 'trending-up', color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
+                { label: '整体回款率', value: '85.3%', icon: 'pie-chart', color: 'text-amber-600', bgColor: 'bg-amber-50' },
+            ];
+
+            const reports = [
+                { key: 'project', label: '项目产值统计', icon: 'bar-chart-3' },
+                { key: 'collection', label: '回款分析报表', icon: 'wallet' },
+                { key: 'personnel', label: '人员产值排行', icon: 'users' },
+                { key: 'category', label: '项目分类统计', icon: 'pie-chart' },
+            ];
+
+            const dateRanges = [
+                { key: 'week', label: '本周' },
+                { key: 'month', label: '本月' },
+                { key: 'quarter', label: '本季度' },
+                { key: 'year', label: '本年度' },
+            ];
+
+            return (
+                <div className="flex min-h-screen">
+                    {/* 左侧导航栏 */}
+                    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen">
+                        <div className="p-6 flex items-center gap-3">
+                            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">R</div>
+                            <span className="font-bold text-slate-800 text-lg tracking-tight">然而信工程管理</span>
+                        </div>
+
+                        <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto">
+                            <a href="index.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="layout-dashboard" /> <span className="font-medium text-sm text-slate-600">工作台</span>
+                            </a>
+
+                            {/* 日常工作 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">日常工作</div>
+                            <a href="my-projects.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="folder-open" /> <span className="font-medium text-sm text-slate-600">我的项目</span>
+                            </a>
+                            <a href="inspection-approval.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="clipboard-check" /> <span className="font-medium text-sm text-slate-600">验工审批</span>
+                                <span className="ml-auto text-xs bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full font-semibold">3</span>
+                            </a>
+                            <a href="timesheet.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="clock" /> <span className="font-medium text-sm text-slate-600">工时填报</span>
+                            </a>
+
+                            {/* 项目管理 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">项目管理</div>
+                            <a href="all-projects.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="briefcase" /> <span className="font-medium text-sm text-slate-600">全部项目</span>
+                            </a>
+                            <a href="inspection-management.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="file-text" /> <span className="font-medium text-sm text-slate-600">验工单管理</span>
+                            </a>
+
+                            {/* 财务管理 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">财务管理</div>
+                            <a href="output-value.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="coins" /> <span className="font-medium text-sm text-slate-600">产值分配</span>
+                            </a>
+                            <a href="collection.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="wallet" /> <span className="font-medium text-sm text-slate-600">回款管理</span>
+                            </a>
+
+                            {/* 报表统计 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">报表统计</div>
+                            <div className="sidebar-item-active flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all">
+                                <Icon name="bar-chart-3" /> <span className="font-medium text-sm">统计报表</span>
+                            </div>
+                            <a href="performance.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="user-circle" /> <span className="font-medium text-sm text-slate-600">个人绩效</span>
+                            </a>
+                        </nav>
+
+                        <div className="p-4 border-t border-slate-100 mt-auto">
+                            <div className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl cursor-pointer">
+                                <div className="w-10 h-10 bg-slate-200 rounded-full overflow-hidden">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" />
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                    <p className="text-sm font-semibold text-slate-800 truncate">陈经理</p>
+                                    <p className="text-xs text-slate-400 truncate">管理员</p>
+                                </div>
+                                <Icon name="chevron-down" className="w-4 h-4 text-slate-400" />
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* 主内容区 */}
+                    <main className="flex-1 p-8">
+                        {/* 顶部标题和操作 */}
+                        <div className="flex items-center justify-between mb-8">
+                            <div>
+                                <h1 className="text-2xl font-bold text-slate-800 mb-1">统计报表</h1>
+                                <p className="text-slate-500 text-sm">查看项目、回款、人员等各类统计数据</p>
+                            </div>
+                            <button className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-medium flex items-center gap-2 hover:bg-blue-700 transition-colors">
+                                <Icon name="download" className="w-4 h-4" /> 导出报表
+                            </button>
+                        </div>
+
+                        {/* 总体统计卡片 */}
+                        <div className="grid grid-cols-4 gap-6 mb-8">
+                            {overallStats.map((stat, idx) => (
+                                <div key={idx} className="glass-card rounded-2xl p-5 shadow-sm">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className={`w-10 h-10 ${stat.bgColor} rounded-xl flex items-center justify-center`}>
+                                            <Icon name={stat.icon} className={`w-5 h-5 ${stat.color}`} />
+                                        </div>
+                                    </div>
+                                    <p className="text-2xl font-bold text-slate-800">{stat.value}</p>
+                                    <p className="text-slate-500 text-sm mt-1">{stat.label}</p>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* 报表切换和时间筛选 */}
+                        <div className="glass-card rounded-2xl p-6 shadow-sm mb-6">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    {reports.map(report => (
+                                        <button
+                                            key={report.key}
+                                            onClick={() => setActiveReport(report.key)}
+                                            className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${
+                                                activeReport === report.key
+                                                    ? 'bg-blue-600 text-white'
+                                                    : 'text-slate-600 hover:bg-slate-100'
+                                            }`}
+                                        >
+                                            <Icon name={report.icon} className="w-4 h-4" />
+                                            {report.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {dateRanges.map(range => (
+                                        <button
+                                            key={range.key}
+                                            onClick={() => setDateRange(range.key)}
+                                            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                                dateRange === range.key
+                                                    ? 'bg-slate-800 text-white'
+                                                    : 'text-slate-600 hover:bg-slate-100'
+                                            }`}
+                                        >
+                                            {range.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 报表内容 */}
+                        {activeReport === 'project' && (
+                            <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+                                <div className="p-6 border-b border-slate-100">
+                                    <h2 className="text-lg font-semibold text-slate-800">项目产值统计</h2>
+                                    <p className="text-slate-500 text-sm mt-1">各项目合同金额、完成产值及利润情况</p>
+                                </div>
+                                <table className="w-full">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="text-left py-4 px-6 text-sm font-semibold text-slate-600">项目名称</th>
+                                            <th className="text-left py-4 px-4 text-sm font-semibold text-slate-600">分类</th>
+                                            <th className="text-right py-4 px-4 text-sm font-semibold text-slate-600">合同金额</th>
+                                            <th className="text-right py-4 px-4 text-sm font-semibold text-slate-600">已完成金额</th>
+                                            <th className="text-right py-4 px-4 text-sm font-semibold text-slate-600">已发产值</th>
+                                            <th className="text-right py-4 px-4 text-sm font-semibold text-slate-600">待发产值</th>
+                                            <th className="text-right py-4 px-4 text-sm font-semibold text-slate-600">利润率</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {projectStats.map((project) => (
+                                            <tr key={project.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                                                <td className="py-4 px-6">
+                                                    <span className="font-medium text-slate-800">{project.name}</span>
+                                                </td>
+                                                <td className="py-4 px-4">
+                                                    <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">{project.category}</span>
+                                                </td>
+                                                <td className="py-4 px-4 text-right text-slate-700">
+                                                    ￥{project.contractAmount.toLocaleString()}
+                                                </td>
+                                                <td className="py-4 px-4 text-right text-slate-700">
+                                                    ￥{project.completedAmount.toLocaleString()}
+                                                </td>
+                                                <td className="py-4 px-4 text-right font-medium text-emerald-600">
+                                                    ￥{project.outputValue.toLocaleString()}
+                                                </td>
+                                                <td className="py-4 px-4 text-right font-medium text-amber-600">
+                                                    ￥{project.profit.toLocaleString()}
+                                                </td>
+                                                <td className="py-4 px-4 text-right">
+                                                    <span className={`font-medium ${project.profitRate > 20 ? 'text-emerald-600' : project.profitRate > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                                                        {project.profitRate}%
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="bg-slate-50 font-semibold">
+                                        <tr>
+                                            <td className="py-4 px-6 text-slate-800">合计</td>
+                                            <td className="py-4 px-4"></td>
+                                            <td className="py-4 px-4 text-right text-slate-800">
+                                                ￥{projectStats.reduce((sum, p) => sum + p.contractAmount, 0).toLocaleString()}
+                                            </td>
+                                            <td className="py-4 px-4 text-right text-slate-800">
+                                                ￥{projectStats.reduce((sum, p) => sum + p.completedAmount, 0).toLocaleString()}
+                                            </td>
+                                            <td className="py-4 px-4 text-right text-emerald-600">
+                                                ￥{projectStats.reduce((sum, p) => sum + p.outputValue, 0).toLocaleString()}
+                                            </td>
+                                            <td className="py-4 px-4 text-right text-amber-600">
+                                                ￥{projectStats.reduce((sum, p) => sum + p.profit, 0).toLocaleString()}
+                                            </td>
+                                            <td className="py-4 px-4"></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        )}
+
+                        {activeReport === 'collection' && (
+                            <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+                                <div className="p-6 border-b border-slate-100">
+                                    <h2 className="text-lg font-semibold text-slate-800">回款分析报表</h2>
+                                    <p className="text-slate-500 text-sm mt-1">各月份应回款与实际回款对比分析</p>
+                                </div>
+                                <div className="p-6">
+                                    {/* 回款趋势图（模拟） */}
+                                    <div className="mb-6">
+                                        <div className="flex items-end gap-4 h-48">
+                                            {collectionStats.map((stat, idx) => (
+                                                <div key={idx} className="flex-1 flex flex-col items-center gap-2">
+                                                    <div className="w-full flex gap-2 items-end justify-center h-40">
+                                                        <div
+                                                            className="w-8 bg-blue-200 rounded-t"
+                                                            style={{ height: `${(stat.expected / 600000) * 100}%` }}
+                                                            title={`应回款: ￥${stat.expected.toLocaleString()}`}
+                                                        />
+                                                        <div
+                                                            className="w-8 bg-emerald-500 rounded-t"
+                                                            style={{ height: `${(stat.actual / 600000) * 100}%` }}
+                                                            title={`实际回款: ￥${stat.actual.toLocaleString()}`}
+                                                        />
+                                                    </div>
+                                                    <span className="text-sm text-slate-600">{stat.month}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="flex items-center justify-center gap-6 mt-4">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 bg-blue-200 rounded" />
+                                                <span className="text-sm text-slate-600">应回款金额</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-4 h-4 bg-emerald-500 rounded" />
+                                                <span className="text-sm text-slate-600">实际回款金额</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* 回款明细表 */}
+                                    <table className="w-full">
+                                        <thead className="bg-slate-50">
+                                            <tr>
+                                                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-600">时间</th>
+                                                <th className="text-right py-3 px-4 text-sm font-semibold text-slate-600">应回款金额</th>
+                                                <th className="text-right py-3 px-4 text-sm font-semibold text-slate-600">实回款金额</th>
+                                                <th className="text-right py-3 px-4 text-sm font-semibold text-slate-600">回款率</th>
+                                                <th className="text-right py-3 px-4 text-sm font-semibold text-slate-600">逾期金额</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {collectionStats.map((stat, idx) => (
+                                                <tr key={idx} className="border-b border-slate-100">
+                                                    <td className="py-3 px-4 text-sm text-slate-700">{stat.month}</td>
+                                                    <td className="py-3 px-4 text-sm text-right text-slate-700">￥{stat.expected.toLocaleString()}</td>
+                                                    <td className="py-3 px-4 text-sm text-right font-medium text-emerald-600">￥{stat.actual.toLocaleString()}</td>
+                                                    <td className="py-3 px-4 text-sm text-right">
+                                                        <span className={`font-medium ${stat.rate >= 90 ? 'text-emerald-600' : stat.rate >= 80 ? 'text-amber-600' : 'text-rose-600'}`}>
+                                                            {stat.rate}%
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-sm text-right text-rose-600">￥{stat.overdue.toLocaleString()}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeReport === 'personnel' && (
+                            <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+                                <div className="p-6 border-b border-slate-100">
+                                    <h2 className="text-lg font-semibold text-slate-800">人员产值排行</h2>
+                                    <p className="text-slate-500 text-sm mt-1">员工产值贡献排名及趋势</p>
+                                </div>
+                                <table className="w-full">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="text-center py-4 px-4 text-sm font-semibold text-slate-600 w-16">排名</th>
+                                            <th className="text-left py-4 px-4 text-sm font-semibold text-slate-600">姓名</th>
+                                            <th className="text-left py-4 px-4 text-sm font-semibold text-slate-600">部门</th>
+                                            <th className="text-center py-4 px-4 text-sm font-semibold text-slate-600">参与项目数</th>
+                                            <th className="text-right py-4 px-4 text-sm font-semibold text-slate-600">总产值</th>
+                                            <th className="text-right py-4 px-4 text-sm font-semibold text-slate-600">人均产值</th>
+                                            <th className="text-center py-4 px-4 text-sm font-semibold text-slate-600">趋势</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {personnelRanking.map((person) => (
+                                            <tr key={person.rank} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                                                <td className="py-4 px-4 text-center">
+                                                    {person.rank <= 3 ? (
+                                                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-sm ${
+                                                            person.rank === 1 ? 'bg-amber-100 text-amber-600' :
+                                                            person.rank === 2 ? 'bg-slate-200 text-slate-600' :
+                                                            'bg-orange-100 text-orange-600'
+                                                        }`}>
+                                                            {person.rank}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-500">{person.rank}</span>
+                                                    )}
+                                                </td>
+                                                <td className="py-4 px-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 bg-slate-200 rounded-full overflow-hidden">
+                                                            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${person.name}`} alt="avatar" />
+                                                        </div>
+                                                        <span className="font-medium text-slate-800">{person.name}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="py-4 px-4 text-slate-600">{person.department}</td>
+                                                <td className="py-4 px-4 text-center text-slate-700">{person.projectCount}</td>
+                                                <td className="py-4 px-4 text-right font-semibold text-slate-800">
+                                                    ￥{person.outputValue.toLocaleString()}
+                                                </td>
+                                                <td className="py-4 px-4 text-right text-slate-600">
+                                                    ￥{person.avgValue.toLocaleString()}
+                                                </td>
+                                                <td className="py-4 px-4 text-center">
+                                                    {person.trend === 'up' && <Icon name="trending-up" className="w-5 h-5 text-emerald-500 inline" />}
+                                                    {person.trend === 'down' && <Icon name="trending-down" className="w-5 h-5 text-rose-500 inline" />}
+                                                    {person.trend === 'stable' && <Icon name="minus" className="w-5 h-5 text-slate-400 inline" />}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {activeReport === 'category' && (
+                            <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+                                <div className="p-6 border-b border-slate-100">
+                                    <h2 className="text-lg font-semibold text-slate-800">项目分类统计</h2>
+                                    <p className="text-slate-500 text-sm mt-1">按项目类型统计合同金额及完成情况</p>
+                                </div>
+                                <div className="p-6">
+                                    {/* 分类占比图（模拟） */}
+                                    <div className="flex items-center gap-8 mb-8">
+                                        <div className="relative w-48 h-48">
+                                            <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+                                                {categoryStats.reduce((acc, cat, idx) => {
+                                                    const offset = acc.offset;
+                                                    const colors = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444'];
+                                                    acc.elements.push(
+                                                        <circle
+                                                            key={idx}
+                                                            cx="50"
+                                                            cy="50"
+                                                            r="40"
+                                                            fill="transparent"
+                                                            stroke={colors[idx]}
+                                                            strokeWidth="20"
+                                                            strokeDasharray={`${cat.percentage * 2.51} 251`}
+                                                            strokeDashoffset={-offset * 2.51}
+                                                        />
+                                                    );
+                                                    acc.offset += cat.percentage;
+                                                    return acc;
+                                                }, { elements: [], offset: 0 }).elements}
+                                            </svg>
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <div className="text-center">
+                                                    <p className="text-2xl font-bold text-slate-800">42</p>
+                                                    <p className="text-sm text-slate-500">项目总数</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 space-y-3">
+                                            {categoryStats.map((cat, idx) => {
+                                                const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-purple-500', 'bg-rose-500'];
+                                                return (
+                                                    <div key={idx} className="flex items-center gap-3">
+                                                        <div className={`w-3 h-3 rounded-full ${colors[idx]}`} />
+                                                        <span className="text-sm text-slate-600 w-24">{cat.category} {cat.name}</span>
+                                                        <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                            <div className={`h-full ${colors[idx]}`} style={{ width: `${cat.percentage}%` }} />
+                                                        </div>
+                                                        <span className="text-sm font-medium text-slate-700 w-12 text-right">{cat.percentage}%</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* 分类明细表 */}
+                                    <table className="w-full">
+                                        <thead className="bg-slate-50">
+                                            <tr>
+                                                <th className="text-left py-3 px-4 text-sm font-semibold text-slate-600">分类</th>
+                                                <th className="text-center py-3 px-4 text-sm font-semibold text-slate-600">项目数量</th>
+                                                <th className="text-right py-3 px-4 text-sm font-semibold text-slate-600">合同总额</th>
+                                                <th className="text-right py-3 px-4 text-sm font-semibold text-slate-600">已完成金额</th>
+                                                <th className="text-right py-3 px-4 text-sm font-semibold text-slate-600">完成率</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {categoryStats.map((cat, idx) => (
+                                                <tr key={idx} className="border-b border-slate-100">
+                                                    <td className="py-3 px-4">
+                                                        <span className="font-medium text-slate-800">{cat.category}</span>
+                                                        <span className="text-slate-500 ml-2">({cat.name})</span>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-center text-slate-700">{cat.count}</td>
+                                                    <td className="py-3 px-4 text-right text-slate-700">￥{cat.contractTotal.toLocaleString()}</td>
+                                                    <td className="py-3 px-4 text-right font-medium text-emerald-600">￥{cat.completedTotal.toLocaleString()}</td>
+                                                    <td className="py-3 px-4 text-right">
+                                                        <span className="font-medium text-blue-600">
+                                                            {((cat.completedTotal / cat.contractTotal) * 100).toFixed(1)}%
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot className="bg-slate-50 font-semibold">
+                                            <tr>
+                                                <td className="py-3 px-4 text-slate-800">合计</td>
+                                                <td className="py-3 px-4 text-center text-slate-800">
+                                                    {categoryStats.reduce((sum, c) => sum + c.count, 0)}
+                                                </td>
+                                                <td className="py-3 px-4 text-right text-slate-800">
+                                                    ￥{categoryStats.reduce((sum, c) => sum + c.contractTotal, 0).toLocaleString()}
+                                                </td>
+                                                <td className="py-3 px-4 text-right text-emerald-600">
+                                                    ￥{categoryStats.reduce((sum, c) => sum + c.completedTotal, 0).toLocaleString()}
+                                                </td>
+                                                <td className="py-3 px-4"></td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        };
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>产值分配 - 项目产值分配核算管理系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', 'Microsoft YaHei', sans-serif;
+            background-color: #F8FAFC;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .sidebar-item-active {
+            background: #EFF6FF;
+            color: #2563EB;
+            border-right: 4px solid #2563EB;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // 模拟图标组件封装
+        const Icon = ({ name, className = "w-5 h-5" }) => {
+            useEffect(() => { lucide.createIcons(); }, []);
+            return <i data-lucide={name} className={className}></i>;
+        };
+
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('pending');
+            const [searchText, setSearchText] = useState('');
+            const [showDetailModal, setShowDetailModal] = useState(false);
+            const [selectedAllocation, setSelectedAllocation] = useState(null);
+
+            // 产值分配数据（来自实际Excel数据）
+            const allocations = [
+                {
+                    id: 1,
+                    projectName: '国家电投通辽智慧热电项目',
+                    projectCode: 'PJ2024-004',
+                    category: 'A类',
+                    phase: '阶段3',
+                    phaseName: '终稿编制',
+                    phaseRatio: '20%',
+                    phaseAmount: 280000,
+                    collectionRatio: 74,
+                    actualAmount: 207200,
+                    status: '待确认',
+                    createTime: '2024-01-15 15:00',
+                    distributions: [
+                        { type: '管理工作', ratio: 20, amount: 41440, person: '朱勇', role: '项目经理' },
+                        { type: '基础工作', ratio: 45, amount: 93240, person: '付雪梅', role: '造价员' },
+                        { type: '智励工作', ratio: 35, amount: 72520, person: '张鑫', role: '技术骨干' },
+                    ]
+                },
+                {
+                    id: 2,
+                    projectName: '内蒙杭锦旗供热管网项目',
+                    projectCode: 'PJ2024-003',
+                    category: 'B类',
+                    phase: '阶段4',
+                    phaseName: '核对',
+                    phaseRatio: '20%',
+                    phaseAmount: 52000,
+                    collectionRatio: 85,
+                    actualAmount: 44200,
+                    status: '待审核',
+                    createTime: '2024-01-13 17:00',
+                    distributions: [
+                        { type: '管理工作', ratio: 15, amount: 6630, person: '付雪梅', role: '项目经理' },
+                        { type: '基础工作', ratio: 35, amount: 15470, person: '张鑫', role: '造价员' },
+                        { type: '智励工作', ratio: 50, amount: 22100, person: '李明', role: '技术骨干' },
+                    ]
+                },
+                {
+                    id: 3,
+                    projectName: '三峡能源哈密光热项目',
+                    projectCode: 'PJ2024-007',
+                    category: 'B类',
+                    phase: '阶段2',
+                    phaseName: '过程服务',
+                    phaseRatio: '35%',
+                    phaseAmount: 175000,
+                    collectionRatio: 65,
+                    actualAmount: 113750,
+                    status: '已审批',
+                    createTime: '2024-01-12 14:30',
+                    approvedTime: '2024-01-14 10:00',
+                    distributions: [
+                        { type: '管理工作', ratio: 30, amount: 34125, person: '张鑫', role: '项目经理' },
+                        { type: '基础工作', ratio: 55, amount: 62562, person: '李明', role: '造价员' },
+                        { type: '智励工作', ratio: 15, amount: 17063, person: '王强', role: '技术骨干' },
+                    ]
+                },
+                {
+                    id: 4,
+                    projectName: '国家电投通辽智慧热电项目',
+                    projectCode: 'PJ2024-004',
+                    category: 'A类',
+                    phase: '阶段2',
+                    phaseName: '初稿编制',
+                    phaseRatio: '45%',
+                    phaseAmount: 630000,
+                    collectionRatio: 74,
+                    actualAmount: 466200,
+                    status: '已发放',
+                    createTime: '2024-01-08 16:00',
+                    approvedTime: '2024-01-10 09:00',
+                    paidTime: '2024-01-15 00:00',
+                    distributions: [
+                        { type: '管理工作', ratio: 15, amount: 69930, person: '朱勇', role: '项目经理' },
+                        { type: '基础工作', ratio: 70, amount: 326340, person: '付雪梅', role: '造价员' },
+                        { type: '智励工作', ratio: 15, amount: 69930, person: '张鑫', role: '技术骨干' },
+                    ]
+                },
+                {
+                    id: 5,
+                    projectName: '甘肃能化兰州新区热电项目',
+                    projectCode: 'PJ2024-008',
+                    category: 'A类',
+                    phase: '阶段1',
+                    phaseName: '项目策划',
+                    phaseRatio: '5%',
+                    phaseAmount: 19000,
+                    collectionRatio: 50,
+                    actualAmount: 9500,
+                    status: '已发放',
+                    createTime: '2024-01-06 11:00',
+                    approvedTime: '2024-01-08 14:00',
+                    paidTime: '2024-01-15 00:00',
+                    distributions: [
+                        { type: '管理工作', ratio: 70, amount: 6650, person: '付雪梅', role: '项目经理' },
+                        { type: '基础工作', ratio: 10, amount: 950, person: '刘伟', role: '造价员' },
+                        { type: '智励工作', ratio: 20, amount: 1900, person: '张鑫', role: '技术骨干' },
+                    ]
+                },
+                {
+                    id: 6,
+                    projectName: '中国石化长城能化330kV变电站',
+                    projectCode: 'PJ2024-009',
+                    category: 'C类',
+                    phase: '阶段1',
+                    phaseName: '方案计划编制',
+                    phaseRatio: '10%',
+                    phaseAmount: 12000,
+                    collectionRatio: 100,
+                    actualAmount: 12000,
+                    status: '已发放',
+                    createTime: '2023-12-30 10:00',
+                    approvedTime: '2024-01-02 09:00',
+                    paidTime: '2024-01-05 00:00',
+                    distributions: [
+                        { type: '管理工作', ratio: 30, amount: 3600, person: '王强', role: '项目经理' },
+                        { type: '基础工作', ratio: 50, amount: 6000, person: '赵华', role: '造价员' },
+                        { type: '智励工作', ratio: 20, amount: 2400, person: '李明', role: '技术骨干' },
+                    ]
+                },
+            ];
+
+            // 统计数据
+            const stats = {
+                total: allocations.length,
+                pending: allocations.filter(a => a.status === '待确认' || a.status === '待审核').length,
+                approved: allocations.filter(a => a.status === '已审批').length,
+                paid: allocations.filter(a => a.status === '已发放').length,
+                totalAmount: allocations.reduce((sum, a) => sum + a.actualAmount, 0),
+                paidAmount: allocations.filter(a => a.status === '已发放').reduce((sum, a) => sum + a.actualAmount, 0),
+            };
+
+            // 筛选
+            const filteredAllocations = allocations.filter(a => {
+                if (activeTab === 'pending' && a.status !== '待确认' && a.status !== '待审核') return false;
+                if (activeTab === 'approved' && a.status !== '已审批') return false;
+                if (activeTab === 'paid' && a.status !== '已发放') return false;
+                if (searchText && !a.projectName.includes(searchText) && !a.projectCode.includes(searchText)) return false;
+                return true;
+            });
+
+            // 状态样式
+            const getStatusStyle = (status) => {
+                switch(status) {
+                    case '待确认': return 'bg-amber-100 text-amber-600';
+                    case '待审核': return 'bg-blue-100 text-blue-600';
+                    case '已审批': return 'bg-purple-100 text-purple-600';
+                    case '已发放': return 'bg-emerald-100 text-emerald-600';
+                    default: return 'bg-slate-100 text-slate-500';
+                }
+            };
+
+            // 工作类型样式
+            const getWorkTypeStyle = (type) => {
+                switch(type) {
+                    case '管理工作': return 'bg-blue-500';
+                    case '基础工作': return 'bg-emerald-500';
+                    case '智励工作': return 'bg-amber-500';
+                    default: return 'bg-slate-500';
+                }
+            };
+
+            // 打开详情
+            const openDetail = (allocation) => {
+                setSelectedAllocation(allocation);
+                setShowDetailModal(true);
+            };
+
+            return (
+                <div className="flex min-h-screen">
+                    {/* 左侧导航栏 */}
+                    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen">
+                        <div className="p-6 flex items-center gap-3">
+                            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">R</div>
+                            <span className="font-bold text-slate-800 text-lg tracking-tight">然而信工程管理</span>
+                        </div>
+
+                        <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto">
+                            <a href="index.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="layout-dashboard" /> <span className="font-medium text-sm text-slate-600">工作台</span>
+                            </a>
+
+                            {/* 日常工作 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">日常工作</div>
+                            <a href="my-projects.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="folder-open" /> <span className="font-medium text-sm text-slate-600">我的项目</span>
+                            </a>
+                            <a href="inspection-approval.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="clipboard-check" /> <span className="font-medium text-sm text-slate-600">验工审批</span>
+                                <span className="ml-auto text-xs bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full font-semibold">3</span>
+                            </a>
+                            <a href="timesheet.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="clock" /> <span className="font-medium text-sm text-slate-600">工时填报</span>
+                            </a>
+
+                            {/* 项目管理 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">项目管理</div>
+                            <a href="all-projects.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="briefcase" /> <span className="font-medium text-sm text-slate-600">全部项目</span>
+                            </a>
+                            <a href="inspection-management.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="file-text" /> <span className="font-medium text-sm text-slate-600">验工单管理</span>
+                            </a>
+
+                            {/* 财务管理 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">财务管理</div>
+                            <div className="sidebar-item-active flex items-center gap-3 px-4 py-3 rounded-xl cursor-pointer transition-all">
+                                <Icon name="coins" /> <span className="font-medium text-sm">产值分配</span>
+                            </div>
+                            <a href="collection.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="wallet" /> <span className="font-medium text-sm text-slate-600">回款管理</span>
+                            </a>
+
+                            {/* 报表统计 */}
+                            <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">报表统计</div>
+                            <a href="statistics.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="bar-chart-3" /> <span className="font-medium text-sm text-slate-600">统计报表</span>
+                            </a>
+                            <a href="performance.html" className="flex items-center gap-3 px-4 py-3 text-slate-500 hover:bg-slate-50 rounded-xl cursor-pointer transition-all">
+                                <Icon name="user-circle" /> <span className="font-medium text-sm text-slate-600">个人绩效</span>
+                            </a>
+                        </nav>
+
+                        <div className="p-4 border-t border-slate-100 mt-auto">
+                            <div className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl cursor-pointer">
+                                <div className="w-10 h-10 bg-slate-200 rounded-full overflow-hidden">
+                                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="avatar" />
+                                </div>
+                                <div className="flex-1 overflow-hidden">
+                                    <p className="text-sm font-semibold text-slate-800 truncate">陈经理</p>
+                                    <p className="text-xs text-slate-400 truncate">管理员</p>
+                                </div>
+                                <Icon name="log-out" className="w-4 h-4 text-slate-400" />
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* 主体内容区 */}
+                    <main className="flex-1 p-8 space-y-6 overflow-y-auto">
+                        {/* 顶部标题 */}
+                        <div className="flex justify-between items-end">
+                            <div>
+                                <h1 className="text-2xl font-bold text-slate-900 tracking-tight">产值分配</h1>
+                                <p className="text-slate-500 text-sm mt-1">管理项目阶段产值分配方案，跟踪审批与发放状态。</p>
+                            </div>
+                            <div className="flex gap-3">
+                                <button className="px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-sm font-medium hover:bg-slate-50 transition-all flex items-center gap-2">
+                                    <Icon name="download" className="w-4 h-4" /> 导出报表
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* 统计卡片 */}
+                        <div className="grid grid-cols-5 gap-4">
+                            <div className="glass-card p-4 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-slate-100 text-slate-600 rounded-lg">
+                                        <Icon name="file-text" className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500">分配单总数</p>
+                                        <p className="text-xl font-bold text-slate-800">{stats.total}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="glass-card p-4 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
+                                        <Icon name="clock" className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500">待处理</p>
+                                        <p className="text-xl font-bold text-slate-800">{stats.pending}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="glass-card p-4 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-purple-100 text-purple-600 rounded-lg">
+                                        <Icon name="check-square" className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500">已审批</p>
+                                        <p className="text-xl font-bold text-slate-800">{stats.approved}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="glass-card p-4 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+                                        <Icon name="banknote" className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500">已发放</p>
+                                        <p className="text-xl font-bold text-slate-800">{stats.paid}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="glass-card p-4 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
+                                        <Icon name="trending-up" className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-slate-500">已发放金额</p>
+                                        <p className="text-xl font-bold text-slate-800">￥{(stats.paidAmount / 10000).toFixed(1)}万</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 筛选区域 */}
+                        <div className="flex items-center gap-4">
+                            <div className="flex bg-white rounded-xl p-1 shadow-sm border border-slate-100">
+                                {[
+                                    { key: 'pending', label: '待处理', count: stats.pending },
+                                    { key: 'approved', label: '已审批', count: stats.approved },
+                                    { key: 'paid', label: '已发放', count: stats.paid },
+                                    { key: 'all', label: '全部', count: stats.total },
+                                ].map(item => (
+                                    <button
+                                        key={item.key}
+                                        onClick={() => setActiveTab(item.key)}
+                                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                                            activeTab === item.key
+                                                ? 'bg-blue-600 text-white shadow-sm'
+                                                : 'text-slate-500 hover:text-slate-700'
+                                        }`}
+                                    >
+                                        {item.label}
+                                        <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                                            activeTab === item.key
+                                                ? 'bg-blue-500 text-white'
+                                                : 'bg-slate-100 text-slate-500'
+                                        }`}>{item.count}</span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="flex-1"></div>
+
+                            <div className="relative">
+                                <Icon name="search" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="text"
+                                    placeholder="搜索项目名称或编号..."
+                                    value={searchText}
+                                    onChange={(e) => setSearchText(e.target.value)}
+                                    className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                />
+                            </div>
+                        </div>
+
+                        {/* 产值分配列表 */}
+                        <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+                            <table className="w-full">
+                                <thead className="bg-slate-50/50">
+                                    <tr className="text-slate-500 text-xs uppercase tracking-wider">
+                                        <th className="text-left py-4 px-6 font-semibold">项目/阶段</th>
+                                        <th className="text-left py-4 px-4 font-semibold">阶段产值</th>
+                                        <th className="text-left py-4 px-4 font-semibold">回款系数</th>
+                                        <th className="text-left py-4 px-4 font-semibold">实发产值</th>
+                                        <th className="text-left py-4 px-4 font-semibold">分配明细</th>
+                                        <th className="text-center py-4 px-4 font-semibold">状态</th>
+                                        <th className="text-right py-4 px-6 font-semibold">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {filteredAllocations.map(item => (
+                                        <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                                            <td className="py-4 px-6">
+                                                <p className="text-sm font-semibold text-slate-800">{item.projectName}</p>
+                                                <p className="text-xs text-slate-400 mt-0.5">
+                                                    {item.projectCode} · {item.category} · {item.phase} {item.phaseName}
+                                                </p>
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                <p className="text-sm font-semibold text-slate-800">￥{item.phaseAmount.toLocaleString()}</p>
+                                                <p className="text-xs text-slate-400 mt-0.5">比例 {item.phaseRatio}</p>
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={`h-full rounded-full ${
+                                                                item.collectionRatio >= 80 ? 'bg-emerald-500' :
+                                                                item.collectionRatio >= 50 ? 'bg-amber-500' : 'bg-rose-500'
+                                                            }`}
+                                                            style={{ width: `${item.collectionRatio}%` }}
+                                                        ></div>
+                                                    </div>
+                                                    <span className={`text-sm font-medium ${
+                                                        item.collectionRatio >= 80 ? 'text-emerald-600' :
+                                                        item.collectionRatio >= 50 ? 'text-amber-600' : 'text-rose-600'
+                                                    }`}>{item.collectionRatio}%</span>
+                                                </div>
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                <p className="text-sm font-bold text-blue-600">￥{item.actualAmount.toLocaleString()}</p>
+                                            </td>
+                                            <td className="py-4 px-4">
+                                                <div className="flex items-center gap-1">
+                                                    {item.distributions.map((d, idx) => (
+                                                        <div
+                                                            key={idx}
+                                                            className={`w-6 h-6 rounded-full flex items-center justify-center text-xs text-white font-medium ${getWorkTypeStyle(d.type)}`}
+                                                            title={`${d.type}: ${d.person} ￥${d.amount}`}
+                                                        >
+                                                            {d.person[0]}
+                                                        </div>
+                                                    ))}
+                                                    <span className="text-xs text-slate-400 ml-1">{item.distributions.length}人</span>
+                                                </div>
+                                            </td>
+                                            <td className="py-4 px-4 text-center">
+                                                <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusStyle(item.status)}`}>
+                                                    {item.status}
+                                                </span>
+                                            </td>
+                                            <td className="py-4 px-6 text-right">
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <button
+                                                        onClick={() => openDetail(item)}
+                                                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                        title="查看详情"
+                                                    >
+                                                        <Icon name="eye" className="w-4 h-4" />
+                                                    </button>
+                                                    {item.status === '待确认' && (
+                                                        <button className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors" title="确认分配">
+                                                            <Icon name="check" className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                    {item.status === '待审核' && (
+                                                        <button className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="审批">
+                                                            <Icon name="check-square" className="w-4 h-4" />
+                                                        </button>
+                                                    )}
+                                                    <button className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" title="更多">
+                                                        <Icon name="more-horizontal" className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+
+                            {/* 空状态 */}
+                            {filteredAllocations.length === 0 && (
+                                <div className="py-16 text-center">
+                                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <Icon name="coins" className="w-8 h-8 text-slate-400" />
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-slate-800 mb-2">暂无分配记录</h3>
+                                    <p className="text-sm text-slate-500">当前筛选条件下没有找到产值分配记录</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 分页 */}
+                        {filteredAllocations.length > 0 && (
+                            <div className="flex justify-between items-center pt-2">
+                                <p className="text-sm text-slate-500">
+                                    共 <span className="font-semibold text-slate-800">{filteredAllocations.length}</span> 条记录
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50" disabled>
+                                        <Icon name="chevron-left" className="w-4 h-4" />
+                                    </button>
+                                    <button className="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg">1</button>
+                                    <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                                        <Icon name="chevron-right" className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    {/* 详情弹窗 */}
+                    {showDetailModal && selectedAllocation && (
+                        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-8">
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+                                {/* 弹窗头部 */}
+                                <div className="p-6 border-b border-slate-100 flex justify-between items-start">
+                                    <div>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <h2 className="text-xl font-bold text-slate-900">产值分配详情</h2>
+                                            <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${getStatusStyle(selectedAllocation.status)}`}>
+                                                {selectedAllocation.status}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-slate-500">{selectedAllocation.projectName} · {selectedAllocation.phase} {selectedAllocation.phaseName}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowDetailModal(false)}
+                                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                                    >
+                                        <Icon name="x" className="w-5 h-5" />
+                                    </button>
+                                </div>
+
+                                {/* 弹窗内容 */}
+                                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                                    {/* 产值概览 */}
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="p-4 bg-slate-50 rounded-xl text-center">
+                                            <p className="text-xs text-slate-500 mb-1">阶段产值</p>
+                                            <p className="text-xl font-bold text-slate-800">￥{selectedAllocation.phaseAmount.toLocaleString()}</p>
+                                            <p className="text-xs text-slate-400 mt-1">比例 {selectedAllocation.phaseRatio}</p>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 rounded-xl text-center">
+                                            <p className="text-xs text-slate-500 mb-1">回款系数</p>
+                                            <p className={`text-xl font-bold ${
+                                                selectedAllocation.collectionRatio >= 80 ? 'text-emerald-600' :
+                                                selectedAllocation.collectionRatio >= 50 ? 'text-amber-600' : 'text-rose-600'
+                                            }`}>{selectedAllocation.collectionRatio}%</p>
+                                            <p className="text-xs text-slate-400 mt-1">基于回款状态</p>
+                                        </div>
+                                        <div className="p-4 bg-blue-50 rounded-xl text-center">
+                                            <p className="text-xs text-blue-600 mb-1">实发产值</p>
+                                            <p className="text-xl font-bold text-blue-700">￥{selectedAllocation.actualAmount.toLocaleString()}</p>
+                                            <p className="text-xs text-blue-500 mt-1">= 阶段产值 × 回款系数</p>
+                                        </div>
+                                    </div>
+
+                                    {/* 分配明细 */}
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-slate-800 mb-4">分配明细</h3>
+                                        <div className="space-y-3">
+                                            {selectedAllocation.distributions.map((d, idx) => (
+                                                <div key={idx} className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl">
+                                                    <div className={`w-1 h-12 rounded-full ${getWorkTypeStyle(d.type)}`}></div>
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                                                                d.type === '管理工作' ? 'bg-blue-100 text-blue-600' :
+                                                                d.type === '基础工作' ? 'bg-emerald-100 text-emerald-600' :
+                                                                'bg-amber-100 text-amber-600'
+                                                            }`}>{d.type}</span>
+                                                            <span className="text-xs text-slate-400">比例 {d.ratio}%</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-600">
+                                                                {d.person[0]}
+                                                            </div>
+                                                            <span className="text-sm text-slate-700">{d.person}</span>
+                                                            <span className="text-xs text-slate-400">({d.role})</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-lg font-bold text-slate-800">￥{d.amount.toLocaleString()}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* 审批流程 */}
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-slate-800 mb-4">审批流程</h3>
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex flex-col items-center">
+                                                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                                                    <Icon name="check" className="w-5 h-5" />
+                                                </div>
+                                                <p className="text-xs text-slate-600 mt-2">系统生成</p>
+                                                <p className="text-xs text-slate-400">{selectedAllocation.createTime.split(' ')[0]}</p>
+                                            </div>
+                                            <div className="flex-1 h-0.5 bg-slate-200"></div>
+                                            <div className="flex flex-col items-center">
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                                    selectedAllocation.status === '待确认' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'
+                                                }`}>
+                                                    <Icon name={selectedAllocation.status === '待确认' ? 'clock' : 'check'} className="w-5 h-5" />
+                                                </div>
+                                                <p className="text-xs text-slate-600 mt-2">项目经理确认</p>
+                                                <p className="text-xs text-slate-400">{selectedAllocation.status === '待确认' ? '待处理' : '已完成'}</p>
+                                            </div>
+                                            <div className="flex-1 h-0.5 bg-slate-200"></div>
+                                            <div className="flex flex-col items-center">
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                                    selectedAllocation.status === '待审核' ? 'bg-blue-100 text-blue-600' :
+                                                    selectedAllocation.status === '待确认' ? 'bg-slate-100 text-slate-400' : 'bg-emerald-100 text-emerald-600'
+                                                }`}>
+                                                    <Icon name={selectedAllocation.status === '待确认' || selectedAllocation.status === '待审核' ? 'clock' : 'check'} className="w-5 h-5" />
+                                                </div>
+                                                <p className="text-xs text-slate-600 mt-2">业务经理审核</p>
+                                                <p className="text-xs text-slate-400">
+                                                    {selectedAllocation.status === '待确认' ? '待前置' :
+                                                     selectedAllocation.status === '待审核' ? '待处理' : '已完成'}
+                                                </p>
+                                            </div>
+                                            <div className="flex-1 h-0.5 bg-slate-200"></div>
+                                            <div className="flex flex-col items-center">
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                                    selectedAllocation.status === '已发放' ? 'bg-emerald-100 text-emerald-600' :
+                                                    selectedAllocation.status === '已审批' ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'
+                                                }`}>
+                                                    <Icon name={selectedAllocation.status === '已发放' ? 'check' : 'banknote'} className="w-5 h-5" />
+                                                </div>
+                                                <p className="text-xs text-slate-600 mt-2">产值发放</p>
+                                                <p className="text-xs text-slate-400">
+                                                    {selectedAllocation.status === '已发放' ? selectedAllocation.paidTime?.split(' ')[0] : '待发放'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 弹窗底部 */}
+                                <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
+                                    <button
+                                        onClick={() => setShowDetailModal(false)}
+                                        className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
+                                    >
+                                        关闭
+                                    </button>
+                                    {selectedAllocation.status === '待确认' && (
+                                        <>
+                                            <button className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
+                                                调整分配
+                                            </button>
+                                            <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors">
+                                                确认分配
+                                            </button>
+                                        </>
+                                    )}
+                                    {selectedAllocation.status === '待审核' && (
+                                        <>
+                                            <button className="px-4 py-2 text-sm font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl transition-colors">
+                                                驳回
+                                            </button>
+                                            <button className="px-4 py-2 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-colors">
+                                                审批通过
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+
+</html>
