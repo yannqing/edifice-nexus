@@ -18,11 +18,8 @@ public enum ErrorType implements BaseTypeInterface<Integer> {
     NO_AUTH_ERROR(50050, "您没有权限，请重试！"),
 
     //业务异常
-    CHAT_SESSION_NOT_EXISTS(50101, "聊天会话不存在，请重试！"),
-    CHAT_SESSION_NOT_ACTIVE(50102, "聊天会话不可用，请重试！"),
-    RESUME_NOT_EXISTS(50201, "简历不存在，请重试！"),
-    FILES_COUNT_REACH_MAX(50301, "文件数量过多，请重试！"),
-    OPERATION_NOT_EXISTS(50401, "对应操作日志不存在，请重试！"),
+    USER_CANNOT_NULL(50101, "用户不存在，请重试！"),
+    USER_ALREADY_EXISTS(50101, "用户已存在，请重试！"),
     ;
     // 异常码
     private final Integer code;

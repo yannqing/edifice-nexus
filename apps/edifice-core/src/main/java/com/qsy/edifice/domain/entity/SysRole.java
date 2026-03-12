@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
@@ -19,6 +20,7 @@ import java.time.LocalDateTime;
 @TableName("sys_role")
 public class SysRole implements Serializable {
 
+    @Serial
     private static final long serialVersionUID = 1L;
 
     /**

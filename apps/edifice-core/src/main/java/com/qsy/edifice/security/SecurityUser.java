@@ -36,7 +36,7 @@ public class SecurityUser implements UserDetails {
 
     @Override
     public String getPassword() {
-        return null;
+        return sysUser.getPassword();
     }
 
     @Override

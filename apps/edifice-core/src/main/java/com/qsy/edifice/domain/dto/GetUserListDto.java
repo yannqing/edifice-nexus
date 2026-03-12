@@ -2,6 +2,7 @@ package com.qsy.edifice.domain.dto;
 
 
 import com.baomidou.mybatisplus.annotation.TableField;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -14,6 +15,7 @@ public class GetUserListDto {
     /**
      * 登录用户名
      */
+    @Schema(description = "登录用户名", requiredMode = Schema.RequiredMode.REQUIRED)
     private String username;
 
     /**

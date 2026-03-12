@@ -24,7 +24,7 @@ public class JwtUtils {
 
     @Value("${jwt.secret}")
     private String secret;
-    
+
     /**
      * JWT专用的ObjectMapper
      * 注意：这与全局的ObjectMapper配置不同，专门针对JWT内部序列化场景：
