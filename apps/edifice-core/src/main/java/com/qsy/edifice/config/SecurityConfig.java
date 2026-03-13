@@ -30,6 +30,15 @@ public class SecurityConfig {
     @Resource
     private RedisCache redisCache;
 
+    @Resource
+    private MyLoginSuccessHandler myLoginSuccessHandler;
+
+    @Resource
+    private MyLoginFailureHandler myLoginFailureHandler;
+
+    @Resource
+    private MyLogoutSuccessHandler myLogoutSuccessHandler;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         //允许一些请求匿名访问，其他的均需要认证
@@ -66,14 +75,14 @@ public class SecurityConfig {
         //form表单登录
         http.formLogin((login)->login.
                 loginProcessingUrl("/auth/login")
-                .successHandler(new MyLoginSuccessHandler(redisCache))
-                .failureHandler(new MyLoginFailureHandler())
+                .successHandler(myLoginSuccessHandler)
+                .failureHandler(myLoginFailureHandler)
         );
 
         //设置退出logout过滤器
         http.logout((logout)->logout
                 .logoutUrl("/auth/logout")
-                .logoutSuccessHandler(new MyLogoutSuccessHandler(redisCache))
+                .logoutSuccessHandler(myLogoutSuccessHandler)
         );
 
         //关闭跨域拦截--适用于前后端分离，另创建跨域拦截的类
