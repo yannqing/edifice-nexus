@@ -90,4 +90,4 @@ file:
 # JWT配置
 jwt:
   secret: ${JWT_SECRET:your_jwt_secret_key_here}  # JWT密钥，生产环境请使用环境变量
-  expire-times: ${JWT_EXPIRE_TIMES:your_jwt_expire_times_here}  # Token有效期
+  expire-times: ${JWT_EXPIRE_TIMES:604800000}  # Token有效期

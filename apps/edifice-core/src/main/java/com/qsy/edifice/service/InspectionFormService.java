@@ -1,7 +1,9 @@
 package com.qsy.edifice.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.qsy.edifice.domain.dto.GetInspectionFormListDto;
 import com.qsy.edifice.domain.entity.InspectionForm;
+import com.qsy.edifice.domain.vo.InspectionFormListVo;
 
 import java.util.List;
 
@@ -10,6 +12,13 @@ import java.util.List;
  */
 public interface InspectionFormService {
 
+    /**
+     * 查询我的验工单列表
+     *
+     * @param getInspectionFormListDto 查询条件
+     * @return 封装 vo 返回
+     */
+    List<InspectionFormListVo> getMyInspections(GetInspectionFormListDto getInspectionFormListDto);
     /**
      * 根据验工单id查询验工单
      * @param inspectionFormId 验工单id
