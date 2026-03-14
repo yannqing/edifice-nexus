@@ -2,10 +2,14 @@ package com.qsy.edifice.domain.vo;
 
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.qsy.edifice.domain.entity.InspectionForm;
+import com.qsy.edifice.enums.ErrorType;
+import com.qsy.edifice.exception.BusinessException;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.beans.BeanUtils;
 
 import java.io.Serial;
 import java.io.Serializable;
@@ -52,6 +56,12 @@ public class InspectionFormDetailVo  implements Serializable {
     private Long applyUserId;
 
     /**
+     * 验工单状态：0-待审核/1-审核中/2-已驳回/3-已通过/4-草稿
+     */
+    @TableField("inspection_form_status")
+    private Integer inspectionFormStatus;
+
+    /**
      * 附件id（json数组）
      */
     private String fileIds;
@@ -77,8 +87,25 @@ public class InspectionFormDetailVo  implements Serializable {
     private String approvalDescription;
 
     /**
-     * 审批状态：0-待审核/1-已通过/2-已拒绝
+     * 创建时间
      */
-    private Integer inspectionFormStatus;
+    @TableField(value = "created_time", fill = FieldFill.INSERT)
+    private LocalDateTime createdTime;
 
+    /**
+     * 更新时间
+     */
+    @TableField(value = "updated_time", fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updatedTime;
+
+    public static InspectionFormDetailVo objToVo(InspectionForm inspectionForm) {
+        if (inspectionform == null) {
+            throw new BusinessException(ErrorType.SYSTEM_ERROR);
+        }
+
+        SysUserDetailVo sysUserDetailVo = new SysUserDetailVo();
+
+        BeanUtils.copyProperties(insp, sysUserDetailVo);
+        return sysUserDetailVo;
+    }
 }

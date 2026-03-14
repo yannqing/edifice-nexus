@@ -4,7 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.GetInspectionFormListDto;
 import com.qsy.edifice.domain.entity.InspectionForm;
+import com.qsy.edifice.domain.vo.InspectionFormDetailVo;
 import com.qsy.edifice.domain.vo.InspectionFormListVo;
+import com.qsy.edifice.enums.ErrorType;
+import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.InspectionFormMapper;
 import com.qsy.edifice.service.InspectionFormService;
 import jakarta.annotation.Resource;
@@ -25,7 +28,7 @@ public class InspectionFormServiceImpl implements InspectionFormService {
     private InspectionFormMapper inspectionFormMapper;
 
     @Override
-    public List<InspectionFormListVo> getMyInspections(GetInspectionFormListDto getInspectionFormListDto) {
+    public Page<InspectionFormListVo> getMyInspections(GetInspectionFormListDto getInspectionFormListDto) {
 
         //1.获取全部参数
         Long inspectionFormId = getInspectionFormListDto.getInspectionFormId();
@@ -41,54 +44,29 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         queryWrapper.eq(StringUtils.isNotEmpty(inspectionFormCode), "inspectionFormCode", inspectionFormCode);
         queryWrapper.eq(StringUtils.isNotEmpty(projectId), "projectId", projectId);
 
-        List<InspectionForm> inspectionForms = inspectionFormMapper.selectList(queryWrapper);
+        //List<InspectionForm> inspectionForms = inspectionFormMapper.selectList(queryWrapper);
 
-        inspectionFormMapper.selectPage(new Page<>(current, pageSize), queryWrapper);
-        return List.of();
+        Page<InspectionForm> inspectionFormPage = inspectionFormMapper.selectPage(new Page<>(current, pageSize), queryWrapper);
+
+        List<InspectionFormListVo> inspectionFormListVos = inspectionFormPage.getRecords().stream().map(InspectionFormListVo::objToVo).toList();
+
+        return new Page<InspectionFormListVo>(current,pageSize,inspectionFormPage.getTotal()).setRecords(inspectionFormListVos);
     }
 
     @Override
-    public InspectionForm getInspectionFormById(Long inspectionFormId) {
-        return inspectionFormMapper.selectById(inspectionFormId);
-    }
+    public InspectionFormDetailVo getInspectionById(Long id){
 
-    @Override
-    public InspectionForm getInspectionFormByCode(String inspectionFormCode) {
-        return inspectionFormMapper.selectByInspectionFormCode(inspectionFormCode);
-    }
+        //1.参数校验
+         if (id==null){
+             throw  new BusinessException(ErrorType.NO_AUTH_ERROR);
+         }
+         //2.查询数据库，获取用户原始数据
 
-    @Override
-    public List<InspectionForm> getInspectionFormsByProjectId(String projectId) {
-        return inspectionFormMapper.selectByProjectId(projectId);
-    }
+         InspectionForm inspectionForm =inspectionFormMapper.selectById(id);
+         InspectionFormDetailVo inspectionFormDetailVo= InspectionFormDetailVo.objToVo(inspectionForm);
 
-    @Override
-    public List<InspectionForm> getInspectionFormsByProjectStageId(Long projectStageId) {
-        return inspectionFormMapper.selectByProjectStageId(projectStageId);
-    }
+        log.info("查询用户(id: {})", id);
 
-    @Override
-    public List<InspectionForm> getInspectionFormsByApplyUserId(Long applyUserId) {
-        return inspectionFormMapper.selectByApplyUserId(applyUserId);
-    }
-
-    @Override
-    public Page<InspectionForm> getInspectionFormPage(Integer current, Integer pageSize) {
-        return inspectionFormMapper.selectPage(new Page<>(current, pageSize), null);
-    }
-
-    @Override
-    public boolean saveInspectionForm(InspectionForm inspectionForm) {
-        return inspectionFormMapper.insert(inspectionForm) > 0;
-    }
-
-    @Override
-    public boolean updateInspectionForm(InspectionForm inspectionForm) {
-        return inspectionFormMapper.updateById(inspectionForm) > 0;
-    }
-
-    @Override
-    public boolean deleteInspectionForm(Long inspectionFormId) {
-        return inspectionFormMapper.deleteById(inspectionFormId) > 0;
-    }
+        return inspectionFormDetailVo;
+    };
 }
