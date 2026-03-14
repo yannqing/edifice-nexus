@@ -39,6 +39,9 @@ public class SecurityConfig {
     @Resource
     private MyLogoutSuccessHandler myLogoutSuccessHandler;
 
+    @Resource
+    private JwtAuthenticationTokenFilter jwtAuthenticationTokenFilter;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         //允许一些请求匿名访问，其他的均需要认证
@@ -65,8 +68,7 @@ public class SecurityConfig {
         );
 
         //设置用户名密码认证前的jwt过滤器
-        JwtAuthenticationTokenFilter jwtFilter = new JwtAuthenticationTokenFilter(redisCache);
-        http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
+        http.addFilterBefore(jwtAuthenticationTokenFilter, UsernamePasswordAuthenticationFilter.class);
 
         //csrf
         http.csrf(AbstractHttpConfigurer::disable);
