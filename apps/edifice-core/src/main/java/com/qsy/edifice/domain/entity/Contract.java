@@ -29,6 +29,11 @@ public class Contract implements Serializable {
      */
     @TableId(value = "contract_id", type = IdType.ASSIGN_ID)
     private Long contractId;
+    /**
+     * 合同名称
+     */
+    @TableField("project_d")
+    private Long projectId;
 
     /**
      * 合同名称

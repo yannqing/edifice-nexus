@@ -6,6 +6,7 @@
     <resultMap id="BaseResultMap" type="com.qsy.edifice.domain.entity.Contract">
         <id column="contract_id" property="contractId" jdbcType="BIGINT"/>
         <result column="contract_name" property="contractName" jdbcType="VARCHAR"/>
+        <result column="project_id" property="projectId" jdbcType="BIGINT"/>
         <result column="contract_code" property="contractCode" jdbcType="VARCHAR"/>
         <result column="contract_type" property="contractType" jdbcType="TINYINT"/>
         <result column="contract_amount" property="contractAmount" jdbcType="INTEGER"/>
@@ -27,6 +28,40 @@
         contract_file, contract_other_files, base_amount, benefit_rules, signing_date,
         pre_start_date, pre_end_date, created_time, updated_time, is_delete
     </sql>
+    <insert id="batchInsert" parameterType="java.util.List">
+        INSERT INTO contract (
+        contract_name,
+        contract_code,
+        contract_type,
+        contract_amount,
+        contract_file,
+        contract_other_files,
+        base_amount,
+        benefit_rules,
+        signing_date,
+        pre_start_date,
+        pre_end_date,
+        project_id
+        )
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+            #{item.contractName},
+            #{item.contractCode},
+            #{item.contractType},
+            #{item.contractAmount},
+            #{item.contractFile},
+            #{item.contractOtherFiles},
+            #{item.baseAmount},
+            #{item.benefitRules},
+            #{item.signingDate},
+            #{item.preStartDate},
+            #{item.preEndDate},
+            #{item.projectId}
+            )
+        </foreach>
+    </insert>
+
 
     <!-- 根据合同编码查询合同 -->
     <select id="selectByContractCode" resultMap="BaseResultMap">

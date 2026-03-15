@@ -20,6 +20,46 @@
         created_time, updated_time, is_delete
     </sql>
 
+
+
+        <!-- 批量插入合同（主键自增，不传 contract_id） -->
+        <insert id="batchInsert" parameterType="java.util.List"
+                useGeneratedKeys="true" keyProperty="contractId" keyColumn="contract_id">
+            INSERT INTO contract (
+            project_id,
+            contract_name,
+            contract_code,
+            contract_type,
+            contract_amount,
+            contract_file,
+            contract_other_files,
+            base_amount,
+            benefit_rules,
+            signing_date,
+            pre_start_date,
+            pre_end_date
+            <!-- created_time, updated_time, is_delete 由 DB 默认值处理，不写 -->
+            )
+            VALUES
+            <foreach collection="list" item="item" separator=",">
+                (
+                #{item.projectId},
+                #{item.contractName},
+                #{item.contractCode},
+                #{item.contractType},
+                #{item.contractAmount},
+                #{item.contractFile},
+                #{item.contractOtherFiles},
+                #{item.baseAmount},
+                #{item.benefitRules},
+                #{item.signingDate},
+                #{item.preStartDate},
+                #{item.preEndDate}
+                )
+            </foreach>
+        </insert>
+
+
     <!-- 根据项目id查询项目阶段列表 -->
     <select id="selectByProjectId" resultMap="BaseResultMap">
         SELECT

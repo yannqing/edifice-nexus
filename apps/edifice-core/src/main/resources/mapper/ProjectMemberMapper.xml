@@ -18,6 +18,23 @@
         project_member_id, project_id, user_id, project_role,
         created_time, updated_time, is_delete
     </sql>
+    <insert id="batchInsert" parameterType="java.util.List"
+            useGeneratedKeys="true" keyProperty="projectMemberId" keyColumn="project_member_id">
+        INSERT INTO project_member (
+        project_id,
+        user_id,
+        project_role
+        <!-- created_time, updated_time, is_delete 由 DB 默认值处理，不写 -->
+        )
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+            #{item.projectId},
+            #{item.userId},
+            #{item.projectRole}
+            )
+        </foreach>
+    </insert>
 
     <!-- 根据项目id查询项目成员列表 -->
     <select id="selectByProjectId" resultMap="BaseResultMap">

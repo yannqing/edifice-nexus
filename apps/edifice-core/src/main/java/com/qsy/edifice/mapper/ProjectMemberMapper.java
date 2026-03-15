@@ -34,4 +34,6 @@ public interface ProjectMemberMapper extends BaseMapper<ProjectMember> {
      * @return 项目成员信息
      */
     ProjectMember selectByProjectIdAndUserId(@Param("projectId") Long projectId, @Param("userId") Long userId);
+
+    void batchInsert(List<ProjectMember> memberList);
 }

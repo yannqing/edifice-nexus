@@ -27,4 +27,6 @@ public interface ProjectStageMapper extends BaseMapper<ProjectStage> {
      * @return 项目阶段列表
      */
     List<ProjectStage> selectByProjectIdAndStatus(@Param("projectId") Long projectId, @Param("stageStatus") Integer stageStatus);
+
+    void batchInsert(List<ProjectStage> stageList);
 }

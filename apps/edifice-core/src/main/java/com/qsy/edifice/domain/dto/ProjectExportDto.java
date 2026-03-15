@@ -7,7 +7,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-public class ProjectExportDTO {
+public class ProjectExportDto {
 
     @ExcelProperty("项目ID")
     private Long projectId;

@@ -5,6 +5,8 @@ import com.qsy.edifice.domain.entity.Contract;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
 /**
  * 合同 Mapper 接口
  */
@@ -17,4 +19,6 @@ public interface ContractMapper extends BaseMapper<Contract> {
      * @return 合同信息
      */
     Contract selectByContractCode(@Param("contractCode") String contractCode);
+
+    void batchInsert(List<Contract> contractList);
 }

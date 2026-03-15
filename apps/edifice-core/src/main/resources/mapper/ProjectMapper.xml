@@ -23,6 +23,27 @@
         project_start_time, project_end_time, created_time, updated_time, is_delete
     </sql>
 
+    <insert id="insert" useGeneratedKeys="true" keyProperty="projectId" keyColumn="project_id">
+        INSERT INTO project (
+            project_id,
+            project_name,
+            project_code,
+            project_type,
+            project_status,
+
+            project_start_time,
+            project_end_time
+        ) VALUES (
+                     #{projectId},
+                     #{projectName},
+                     #{projectCode},
+                     #{projectType},
+                     #{projectStatus},
+
+                     #{projectStartTime},
+                     #{projectEndTime}
+                 )
+    </insert>
     <!-- 根据项目编码查询项目 -->
     <select id="selectByProjectCode" resultMap="BaseResultMap">
         SELECT

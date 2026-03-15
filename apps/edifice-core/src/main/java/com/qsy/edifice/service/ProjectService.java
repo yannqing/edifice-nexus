@@ -2,8 +2,7 @@ package com.qsy.edifice.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.ProjectCreateDto;
-import com.qsy.edifice.domain.dto.ProjectExportDTO;
-import com.qsy.edifice.domain.dto.SysUserCreateDto;
+import com.qsy.edifice.domain.dto.ProjectExportDto;
 import com.qsy.edifice.domain.entity.Project;
 
 import java.util.List;
@@ -70,7 +69,7 @@ public interface ProjectService {
      */
     boolean deleteProject(Long projectId);
 
-    List<ProjectExportDTO> getProjectsForExport(List<Long> projectIds);
+    List<ProjectExportDto> getProjectsForExport(List<Long> projectIds);
 
-    boolean createUser(ProjectCreateDto sysUserCreateDto, Long currentUserId);
+    boolean createProject(ProjectCreateDto sysUserCreateDto, Long currentUserId);
 }
