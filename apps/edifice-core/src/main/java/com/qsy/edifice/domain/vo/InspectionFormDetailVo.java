@@ -99,13 +99,14 @@ public class InspectionFormDetailVo  implements Serializable {
     private LocalDateTime updatedTime;
 
     public static InspectionFormDetailVo objToVo(InspectionForm inspectionForm) {
-        if (inspectionform == null) {
+        if (inspectionForm == null) {
             throw new BusinessException(ErrorType.SYSTEM_ERROR);
         }
 
-        SysUserDetailVo sysUserDetailVo = new SysUserDetailVo();
+        InspectionFormDetailVo inspectionFormDetailVo= new InspectionFormDetailVo();
 
-        BeanUtils.copyProperties(insp, sysUserDetailVo);
-        return sysUserDetailVo;
+        BeanUtils.copyProperties(inspectionForm, inspectionFormDetailVo);
+
+        return inspectionFormDetailVo;
     }
 }

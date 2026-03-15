@@ -40,4 +40,6 @@ public interface InspectionFormMapper extends BaseMapper<InspectionForm> {
      * @return 验工单列表
      */
     List<InspectionForm> selectByApplyUserId(@Param("applyUserId") Long applyUserId);
+
+    Long countByStatus(@Param("status") String status);
 }

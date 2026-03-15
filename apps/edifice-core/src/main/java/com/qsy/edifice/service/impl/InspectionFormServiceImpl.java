@@ -6,6 +6,7 @@ import com.qsy.edifice.domain.dto.GetInspectionFormListDto;
 import com.qsy.edifice.domain.entity.InspectionForm;
 import com.qsy.edifice.domain.vo.InspectionFormDetailVo;
 import com.qsy.edifice.domain.vo.InspectionFormListVo;
+import com.qsy.edifice.domain.vo.InspectionOverviewVo;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.InspectionFormMapper;
@@ -63,10 +64,38 @@ public class InspectionFormServiceImpl implements InspectionFormService {
          //2.查询数据库，获取用户原始数据
 
          InspectionForm inspectionForm =inspectionFormMapper.selectById(id);
+
+         if(inspectionForm == null) {
+
+            return null;
+        }
          InspectionFormDetailVo inspectionFormDetailVo= InspectionFormDetailVo.objToVo(inspectionForm);
 
         log.info("查询用户(id: {})", id);
 
         return inspectionFormDetailVo;
-    };
+    }
+    @Override
+    public InspectionOverviewVo getInspectionOverview() {
+        InspectionOverviewVo vo = new InspectionOverviewVo();
+
+        // 每次都查数据库，实时统计
+        vo.setPendingApproval(inspectionFormMapper.selectCount(
+                new QueryWrapper<InspectionForm>().eq("inspection_form_status", 0)
+        ));
+
+        vo.setPendingFirstReview(inspectionFormMapper.selectCount(
+                new QueryWrapper<InspectionForm>().eq("inspection_form_status", 1)
+        ));
+
+        vo.setApproved(inspectionFormMapper.selectCount(
+                new QueryWrapper<InspectionForm>().eq("inspection_form_status", 3)
+        ));
+
+        vo.setRejected(inspectionFormMapper.selectCount(
+                new QueryWrapper<InspectionForm>().eq("inspection_form_status", 2)
+        ));
+
+        return vo;
+    }
 }
