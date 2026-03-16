@@ -1,7 +1,11 @@
 package com.qsy.edifice.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.qsy.edifice.domain.dto.GetMyProjectListDto;
 import com.qsy.edifice.domain.entity.Project;
+import com.qsy.edifice.domain.vo.ProjectDetailVo;
+import com.qsy.edifice.domain.vo.ProjectListVo;
+import com.qsy.edifice.domain.vo.ProjectStatisticsVo;
 
 import java.util.List;
 
@@ -66,4 +70,33 @@ public interface ProjectService {
      * @return 是否成功
      */
     boolean deleteProject(Long projectId);
+
+    /**
+     * 分页查询本人参与的项目列表
+     * @param userId 用户id
+     * @param dto 查询条件
+     * @return 分页结果
+     */
+    Page<ProjectListVo> getMyProjectPage(Long userId, GetMyProjectListDto dto);
+
+    /**
+     * 根据项目id查询项目详情
+     * @param projectId 项目id
+     * @param userId 当前用户id
+     * @return 项目详情
+     */
+    ProjectDetailVo getProjectDetailById(Long projectId, Long userId);
+
+    /**
+     * 检查项目是否存在
+     * @param projectId 项目id
+     * @return 项目是否存在
+     */
+    boolean checkProjectExists(Long projectId);
+
+    /**
+     * 获取项目统计信息
+     * @return 统计信息
+     */
+    ProjectStatisticsVo getProjectStatistics();
 }
