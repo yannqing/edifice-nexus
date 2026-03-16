@@ -33,4 +33,6 @@ public interface ProjectMapper extends BaseMapper<Project> {
      * @return 项目列表
      */
     List<Project> selectByProjectType(@Param("projectType") Long projectType);
+
+    boolean insertBatchSomeColumn(List<Project> projects);
 }

@@ -5,6 +5,7 @@ import com.qsy.edifice.common.Code;
 import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.dto.ProjectCreateDto;
 import com.qsy.edifice.domain.dto.ProjectExportDto;
+import com.qsy.edifice.domain.dto.ProjectImportDTO;
 import com.qsy.edifice.service.ProjectService;
 import com.qsy.edifice.utils.ResultUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,13 +13,17 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.net.MulticastSocket;
 import java.net.URLEncoder;
 import java.util.List;
 
 @Tag(name = "项目管理")
+@Slf4j
 @RestController
 @RequestMapping("/project")
 public class ProjectController {
@@ -58,6 +63,30 @@ public class ProjectController {
     private Long getCurrentUserId() {
         // 示例：return SecurityUtils.getCurrentUserId();
         return 1001L; // 测试用
+    }
+    @PostMapping("/import")
+    public BaseResponse<Boolean> importFromExcel(@RequestParam("file")MultipartFile file) {
+
+        if(file.isEmpty()){
+
+            return ResultUtils.failure(Code.FAILURE,false);
+        }
+        try{
+            List<ProjectImportDTO> dataList = EasyExcel.read(file.getInputStream())
+                    .head(ProjectImportDTO.class)
+                    .sheet()
+                    .doReadSync();
+
+            projectService.importProjects(dataList);
+            log.info("importProjects 执行完成，无异常抛出");
+            return ResultUtils.success(Code.SUCCESS,true);
+
+        }catch (Exception e) {
+            log.error("Excel 导入失败", e);
+            return ResultUtils.failure(Code.FAILURE,false);
+        }
+
+
     }
 
 }

@@ -3,6 +3,7 @@ package com.qsy.edifice.service;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.ProjectCreateDto;
 import com.qsy.edifice.domain.dto.ProjectExportDto;
+import com.qsy.edifice.domain.dto.ProjectImportDTO;
 import com.qsy.edifice.domain.entity.Project;
 
 import java.util.List;
@@ -72,4 +73,6 @@ public interface ProjectService {
     List<ProjectExportDto> getProjectsForExport(List<Long> projectIds);
 
     boolean createProject(ProjectCreateDto sysUserCreateDto, Long currentUserId);
+
+    void importProjects(List<ProjectImportDTO> dataList);
 }

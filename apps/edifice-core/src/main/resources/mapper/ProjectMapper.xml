@@ -44,6 +44,7 @@
                      #{projectEndTime}
                  )
     </insert>
+    <insert id="insertBatchSomeColumn"></insert>
     <!-- 根据项目编码查询项目 -->
     <select id="selectByProjectCode" resultMap="BaseResultMap">
         SELECT

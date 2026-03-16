@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -144,6 +145,61 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         }
 
         return true; // 成功返回 true
+    }
+
+    @Override
+    public void importProjects(List<ProjectImportDTO> dataList) {
+        if(dataList == null || dataList.isEmpty()){
+            throw new IllegalArgumentException("导出数据为空");
+        }
+        List<Project> projects = new ArrayList<>();
+
+        for(int i = 0; i < dataList .size();i++) {
+            ProjectImportDTO dto = dataList.get(i);
+            validateRow(dto ,i +1);
+            Project project = Project.builder()
+                    .projectName(dto.getProjectName())
+                    .projectCode(dto.getProjectCode())
+                    .projectType(dto.getProjectType())
+                    .projectStatus(dto.getProjectStatus())
+                    .isShow(dto.getIsShow())
+                    .projectStartTime(dto.getProjectStartTime())
+                    .projectEndTime(dto.getProjectEndTime())
+                    // 注意：不设置 projectId、createdTime、updatedTime、isDelete
+                    // 这些由 MP 自动处理
+                    .build();
+            projects.add(project);
+
+
+
+
+
+        }
+        // 或者用循环 save（更稳妥）：
+        projects.forEach(projectMapper::insert);
+
+
+    }
+    private void validateRow(ProjectImportDTO dto,int rowIndex) {
+        if(dto.getProjectName() == null || dto.getProjectName().trim().isEmpty()){
+            throw new RuntimeException("第 " + rowIndex + " 行：项目名称不能为空");
+        }
+        if (dto.getProjectCode() == null || dto.getProjectCode().trim().isEmpty()) {
+            throw new RuntimeException("第 " + rowIndex + " 行：项目编号不能为空");
+        }
+        if(!Set.of(0,1,2,3,4).contains(dto.getProjectStatus())){
+            throw new RuntimeException("第 " + rowIndex + " 行：项目状态必须是 0-4");
+        }
+        if (!Set.of(0, 1).contains(dto.getIsShow())) {
+            throw new RuntimeException("第 " + rowIndex + " 行：是否公开必须是 0 或 1");
+        }
+        if (dto.getProjectStartTime() == null) {
+            throw new RuntimeException("第 " + rowIndex + " 行：开始日期不能为空");
+        }
+        if (dto.getProjectEndTime() == null) {
+            throw new RuntimeException("第 " + rowIndex + " 行：结束日期不能为空");
+        }
+
     }
 
     private void validateInput(ProjectCreateDto dto, Long currentUserId) {
