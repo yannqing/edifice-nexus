@@ -1,5 +1,6 @@
 package com.qsy.edifice.domain.vo;
 
+
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -7,23 +8,21 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-/**
- * 项目成员VO，用于列表展示
- */
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class ProjectMemberVo implements Serializable {
-    //
+public class ProjectStageVo implements Serializable {
+
     @Serial
     private static final long serialVersionUID = 1L;
 
     /**
-     * 项目成员id
+     * 项目阶段id
      */
-    private Long projectMemberId;
+    private Long projectStageId;
 
     /**
      * 项目id
@@ -31,13 +30,19 @@ public class ProjectMemberVo implements Serializable {
     private Long projectId;
 
     /**
-     * 用户id
+     * 阶段名称
      */
-    private Long userId;
+    private String stageName;
 
     /**
-     * 项目内角色id
+     * 阶段状态：0-未开始/1-进行中/2-待验收/3-已验收/4-已驳回/5-待分配/6-已完成
      */
-    private Long projectRoleId;
+    private Integer stageStatus;
+
+    /**
+     * 阶段产值比例
+     */
+    private BigDecimal stageOutput;
+
 
 }

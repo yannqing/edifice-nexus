@@ -37,8 +37,7 @@ public class FileController {
      */
     @Operation(summary = "上传图片文件", description = "支持jpg, jpeg, png, gif, bmp, webp, svg, ico, tiff, tif格式")
     @PostMapping("/upload/images")
-    public BaseResponse<FilesVo> uploadImage(@RequestParam("image") MultipartFile image,
-                                             HttpServletRequest request) throws IOException {
+    public BaseResponse<FilesVo> uploadImage(@RequestParam("image") MultipartFile image, HttpServletRequest request) throws IOException {
         if (image != null && image.getSize() > MAX_FILE_SIZE_BYTES) {
             return ResultUtils.failure("文件大小不能超过10MB");
         }
