@@ -57,4 +57,9 @@ public class SysUserRole implements Serializable {
     @TableField("is_delete")
     @TableLogic
     private Integer isDelete;
+    /**
+     * 项目id
+     */
+    @TableField("project_id")
+    private Long projectId;
 }

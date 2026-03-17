@@ -44,13 +44,19 @@ public class ProjectCreateDto {
 
         // 合同可为空（但通常建议至少一个）
 
+        @NotEmpty(message = "至少需要一名项目成员")
+        @Valid
+        private List<SysUserRoleDto> roles;
 
 
         /**
          * 阶段
          */
         @Schema(description = "阶段", requiredMode = Schema.RequiredMode.REQUIRED)
-        private String stage;
+        private String stage    ;
+
+        @Schema(description = "用户Id", requiredMode = Schema.RequiredMode.REQUIRED)
+        private Long id;
     }
 
 
