@@ -1,12 +1,13 @@
 package com.qsy.edifice.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.qsy.edifice.domain.entity.Contract;
 
 /**
  * 合同服务接口
  */
-public interface ContractService {
+public interface ContractService extends IService<Contract> {
 
     /**
      * 根据合同id查询合同

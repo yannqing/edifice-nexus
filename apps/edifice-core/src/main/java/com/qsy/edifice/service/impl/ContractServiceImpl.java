@@ -1,6 +1,8 @@
 package com.qsy.edifice.service.impl;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.IService;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.qsy.edifice.domain.entity.Contract;
 import com.qsy.edifice.mapper.ContractMapper;
 import com.qsy.edifice.service.ContractService;
@@ -13,7 +15,7 @@ import org.springframework.stereotype.Service;
  */
 @Slf4j
 @Service
-public class ContractServiceImpl implements ContractService {
+public class ContractServiceImpl extends ServiceImpl<ContractMapper,Contract> implements ContractService {
 
     @Resource
     private ContractMapper contractMapper;

@@ -1,19 +1,25 @@
 package com.qsy.edifice.controller;
 
 import com.alibaba.excel.EasyExcel;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.qsy.edifice.common.Code;
 import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.dto.ProjectCreateDto;
 import com.qsy.edifice.domain.dto.ProjectExportDto;
 import com.qsy.edifice.domain.dto.ProjectImportDTO;
+import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.service.ProjectService;
+import com.qsy.edifice.utils.JwtUtils;
 import com.qsy.edifice.utils.ResultUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -29,11 +35,15 @@ import java.util.List;
 public class ProjectController {
     @Resource
     private ProjectService projectService;
+    @Resource
+    private JwtUtils jwtUtils ;
 
     @PostMapping("/create")
     @Operation(summary = "新增项目")
-    public BaseResponse<Boolean> createUser(@Valid @RequestBody ProjectCreateDto sysUserCreateDto) {
-        Long currentUserId = getCurrentUserId();
+    public BaseResponse<Boolean> createUser(@Valid @RequestBody ProjectCreateDto sysUserCreateDto, HttpServletRequest request) throws JsonProcessingException {
+        String token = request.getHeader("token");
+        SysUser loginUser = jwtUtils.getUserFromToken(token);
+        Long currentUserId = loginUser.getUserId();
         boolean result = projectService.createProject(sysUserCreateDto,currentUserId);
 
         if (result) {

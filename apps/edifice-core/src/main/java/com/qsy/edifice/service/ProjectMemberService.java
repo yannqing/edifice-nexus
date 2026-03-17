@@ -1,6 +1,7 @@
 package com.qsy.edifice.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.qsy.edifice.domain.entity.ProjectMember;
 
 import java.util.List;
@@ -8,7 +9,7 @@ import java.util.List;
 /**
  * 项目成员服务接口
  */
-public interface ProjectMemberService {
+public interface ProjectMemberService extends IService<ProjectMember> {
 
     /**
      * 根据项目成员id查询项目成员

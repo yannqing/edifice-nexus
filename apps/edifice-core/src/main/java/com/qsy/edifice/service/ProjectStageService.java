@@ -1,6 +1,7 @@
 package com.qsy.edifice.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.qsy.edifice.domain.entity.ProjectStage;
 
 import java.util.List;
@@ -8,7 +9,7 @@ import java.util.List;
 /**
  * 项目阶段服务接口
  */
-public interface ProjectStageService {
+public interface ProjectStageService extends IService<ProjectStage> {
 
     /**
      * 根据项目阶段id查询项目阶段

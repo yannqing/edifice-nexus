@@ -1,6 +1,7 @@
 package com.qsy.edifice.service.impl;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.qsy.edifice.domain.entity.ProjectMember;
 import com.qsy.edifice.mapper.ProjectMemberMapper;
 import com.qsy.edifice.service.ProjectMemberService;
@@ -15,7 +16,7 @@ import java.util.List;
  */
 @Slf4j
 @Service
-public class ProjectMemberServiceImpl implements ProjectMemberService {
+public class ProjectMemberServiceImpl extends ServiceImpl<ProjectMemberMapper,ProjectMember> implements ProjectMemberService {
 
     @Resource
     private ProjectMemberMapper projectMemberMapper;

@@ -2,32 +2,31 @@ package com.qsy.edifice.service.impl;
 
 import com.alibaba.excel.util.StringUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.qsy.edifice.domain.dto.*;
-import com.qsy.edifice.domain.entity.Contract;
-import com.qsy.edifice.domain.entity.Project;
-import com.qsy.edifice.domain.entity.ProjectMember;
-import com.qsy.edifice.domain.entity.ProjectStage;
+import com.qsy.edifice.domain.entity.*;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.enums.ProjectStatusEnum;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.*;
+import com.qsy.edifice.service.ContractService;
+import com.qsy.edifice.service.ProjectMemberService;
 import com.qsy.edifice.service.ProjectService;
+import com.qsy.edifice.service.ProjectStageService;
 import com.qsy.edifice.utils.ProjectUtils;
 import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -42,9 +41,15 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     @Resource
     private  ProjectStageMapper projectStageMapper;
     @Resource
+    private ProjectStageService projectStageService;
+    @Resource
+    private ContractService contractService;
+    @Resource
+    private ProjectMemberService projectMemberService;
+    @Resource
     private  ProjectMemberMapper projectMemberMapper;
     @Resource
-    private  SysRoleMapper sysRoleMapper;
+    private  SysUserRoleMapper sysUserRoleMapper;
 
     // 默认角色ID（建议配置到 application.yml 或常量类）
     private static final Long PROJECT_MANAGER_ROLE_ID = 101L;
@@ -125,9 +130,9 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
 
         // 2. 构建项目主记录（ID 由 MyBatis-Plus 自动分配）
         Project project = buildProject(dto, currentUserId);
-        Long projectId = System.currentTimeMillis();
         projectMapper.insert(project); // 插入后 projectId 已被填充
-         projectId = project.getProjectId();
+        Long projectId = project.getProjectId();
+
 
         // 3. 保存合同
         if (dto.getContracts() != null && !dto.getContracts().isEmpty()) {
@@ -135,13 +140,13 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         }
 
         // 4. 保存阶段
-        if (dto.getStages() != null && !dto.getStages().isEmpty()) {
-            saveStages(projectId, dto.getProjectStageDtos());
+        if (dto.getStage() != null && !dto.getStage().isEmpty()) {
+            saveStages(projectId, dto.getStage());
         }
 
         // 5. 保存成员
         if (dto.getMembers() != null && !dto.getMembers().isEmpty()) {
-            saveMembers(projectId, dto.getMembers());
+            saveMembers(projectId, dto.getMembers(),currentUserId);
         }
 
         return true; // 成功返回 true
@@ -306,7 +311,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
             return c;
         }).collect(Collectors.toList());
 
-        contractMapper.batchInsert(contractList);
+        contractService.saveBatch(contractList);
     }
 
 
@@ -332,26 +337,41 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
             // 金额校验（已在 saveContracts 中做，可移除重复）
         }
     }
-    private void saveStages(Long projectId, List<ProjectStageDto> stages) {
-        if (CollectionUtils.isEmpty(stages)) {
+    private void saveStages(Long projectId, String stages) {
+        if (StringUtils.isBlank(stages)) {
             return;
         }
 
-        // 校验阶段数据
-        validateStages(stages);
+        // 1. 分割并清洗阶段名称
+        List<String> stageNameList = Arrays.stream(stages.split(","))
+                .map(String::trim)
+                .filter(name -> !name.isEmpty())
+                .collect(Collectors.toList());
 
-        List<ProjectStage> stageList = stages.stream().map(dto -> {
-            ProjectStage s = new ProjectStage();
-            s.setProjectId(projectId);
-            s.setStageName(dto.getStageName());
-            s.setStageOutput(dto.getStageOutput());
-            s.setStageStatus(0); // 默认“未开始”
-            // created_time / updated_time / is_delete 由 DB 默认值处理，Java 不设
-            return s;
-        }).collect(Collectors.toList());
+        if (stageNameList.isEmpty()) {
+            return;
+        }
 
-        projectStageMapper.batchInsert(stageList);
+        // 2. 构造 ProjectStage 对象列表
+        // ⚠️ 注意：不要手动设置 id！MP 会在插入时自动生成雪花 ID
+        List<ProjectStage> stageList = stageNameList.stream()
+                .map(name -> {
+                    ProjectStage stage = new ProjectStage();
+                    stage.setProjectId(projectId);
+                    stage.setStageName(name);
+                    stage.setStageStatus(0); // 默认“未开始”
+                    // stageOutput 可选，如不需要可不设
+                    // createdTime / updatedTime / isDelete 由 MP 自动填充（见下文）
+                    return stage;
+                })
+                .collect(Collectors.toList());
+
+        // 3. 批量插入（MP 会自动为每个对象分配雪花 ID）
+        if (!stageList.isEmpty()) {
+            projectStageService.saveBatch(stageList); // 推荐使用 IService
+        }
     }
+
 
     private void validateStages(List<ProjectStageDto> stages) {
         BigDecimal total = stages.stream()
@@ -375,7 +395,7 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
     }
 
 
-    private void saveMembers(Long projectId, List<ProjectMemberDto> members) {
+    private void saveMembers(Long projectId, List<ProjectMemberDto> members,Long currentUserId) {
         if (CollectionUtils.isEmpty(members)) {
             return;
         }
@@ -386,13 +406,18 @@ public class ProjectServiceImpl extends ServiceImpl<ProjectMapper, Project> impl
         List<ProjectMember> memberList = members.stream().map(dto -> {
             ProjectMember m = new ProjectMember();
             m.setProjectId(projectId);
+            log.info("{}",projectId);
             m.setUserId(dto.getUserId());
-            m.setProjectRole(dto.getProjectRole());
+            QueryWrapper<SysUserRole> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("user_id",currentUserId);
+            List<SysUserRole> sysUserRoles = sysUserRoleMapper.selectList(queryWrapper);
+            m.setProjectRole(sysUserRoles.get(0).getRoleId());
+            m.setCreatedTime(LocalDateTime.now());
             // created_time / is_delete 由 DB 默认值处理，Java 不设
             return m;
         }).collect(Collectors.toList());
 
-        projectMemberMapper.batchInsert(memberList);
+        projectMemberService.saveBatch(memberList);
     }
 
     private void validateMembers(List<ProjectMemberDto> members) {

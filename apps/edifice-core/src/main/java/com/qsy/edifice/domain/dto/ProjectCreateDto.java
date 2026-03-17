@@ -1,5 +1,6 @@
 package com.qsy.edifice.domain.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -34,8 +35,7 @@ public class ProjectCreateDto {
         private List<ContractDTO> contracts;
 
         // 可选：阶段列表（若不传，使用默认模板）
-        @Valid
-        private List<StageDto> stages;
+
 
         // 其他成员用户ID（不包括创建者，创建者由后端自动加入）
         @NotEmpty(message = "至少需要一名项目成员")
@@ -44,9 +44,13 @@ public class ProjectCreateDto {
 
         // 合同可为空（但通常建议至少一个）
 
-        @NotEmpty(message = "阶段")
-        @Valid
-        private List<ProjectStageDto> projectStageDtos;
+
+
+        /**
+         * 阶段
+         */
+        @Schema(description = "阶段", requiredMode = Schema.RequiredMode.REQUIRED)
+        private String stage;
     }
 
 
