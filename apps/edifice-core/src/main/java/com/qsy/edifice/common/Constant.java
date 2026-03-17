@@ -34,7 +34,9 @@ public class Constant {
             "/api/test/**",  // 测试Token生成接口（仅开发环境使用）
             "/api/wechat/**",
             "/upload/**",
-            "/ws/**"
+            "/ws/**",
+            "/users/**",
+            "/inspections/**"
     };
 
     // 图片类型文件的一级类型

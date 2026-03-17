@@ -59,4 +59,5 @@
         WHERE apply_user_id = #{applyUserId}
         AND is_delete = 0
     </select>
+
 </mapper>
