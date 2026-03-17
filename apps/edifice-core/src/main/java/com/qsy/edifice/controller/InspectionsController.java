@@ -28,9 +28,8 @@ public class InspectionsController {
     @GetMapping("/my-list")
     @Operation(summary = "我的验工单列表",description = "分页+条件查询")
     public BaseResponse<Page<InspectionFormListVo>> getMyInspections(@RequestBody GetInspectionFormListDto getInspectionFormListDto) {
+
         Page<InspectionFormListVo> inspectionFormListVoList = inspectionFormService.getMyInspections(getInspectionFormListDto);
-
-
         return ResultUtils.success(Code.SUCCESS, inspectionFormListVoList);
     };
 

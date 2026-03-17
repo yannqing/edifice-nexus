@@ -42,10 +42,8 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         Integer pageSize = getInspectionFormListDto.getPageSize();
 
         QueryWrapper<InspectionForm> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq(StringUtils.isNotEmpty(inspectionFormCode), "inspectionFormCode", inspectionFormCode);
-        queryWrapper.eq(StringUtils.isNotEmpty(projectId), "projectId", projectId);
-
-        //List<InspectionForm> inspectionForms = inspectionFormMapper.selectList(queryWrapper);
+        queryWrapper.eq(StringUtils.isNotEmpty(inspectionFormCode), "inspection_form_code", inspectionFormCode);
+        queryWrapper.eq(StringUtils.isNotEmpty(projectId), "project_id", projectId);
 
         Page<InspectionForm> inspectionFormPage = inspectionFormMapper.selectPage(new Page<>(current, pageSize), queryWrapper);
 
@@ -59,7 +57,7 @@ public class InspectionFormServiceImpl implements InspectionFormService {
 
         //1.参数校验
          if (id==null){
-             throw  new BusinessException(ErrorType.NO_AUTH_ERROR);
+             throw  new BusinessException(ErrorType.ARGS_NOT_NULL);
          }
          //2.查询数据库，获取用户原始数据
 

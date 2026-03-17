@@ -60,10 +60,4 @@
         AND is_delete = 0
     </select>
 
-    <!-- 根据状态（status）查询数据库里有多少条数据（统计数量）。 -->
-    <select id="countByStatus" resultType="java.lang.Integer">
-        SELECT COUNT(*)
-        FROM inspection_form
-        WHERE status = #{status}
-    </select>
 </mapper>
