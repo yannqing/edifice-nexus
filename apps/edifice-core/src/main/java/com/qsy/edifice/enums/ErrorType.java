@@ -20,6 +20,7 @@ public enum ErrorType implements BaseTypeInterface<Integer> {
     //业务异常
     USER_CANNOT_NULL(50101, "用户不存在，请重试！"),
     USER_ALREADY_EXISTS(50101, "用户已存在，请重试！"),
+    PROJECT_CANNOT_NULL(50006,"项目不存在，请重试！")
     ;
     // 异常码
     private final Integer code;

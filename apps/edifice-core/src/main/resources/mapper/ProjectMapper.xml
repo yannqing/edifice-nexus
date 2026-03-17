@@ -49,4 +49,24 @@
         WHERE project_type = #{projectType}
         AND is_delete = 0
     </select>
+
+    <!-- 根据用户id查询参与的项目id列表 -->
+    <select id="selectProjectIdsByUserId" resultType="java.lang.Long">
+        SELECT DISTINCT project_id
+        FROM project_member
+        WHERE user_id = #{userId}
+        AND is_delete = 0
+    </select>
+
+    <!-- 获取项目统计信息 -->
+    <select id="selectProjectStatistics" resultType="com.qsy.edifice.domain.vo.ProjectStatisticsVo">
+        SELECT
+            COUNT(*) as totalCount,
+            SUM(CASE WHEN project_status = 1 THEN 1 ELSE 0 END) as processingCount,
+            SUM(CASE WHEN project_status = 2 THEN 1 ELSE 0 END) as pendingAcceptanceCount,
+            SUM(CASE WHEN project_status = 4 THEN 1 ELSE 0 END) as completedCount,
+            0.0 as totalContractAmount
+        FROM project
+        WHERE is_delete = 0
+    </select>
 </mapper>
