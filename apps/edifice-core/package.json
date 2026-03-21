@@ -1,0 +1,8 @@
+{
+  "name": "edifice-core",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "./mvnw spring-boot:run -Dspring-boot.run.arguments=--server.port=8081"
+  }
+}

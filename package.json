@@ -7,7 +7,8 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "java:dev": "turbo run dev --filter=server-java"
+    "java:dev": "turbo run dev --filter=edifice-core",
+    "env:pull": "infisical export --format=dotenv --path=/edifice-core | sed \"s/'//g\" > apps/edifice-core/.env && infisical export --format=dotenv --path=/edifice-vision | sed \"s/'//g\" > apps/edifice-vision/.env"
   },
   "keywords": [],
   "author": "",
