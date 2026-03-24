@@ -5,23 +5,30 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { login, isLoginSuccess } from "@/services/auth";
+import { useAuth } from "@/store/auth-context";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { setAuth } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
   const [formData, setFormData] = useState({
-    email: "",
+    username: "",
     password: "",
     rememberMe: false,
   });
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{
+    username?: string;
+    password?: string;
+  }>({});
 
   const validateForm = () => {
-    const newErrors: { email?: string; password?: string } = {};
+    const newErrors: { username?: string; password?: string } = {};
 
-    if (!formData.email) {
-      newErrors.email = "请输入邮箱或用户名";
+    if (!formData.username) {
+      newErrors.username = "请输入邮箱或用户名";
     }
 
     if (!formData.password) {
@@ -40,12 +47,26 @@ export default function LoginPage() {
     if (!validateForm()) return;
 
     setIsLoading(true);
+    setLoginError("");
 
-    // 模拟登录请求
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      const response = await login({
+        username: formData.username,
+        password: formData.password,
+      });
 
-    setIsLoading(false);
-    router.push("/");
+      if (isLoginSuccess(response)) {
+        const { accessToken, refreshToken, userInfo, roles } = response.data;
+        setAuth(accessToken, refreshToken, userInfo, roles);
+        router.push("/");
+      } else {
+        setLoginError(response.msg || "登录失败，请重试");
+      }
+    } catch {
+      setLoginError("网络异常，请检查网络连接后重试");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -125,9 +146,16 @@ export default function LoginPage() {
             <p className="text-slate-500 mt-2">请登录您的账户以继续</p>
           </div>
 
+          {/* Login Error */}
+          {loginError && (
+            <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-sm text-rose-600">
+              {loginError}
+            </div>
+          )}
+
           {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Email Field */}
+            {/* Username Field */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">
                 邮箱 / 用户名
@@ -136,19 +164,21 @@ export default function LoginPage() {
                 <Mail className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  value={formData.email}
+                  value={formData.username}
                   onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
+                    setFormData({ ...formData, username: e.target.value })
                   }
                   placeholder="请输入邮箱或用户名"
                   className={cn(
                     "w-full pl-10 pr-4 py-3 bg-white border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all",
-                    errors.email ? "border-rose-300" : "border-slate-200"
+                    errors.username ? "border-rose-300" : "border-slate-200"
                   )}
                 />
               </div>
-              {errors.email && (
-                <p className="text-rose-500 text-xs mt-1.5">{errors.email}</p>
+              {errors.username && (
+                <p className="text-rose-500 text-xs mt-1.5">
+                  {errors.username}
+                </p>
               )}
             </div>
 
@@ -184,7 +214,9 @@ export default function LoginPage() {
                 </button>
               </div>
               {errors.password && (
-                <p className="text-rose-500 text-xs mt-1.5">{errors.password}</p>
+                <p className="text-rose-500 text-xs mt-1.5">
+                  {errors.password}
+                </p>
               )}
             </div>
 
