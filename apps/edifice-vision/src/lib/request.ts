@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { BaseResponse, ResponseCode } from "@/types/api";
 import { getAccessToken, clearAuth } from "@/lib/token";
 
@@ -29,7 +30,9 @@ async function request<T>(
   }
 
   // 默认 JSON content-type（如果 body 是对象且未指定 content-type）
-  if (body && !headers.has("Content-Type")) {
+  // FormData 不设置 Content-Type，让浏览器自动处理 boundary
+  const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+  if (body && !isFormData && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -55,6 +58,7 @@ async function request<T>(
     data.code === ResponseCode.TOKEN_AUTHENTICATE_FAILURE
   ) {
     clearAuth();
+    toast.error("登录已过期，请重新登录");
     window.location.href = "/login";
     throw new Error(data.msg || "登录已过期，请重新登录");
   }

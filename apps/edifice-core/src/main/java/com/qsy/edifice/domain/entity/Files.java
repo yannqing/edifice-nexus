@@ -22,16 +22,10 @@ public class Files implements Serializable {
     private Long fileId;
 
     /**
-     * 用户ID
+     * 上传用户ID
      */
-    @TableField(value = "wx_id")
-    private Long wxId;
-
-    /**
-     * 会话ID
-     */
-    @TableField(value = "session_id")
-    private String sessionId;
+    @TableField(value = "upload_user_id")
+    private Long uploadUserId;
 
     /**
      * 文件类型：pdf/word/image/text...

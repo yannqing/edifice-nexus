@@ -3,6 +3,8 @@ package com.qsy.edifice.domain.vo;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -22,6 +24,7 @@ public class ContractVo implements Serializable {
     /**
      * 合同id
      */
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long contractId;
 
     /**
@@ -47,6 +50,7 @@ public class ContractVo implements Serializable {
     /**
      * 合同主文件id
      */
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long contractFile;
 
     /**

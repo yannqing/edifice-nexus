@@ -6,6 +6,7 @@
     <resultMap id="BaseResultMap" type="com.qsy.edifice.domain.entity.ProjectStageTemplate">
         <id column="stage_id" property="stageId" jdbcType="BIGINT"/>
         <result column="stage_name" property="stageName" jdbcType="VARCHAR"/>
+        <result column="project_type_id" property="projectTypeId" jdbcType="BIGINT"/>
         <result column="stage_output" property="stageOutput" jdbcType="DECIMAL"/>
         <result column="stage_status" property="stageStatus" jdbcType="TINYINT"/>
         <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
@@ -15,7 +16,7 @@
 
     <!-- 基础字段列表 -->
     <sql id="Base_Column_List">
-        stage_id, stage_name, stage_output, stage_status,
+        stage_id, stage_name, project_type_id, stage_output, stage_status,
         created_time, updated_time, is_delete
     </sql>
 
@@ -26,5 +27,16 @@
         FROM project_stage_template
         WHERE stage_status = 1
         AND is_delete = 0
+    </select>
+
+    <!-- 根据项目类型id查询启用的阶段模版 -->
+    <select id="selectEnabledByProjectTypeId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM project_stage_template
+        WHERE project_type_id = #{projectTypeId}
+        AND stage_status = 1
+        AND is_delete = 0
+        ORDER BY stage_id ASC
     </select>
 </mapper>

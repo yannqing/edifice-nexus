@@ -37,6 +37,12 @@ public class ProjectStageTemplate implements Serializable {
     private String stageName;
 
     /**
+     * 关联项目类型id
+     */
+    @TableField("project_type_id")
+    private Long projectTypeId;
+
+    /**
      * 阶段默认产值比例
      */
     @TableField("stage_output")

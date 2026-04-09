@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, Mail, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { login, isLoginSuccess } from "@/services/auth";
 import { useAuth } from "@/store/auth-context";
 
@@ -58,11 +59,14 @@ export default function LoginPage() {
       if (isLoginSuccess(response)) {
         const { accessToken, refreshToken, userInfo, roles } = response.data;
         setAuth(accessToken, refreshToken, userInfo, roles);
+        toast.success("登录成功");
         router.push("/");
       } else {
+        toast.error(response.msg || "登录失败，请重试");
         setLoginError(response.msg || "登录失败，请重试");
       }
     } catch {
+      toast.error("网络异常，请检查网络连接后重试");
       setLoginError("网络异常，请检查网络连接后重试");
     } finally {
       setIsLoading(false);

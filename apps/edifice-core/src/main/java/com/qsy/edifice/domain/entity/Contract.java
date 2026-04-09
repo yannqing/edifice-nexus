@@ -31,6 +31,12 @@ public class Contract implements Serializable {
     private Long contractId;
 
     /**
+     * 关联项目id
+     */
+    @TableField("project_id")
+    private Long projectId;
+
+    /**
      * 合同名称
      */
     @TableField("contract_name")

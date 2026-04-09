@@ -26,8 +26,8 @@ public class ProjectTypeServiceImpl implements ProjectTypeService {
     }
 
     @Override
-    public ProjectType getProjectTypeByCode(String projectCode) {
-        return projectTypeMapper.selectByProjectCode(projectCode);
+    public ProjectType getProjectTypeByCode(String projectTypeCode) {
+        return projectTypeMapper.selectByProjectTypeCode(projectTypeCode);
     }
 
     @Override

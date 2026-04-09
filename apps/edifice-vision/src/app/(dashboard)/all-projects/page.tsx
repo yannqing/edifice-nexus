@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Upload,
   Download,
@@ -8,7 +8,6 @@ import {
   Search,
   Eye,
   Pencil,
-  MoreHorizontal,
   Layers,
   PlayCircle,
   Clock,
@@ -17,15 +16,24 @@ import {
   ChevronLeft,
   ChevronRight,
   Briefcase,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { allProjectsData } from "@/data/mock-data";
+import { getAllProjects, getProjectStatistics, getProjectTypes, getExportUrl } from "@/services/project";
+import { ProjectDetailDialog } from "@/components/project/project-detail-dialog";
+import { ImportProjectDialog } from "@/components/project/import-project-dialog";
+import { EditProjectDialog } from "@/components/project/edit-project-dialog";
+import { deleteProject } from "@/services/project";
+import { getAccessToken } from "@/lib/token";
+import { ResponseCode } from "@/types/api";
+import type { ProjectListVo, ProjectStatisticsVo } from "@/types/project";
+import {
+  PROJECT_STATUS_MAP,
+  STAGE_COMPLETED_STATUSES,
+} from "@/types/project";
 import type { ProjectStatus, ProjectCategory } from "@/types";
-
-type StatusFilter = "all" | ProjectStatus;
-type CategoryFilter = "all" | ProjectCategory;
 
 const statusStyles: Record<ProjectStatus, string> = {
   进行中: "bg-blue-100 text-blue-600",
@@ -42,49 +50,160 @@ const categoryStyles: Record<ProjectCategory, string> = {
   E类: "bg-rose-50 text-rose-600",
 };
 
+/** 后端状态数字 → 前端中文 */
+function getStatusLabel(status: number): ProjectStatus {
+  return (PROJECT_STATUS_MAP[status] ?? "未开始") as ProjectStatus;
+}
+
+/** 项目类型编码 → 分类标签 */
+function getCategoryLabel(project: ProjectListVo): ProjectCategory {
+  const code = project.projectType?.projectTypeCode ?? "";
+  if (code.startsWith("A")) return "A类";
+  if (code.startsWith("B")) return "B类";
+  if (code.startsWith("C")) return "C类";
+  if (code.startsWith("D")) return "D类";
+  if (code.startsWith("E")) return "E类";
+  return "A类";
+}
+
+/** 已完成阶段数 */
+function getCompletedStageCount(project: ProjectListVo): number {
+  if (!project.projectStages) return 0;
+  return project.projectStages.filter((s) =>
+    STAGE_COMPLETED_STATUSES.includes(s.stageStatus)
+  ).length;
+}
+
+/** 获取成员名列表 */
+function getMemberNames(project: ProjectListVo): string[] {
+  if (!project.projectMemberList) return [];
+  return project.projectMemberList.map((m) => m.realName).filter(Boolean);
+}
+
+/** 状态数字 → 筛选值 */
+const STATUS_FILTER_OPTIONS: { value: string; label: string; status?: number }[] = [
+  { value: "all", label: "全部状态" },
+  { value: "0", label: "未开始", status: 0 },
+  { value: "1", label: "进行中", status: 1 },
+  { value: "2", label: "待验收", status: 2 },
+  { value: "4", label: "已完成", status: 4 },
+];
+
+interface ProjectTypeOption {
+  projectTypeId: number;
+  projectTypeName: string;
+  projectTypeCode: string;
+}
+
+const PAGE_SIZE = 10;
+
 export default function AllProjectsPage() {
-  const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>("all");
-  const [selectedStatus, setSelectedStatus] = useState<StatusFilter>("all");
-  const [selectedManager, setSelectedManager] = useState<string>("all");
   const [searchText, setSearchText] = useState("");
-  const [selectedRows, setSelectedRows] = useState<number[]>([]);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("all");
+  const [selectedType, setSelectedType] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [projects, setProjects] = useState<ProjectListVo[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [selectedRows, setSelectedRows] = useState<string[]>([]);
+  const [statistics, setStatistics] = useState<ProjectStatisticsVo | null>(null);
+  const [projectTypes, setProjectTypes] = useState<ProjectTypeOption[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [editProjectId, setEditProjectId] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
-  const managers = [...new Set(allProjectsData.map((p) => p.manager))];
+  // 搜索防抖
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchText), 300);
+    return () => clearTimeout(timer);
+  }, [searchText]);
 
-  const stats = {
-    total: allProjectsData.length,
-    inProgress: allProjectsData.filter((p) => p.status === "进行中").length,
-    pending: allProjectsData.filter((p) => p.status === "待验收").length,
-    completed: allProjectsData.filter((p) => p.status === "已完成").length,
-    totalAmount: allProjectsData.reduce((sum, p) => sum + p.contractAmount, 0),
-  };
+  // 筛选变化时重置页码
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedStatus, selectedType, debouncedSearch]);
 
-  const filteredProjects = allProjectsData.filter((p) => {
-    if (selectedCategory !== "all" && p.category !== selectedCategory) return false;
-    if (selectedStatus !== "all" && p.status !== selectedStatus) return false;
-    if (selectedManager !== "all" && p.manager !== selectedManager) return false;
-    if (searchText && !p.name.includes(searchText) && !p.code.includes(searchText)) return false;
-    return true;
-  });
+  // 加载项目列表
+  const fetchProjects = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await getAllProjects({
+        keywords: debouncedSearch || undefined,
+        projectStatus:
+          selectedStatus !== "all" ? Number(selectedStatus) : undefined,
+        projectType:
+          selectedType !== "all" ? Number(selectedType) : undefined,
+        current: currentPage,
+        pageSize: PAGE_SIZE,
+      });
 
-  const toggleRow = (id: number) => {
+      if (response.code === ResponseCode.SUCCESS && response.data) {
+        setProjects(response.data.records ?? []);
+        setTotal(response.data.total ?? 0);
+      }
+    } catch {
+      setProjects([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [debouncedSearch, selectedStatus, selectedType, currentPage]);
+
+  // 加载统计数据
+  const fetchStatistics = useCallback(async () => {
+    try {
+      const res = await getProjectStatistics();
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setStatistics(res.data);
+      }
+    } catch {
+      // 静默
+    }
+  }, []);
+
+  // 加载项目类型（用于下拉筛选）
+  const fetchProjectTypes = useCallback(async () => {
+    try {
+      const res = await getProjectTypes();
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setProjectTypes(res.data);
+      }
+    } catch {
+      // 静默
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  useEffect(() => {
+    fetchStatistics();
+    fetchProjectTypes();
+  }, [fetchStatistics, fetchProjectTypes]);
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  const toggleRow = (id: string) => {
     setSelectedRows((prev) =>
       prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]
     );
   };
 
   const toggleAll = () => {
-    if (selectedRows.length === filteredProjects.length) {
+    if (selectedRows.length === projects.length && projects.length > 0) {
       setSelectedRows([]);
     } else {
-      setSelectedRows(filteredProjects.map((p) => p.id));
+      setSelectedRows(projects.map((p) => p.projectId));
     }
   };
 
   const resetFilters = () => {
-    setSelectedCategory("all");
     setSelectedStatus("all");
-    setSelectedManager("all");
+    setSelectedType("all");
     setSearchText("");
   };
 
@@ -101,10 +220,23 @@ export default function AllProjectsPage() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="flex items-center gap-2"
+            onClick={() => setImportOpen(true)}
+          >
             <Upload className="w-4 h-4" /> 导入
           </Button>
-          <Button variant="outline" className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="flex items-center gap-2"
+            onClick={() => {
+              const url = getExportUrl();
+              const token = getAccessToken();
+              const separator = url.includes("?") ? "&" : "?";
+              window.open(token ? `${url}${separator}token=${token}` : url, "_blank");
+            }}
+          >
             <Download className="w-4 h-4" /> 导出
           </Button>
           <Button className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2">
@@ -122,7 +254,9 @@ export default function AllProjectsPage() {
             </div>
             <div>
               <p className="text-xs text-slate-500">项目总数</p>
-              <p className="text-xl font-bold text-slate-800">{stats.total}</p>
+              <p className="text-xl font-bold text-slate-800">
+                {statistics?.totalCount ?? 0}
+              </p>
             </div>
           </div>
         </div>
@@ -133,7 +267,9 @@ export default function AllProjectsPage() {
             </div>
             <div>
               <p className="text-xs text-slate-500">进行中</p>
-              <p className="text-xl font-bold text-slate-800">{stats.inProgress}</p>
+              <p className="text-xl font-bold text-slate-800">
+                {statistics?.processingCount ?? 0}
+              </p>
             </div>
           </div>
         </div>
@@ -144,7 +280,9 @@ export default function AllProjectsPage() {
             </div>
             <div>
               <p className="text-xs text-slate-500">待验收</p>
-              <p className="text-xl font-bold text-slate-800">{stats.pending}</p>
+              <p className="text-xl font-bold text-slate-800">
+                {statistics?.pendingAcceptanceCount ?? 0}
+              </p>
             </div>
           </div>
         </div>
@@ -155,7 +293,9 @@ export default function AllProjectsPage() {
             </div>
             <div>
               <p className="text-xs text-slate-500">已完成</p>
-              <p className="text-xl font-bold text-slate-800">{stats.completed}</p>
+              <p className="text-xl font-bold text-slate-800">
+                {statistics?.completedCount ?? 0}
+              </p>
             </div>
           </div>
         </div>
@@ -167,7 +307,9 @@ export default function AllProjectsPage() {
             <div>
               <p className="text-xs text-slate-500">合同总额</p>
               <p className="text-xl font-bold text-slate-800">
-                ¥{(stats.totalAmount / 10000).toFixed(0)}万
+                {statistics?.totalContractAmount
+                  ? `¥${(statistics.totalContractAmount / 10000).toFixed(0)}万`
+                  : "¥0"}
               </p>
             </div>
           </div>
@@ -189,39 +331,26 @@ export default function AllProjectsPage() {
           </div>
 
           <select
-            value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value as CategoryFilter)}
+            value={selectedType}
+            onChange={(e) => setSelectedType(e.target.value)}
             className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">全部分类</option>
-            <option value="A类">A类 · 全程结算</option>
-            <option value="B类">B类 · 全过程</option>
-            <option value="C类">C类 · 单项</option>
-            <option value="D类">D类 · 技术咨询</option>
-            <option value="E类">E类 · 零星</option>
+            {projectTypes.map((t) => (
+              <option key={t.projectTypeId} value={t.projectTypeId}>
+                {t.projectTypeCode}类 · {t.projectTypeName}
+              </option>
+            ))}
           </select>
 
           <select
             value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value as StatusFilter)}
+            onChange={(e) => setSelectedStatus(e.target.value)}
             className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="all">全部状态</option>
-            <option value="未开始">未开始</option>
-            <option value="进行中">进行中</option>
-            <option value="待验收">待验收</option>
-            <option value="已完成">已完成</option>
-          </select>
-
-          <select
-            value={selectedManager}
-            onChange={(e) => setSelectedManager(e.target.value)}
-            className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">全部负责人</option>
-            {managers.map((m) => (
-              <option key={m} value={m}>
-                {m}
+            {STATUS_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
               </option>
             ))}
           </select>
@@ -237,13 +366,21 @@ export default function AllProjectsPage() {
         {selectedRows.length > 0 && (
           <div className="mt-4 pt-4 border-t border-slate-100 flex items-center gap-4">
             <span className="text-sm text-slate-500">
-              已选择 <span className="font-semibold text-slate-800">{selectedRows.length}</span> 个项目
+              已选择{" "}
+              <span className="font-semibold text-slate-800">
+                {selectedRows.length}
+              </span>{" "}
+              个项目
             </span>
-            <button className="px-3 py-1.5 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+            <button
+              className="px-3 py-1.5 text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              onClick={() => {
+                const url = getExportUrl(selectedRows);
+                const token = getAccessToken();
+                window.open(token ? `${url}&token=${token}` : url, "_blank");
+              }}
+            >
               批量导出
-            </button>
-            <button className="px-3 py-1.5 text-sm text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors">
-              批量暂停
             </button>
             <button
               onClick={() => setSelectedRows([])}
@@ -255,164 +392,286 @@ export default function AllProjectsPage() {
         )}
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div className="flex justify-center py-16">
+          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+        </div>
+      )}
+
       {/* Projects Table */}
-      <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-slate-50/50">
-            <tr className="text-slate-500 text-xs uppercase tracking-wider">
-              <th className="py-4 px-4 text-left">
-                <input
-                  type="checkbox"
-                  checked={selectedRows.length === filteredProjects.length && filteredProjects.length > 0}
-                  onChange={toggleAll}
-                  className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                />
-              </th>
-              <th className="py-4 px-4 text-left font-semibold">项目信息</th>
-              <th className="py-4 px-4 text-left font-semibold">分类</th>
-              <th className="py-4 px-4 text-left font-semibold">合同金额</th>
-              <th className="py-4 px-4 text-left font-semibold">项目经理</th>
-              <th className="py-4 px-4 text-left font-semibold">阶段进度</th>
-              <th className="py-4 px-4 text-center font-semibold">回款率</th>
-              <th className="py-4 px-4 text-center font-semibold">状态</th>
-              <th className="py-4 px-6 text-right font-semibold">操作</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filteredProjects.map((project) => (
-              <tr key={project.id} className="hover:bg-slate-50/50 transition-colors">
-                <td className="py-4 px-4">
+      {!loading && projects.length > 0 && (
+        <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-slate-50/50">
+              <tr className="text-slate-500 text-xs uppercase tracking-wider">
+                <th className="py-4 px-4 text-left">
                   <input
                     type="checkbox"
-                    checked={selectedRows.includes(project.id)}
-                    onChange={() => toggleRow(project.id)}
+                    checked={
+                      selectedRows.length === projects.length &&
+                      projects.length > 0
+                    }
+                    onChange={toggleAll}
                     className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
-                </td>
-                <td className="py-4 px-4">
-                  <p className="text-sm font-semibold text-slate-800">{project.name}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{project.code}</p>
-                </td>
-                <td className="py-4 px-4">
-                  <span className={cn("text-xs px-2 py-1 rounded-md font-medium", categoryStyles[project.category])}>
-                    {project.category}
-                  </span>
-                  <p className="text-xs text-slate-400 mt-1">{project.categoryName}</p>
-                </td>
-                <td className="py-4 px-4">
-                  <p className="text-sm font-semibold text-slate-800">
-                    ¥{(project.contractAmount / 10000).toFixed(1)}万
-                  </p>
-                  <p className="text-xs text-slate-400 mt-0.5">{project.contractType}</p>
-                </td>
-                <td className="py-4 px-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-600">
-                      {project.manager[0]}
-                    </div>
-                    <span className="text-sm text-slate-600">{project.manager}</span>
-                  </div>
-                </td>
-                <td className="py-4 px-4">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="flex-1 flex gap-0.5 max-w-24">
-                      {[...Array(project.phases)].map((_, i) => (
-                        <div
-                          key={i}
-                          className={cn(
-                            "h-1.5 flex-1 rounded-full",
-                            i < project.currentPhase ? "bg-blue-500" : "bg-slate-200"
-                          )}
-                        />
-                      ))}
-                    </div>
-                    <span className="text-xs text-slate-500">
-                      {project.currentPhase}/{project.phases}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400">{project.currentPhaseName}</p>
-                </td>
-                <td className="py-4 px-4 text-center">
-                  <span
-                    className={cn(
-                      "text-sm font-semibold",
-                      project.collection >= 80
-                        ? "text-emerald-600"
-                        : project.collection >= 50
-                        ? "text-amber-600"
-                        : "text-rose-600"
-                    )}
-                  >
-                    {project.collection}%
-                  </span>
-                </td>
-                <td className="py-4 px-4 text-center">
-                  <Badge variant="secondary" className={cn("text-xs", statusStyles[project.status])}>
-                    {project.status}
-                  </Badge>
-                </td>
-                <td className="py-4 px-6 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <button className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    <button className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
+                </th>
+                <th className="py-4 px-4 text-left font-semibold">项目信息</th>
+                <th className="py-4 px-4 text-left font-semibold">分类</th>
+                <th className="py-4 px-4 text-left font-semibold">合同金额</th>
+                <th className="py-4 px-4 text-left font-semibold">项目成员</th>
+                <th className="py-4 px-4 text-left font-semibold">阶段进度</th>
+                <th className="py-4 px-4 text-center font-semibold">状态</th>
+                <th className="py-4 px-6 text-right font-semibold">操作</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {projects.map((project) => {
+                const statusLabel = getStatusLabel(project.projectStatus);
+                const category = getCategoryLabel(project);
+                const typeName = project.projectType?.projectTypeName ?? "";
+                const stages = project.projectStages ?? [];
+                const completedStages = getCompletedStageCount(project);
+                const totalStages = stages.length;
+                const currentStageName =
+                  project.projectStage?.stageName ?? "-";
+                const members = getMemberNames(project);
+                const contractAmt =
+                  project.contractAmount?.contractAmount ?? 0;
+                const contractTypeLabel =
+                  project.contractAmount?.contractType === 0
+                    ? "基本收费"
+                    : project.contractAmount?.contractType === 1
+                    ? "基本+效益"
+                    : "";
 
-        {filteredProjects.length === 0 && (
-          <div className="py-16 text-center">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Briefcase className="w-8 h-8 text-slate-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-800 mb-2">暂无项目</h3>
-            <p className="text-sm text-slate-500 mb-4">当前筛选条件下没有找到项目</p>
-            <button
-              onClick={resetFilters}
-              className="px-4 py-2 text-sm text-blue-600 font-medium hover:bg-blue-50 rounded-lg transition-colors"
-            >
-              清除筛选条件
-            </button>
+                return (
+                  <tr
+                    key={project.projectId}
+                    className="hover:bg-slate-50/50 transition-colors"
+                  >
+                    <td className="py-4 px-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedRows.includes(project.projectId)}
+                        onChange={() => toggleRow(project.projectId)}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    </td>
+                    <td className="py-4 px-4">
+                      <p className="text-sm font-semibold text-slate-800">
+                        {project.projectName}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {project.projectCode}
+                      </p>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span
+                        className={cn(
+                          "text-xs px-2 py-1 rounded-md font-medium",
+                          categoryStyles[category]
+                        )}
+                      >
+                        {category}
+                      </span>
+                      {typeName && (
+                        <p className="text-xs text-slate-400 mt-1">
+                          {typeName}
+                        </p>
+                      )}
+                    </td>
+                    <td className="py-4 px-4">
+                      <p className="text-sm font-semibold text-slate-800">
+                        {contractAmt > 0
+                          ? `¥${(contractAmt / 10000).toFixed(1)}万`
+                          : "-"}
+                      </p>
+                      {contractTypeLabel && (
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {contractTypeLabel}
+                        </p>
+                      )}
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex -space-x-1.5">
+                        {members.slice(0, 3).map((name, idx) => (
+                          <div
+                            key={idx}
+                            className="w-7 h-7 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center text-xs font-medium text-slate-600"
+                            title={name}
+                          >
+                            {name[0]}
+                          </div>
+                        ))}
+                        {members.length > 3 && (
+                          <div className="w-7 h-7 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-xs text-slate-500">
+                            +{members.length - 3}
+                          </div>
+                        )}
+                        {members.length === 0 && (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      {totalStages > 0 ? (
+                        <>
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="flex-1 flex gap-0.5 max-w-24">
+                              {stages.map((_, i) => (
+                                <div
+                                  key={i}
+                                  className={cn(
+                                    "h-1.5 flex-1 rounded-full",
+                                    i < completedStages
+                                      ? "bg-blue-500"
+                                      : "bg-slate-200"
+                                  )}
+                                />
+                              ))}
+                            </div>
+                            <span className="text-xs text-slate-500">
+                              {completedStages}/{totalStages}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400">
+                            {currentStageName}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-xs text-slate-400">-</span>
+                      )}
+                    </td>
+                    <td className="py-4 px-4 text-center">
+                      <Badge
+                        variant="secondary"
+                        className={cn("text-xs", statusStyles[statusLabel])}
+                      >
+                        {statusLabel}
+                      </Badge>
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => {
+                            setSelectedProjectId(project.projectId);
+                            setDetailOpen(true);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditProjectId(project.projectId);
+                            setEditOpen(true);
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && projects.length === 0 && (
+        <div className="glass-card rounded-2xl py-16 text-center">
+          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Briefcase className="w-8 h-8 text-slate-400" />
           </div>
-        )}
-      </div>
+          <h3 className="text-lg font-semibold text-slate-800 mb-2">
+            暂无项目
+          </h3>
+          <p className="text-sm text-slate-500 mb-4">
+            当前筛选条件下没有找到项目
+          </p>
+          <button
+            onClick={resetFilters}
+            className="px-4 py-2 text-sm text-blue-600 font-medium hover:bg-blue-50 rounded-lg transition-colors"
+          >
+            清除筛选条件
+          </button>
+        </div>
+      )}
 
       {/* Pagination */}
-      {filteredProjects.length > 0 && (
+      {!loading && total > 0 && (
         <div className="flex justify-between items-center pt-2">
           <p className="text-sm text-slate-500">
-            共 <span className="font-semibold text-slate-800">{filteredProjects.length}</span> 个项目
+            共{" "}
+            <span className="font-semibold text-slate-800">{total}</span>{" "}
+            个项目
           </p>
           <div className="flex items-center gap-2">
-            <select className="px-3 py-1.5 text-sm border border-slate-200 rounded-lg bg-white">
-              <option>10 条/页</option>
-              <option>20 条/页</option>
-              <option>50 条/页</option>
-            </select>
             <button
               className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
-              disabled
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => p - 1)}
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <button className="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg">
-              1
-            </button>
-            <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+              (page) => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={cn(
+                    "px-3 py-1.5 text-sm font-medium rounded-lg",
+                    page === currentPage
+                      ? "bg-blue-600 text-white"
+                      : "text-slate-600 hover:bg-slate-100"
+                  )}
+                >
+                  {page}
+                </button>
+              )
+            )}
+            <button
+              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => p + 1)}
+            >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
+
+      {/* 导入项目弹窗 */}
+      <ImportProjectDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onSuccess={() => {
+          fetchProjects();
+          fetchStatistics();
+        }}
+      />
+
+      {/* 编辑项目弹窗 */}
+      <EditProjectDialog
+        projectId={editProjectId}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        onSuccess={() => {
+          fetchProjects();
+          fetchStatistics();
+        }}
+      />
+
+      {/* 项目详情弹窗 */}
+      <ProjectDetailDialog
+        projectId={selectedProjectId}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+      />
     </div>
   );
 }

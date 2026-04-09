@@ -24,6 +24,13 @@ public interface ProjectStageTemplateService {
     List<ProjectStageTemplate> getAllEnabledProjectStageTemplates();
 
     /**
+     * 根据项目类型id查询启用的阶段模版
+     * @param projectTypeId 项目类型id
+     * @return 阶段模版列表
+     */
+    List<ProjectStageTemplate> getEnabledByProjectTypeId(Long projectTypeId);
+
+    /**
      * 分页查询阶段模版列表
      * @param current 当前页
      * @param pageSize 每页大小

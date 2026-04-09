@@ -28,17 +28,11 @@ public class FilesVo implements Serializable {
     private Long fileId;
 
     /**
-     * 用户ID
+     * 上传用户ID
      */
-    @Schema(description = "用户ID")
+    @Schema(description = "上传用户ID")
     @JsonSerialize(using = ToStringSerializer.class)
-    private Long wxId;
-
-    /**
-     * 会话ID
-     */
-    @Schema(description = "会话ID")
-    private String sessionId;
+    private Long uploadUserId;
 
     /**
      * 文件类型：pdf/word/image/text...

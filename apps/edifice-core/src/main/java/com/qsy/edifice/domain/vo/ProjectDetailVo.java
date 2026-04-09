@@ -1,5 +1,7 @@
 package com.qsy.edifice.domain.vo;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -26,6 +28,7 @@ public class ProjectDetailVo implements Serializable {
      * 项目id
      */
     @Schema(description = "项目id")
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long projectId;
 
     /**
@@ -53,16 +56,22 @@ public class ProjectDetailVo implements Serializable {
     private Integer projectStatus;
 
     /**
-     * 项目阶段
+     * 当前项目阶段（最新）
      */
-    @Schema(description = "项目阶段")
+    @Schema(description = "当前项目阶段")
     private ProjectStageVo projectStage;
 
     /**
-     * 合同金额
+     * 所有项目阶段列表
      */
-    @Schema(description = "合同金额")
-    private Double contractAmount;
+    @Schema(description = "所有项目阶段列表")
+    private List<ProjectStageVo> projectStages;
+
+    /**
+     * 合同信息
+     */
+    @Schema(description = "合同信息")
+    private ContractVo contract;
 
     /**
      * 项目成员列表

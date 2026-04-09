@@ -34,6 +34,11 @@ public class ProjectStatisticsVo implements Serializable {
     private Long pendingAcceptanceCount;
 
     /**
+     * 未开始的数量（项目状态=0）
+     */
+    private Long notStartedCount;
+
+    /**
      * 已完成的数量（项目状态=4）
      */
     private Long completedCount;

@@ -12,8 +12,11 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import org.springframework.dao.DataAccessException;
+
 import java.io.IOException;
 import java.nio.file.AccessDeniedException;
+import java.sql.SQLException;
 
 /**
  * 全局异常处理器
@@ -120,6 +123,16 @@ public class GlobalExceptionHandler {
         String requestURI = request.getRequestURI();
         log.error("请求地址 {},发生IO处理异常.", requestURI, e);
         return ResultUtils.failure(e.getMessage());
+    }
+
+    /**
+     * 数据库异常（SQL异常、数据访问异常）
+     */
+    @ExceptionHandler({SQLException.class, DataAccessException.class})
+    public BaseResponse<Object> handleDatabaseException(Exception e, HttpServletRequest request) {
+        String requestURI = request.getRequestURI();
+        log.error("请求地址 {},数据库操作异常: {}", requestURI, e.getMessage(), e);
+        return ResultUtils.failure(Code.FAILURE, null, "数据操作失败，请检查数据完整性后重试");
     }
 
     /**

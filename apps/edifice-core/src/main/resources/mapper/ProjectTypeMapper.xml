@@ -6,7 +6,7 @@
     <resultMap id="BaseResultMap" type="com.qsy.edifice.domain.entity.ProjectType">
         <id column="project_type_id" property="projectTypeId" jdbcType="BIGINT"/>
         <result column="project_type_name" property="projectTypeName" jdbcType="VARCHAR"/>
-        <result column="project_code" property="projectCode" jdbcType="VARCHAR"/>
+        <result column="project_type_code" property="projectTypeCode" jdbcType="VARCHAR"/>
         <result column="project_type_status" property="projectTypeStatus" jdbcType="TINYINT"/>
         <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
         <result column="updated_time" property="updatedTime" jdbcType="TIMESTAMP"/>
@@ -15,16 +15,16 @@
 
     <!-- 基础字段列表 -->
     <sql id="Base_Column_List">
-        project_type_id, project_type_name, project_code, project_type_status,
+        project_type_id, project_type_name, project_type_code, project_type_status,
         created_time, updated_time, is_delete
     </sql>
 
     <!-- 根据项目类型编码查询项目类型 -->
-    <select id="selectByProjectCode" resultMap="BaseResultMap">
+    <select id="selectByProjectTypeCode" resultMap="BaseResultMap">
         SELECT
         <include refid="Base_Column_List"/>
         FROM project_type
-        WHERE project_code = #{projectCode}
+        WHERE project_type_code = #{projectTypeCode}
         AND is_delete = 0
     </select>
 

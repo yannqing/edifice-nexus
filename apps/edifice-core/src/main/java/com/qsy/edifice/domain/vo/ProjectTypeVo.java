@@ -4,6 +4,8 @@ package com.qsy.edifice.domain.vo;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -22,6 +24,7 @@ public class ProjectTypeVo implements Serializable {
     /**
      * 项目类型id
      */
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long projectTypeId;
 
     /**
@@ -30,9 +33,9 @@ public class ProjectTypeVo implements Serializable {
     private String projectTypeName;
 
     /**
-     * 项目类型唯一编码（项目编号）
+     * 项目类型唯一编码
      */
-    private String projectCode;
+    private String projectTypeCode;
 
     /**
      * 项目类型状态：0-禁用/1-启用

@@ -36,10 +36,10 @@ public class ProjectType implements Serializable {
     private String projectTypeName;
 
     /**
-     * 项目类型唯一编码（项目编号）
+     * 项目类型唯一编码
      */
-    @TableField("project_code")
-    private String projectCode;
+    @TableField("project_type_code")
+    private String projectTypeCode;
 
     /**
      * 项目类型状态：0-禁用/1-启用

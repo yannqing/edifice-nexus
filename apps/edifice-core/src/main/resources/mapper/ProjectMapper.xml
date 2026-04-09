@@ -62,11 +62,12 @@
     <select id="selectProjectStatistics" resultType="com.qsy.edifice.domain.vo.ProjectStatisticsVo">
         SELECT
             COUNT(*) as totalCount,
-            SUM(CASE WHEN project_status = 1 THEN 1 ELSE 0 END) as processingCount,
-            SUM(CASE WHEN project_status = 2 THEN 1 ELSE 0 END) as pendingAcceptanceCount,
-            SUM(CASE WHEN project_status = 4 THEN 1 ELSE 0 END) as completedCount,
-            0.0 as totalContractAmount
-        FROM project
-        WHERE is_delete = 0
+            SUM(CASE WHEN p.project_status = 1 THEN 1 ELSE 0 END) as processingCount,
+            SUM(CASE WHEN p.project_status = 2 THEN 1 ELSE 0 END) as pendingAcceptanceCount,
+            SUM(CASE WHEN p.project_status = 4 THEN 1 ELSE 0 END) as completedCount,
+            IFNULL(SUM(c.contract_amount), 0) as totalContractAmount
+        FROM project p
+        LEFT JOIN contract c ON c.project_id = p.project_id AND c.is_delete = 0
+        WHERE p.is_delete = 0
     </select>
 </mapper>

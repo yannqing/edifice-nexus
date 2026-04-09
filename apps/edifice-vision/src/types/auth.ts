@@ -1,7 +1,7 @@
 // ==================== 用户实体 ====================
 
 export interface SysUser {
-  userId: number;
+  userId: number | string;
   username: string;
   realName: string;
   email: string;

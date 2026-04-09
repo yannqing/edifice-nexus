@@ -31,6 +31,11 @@ public class ProjectStageTemplateServiceImpl implements ProjectStageTemplateServ
     }
 
     @Override
+    public List<ProjectStageTemplate> getEnabledByProjectTypeId(Long projectTypeId) {
+        return projectStageTemplateMapper.selectEnabledByProjectTypeId(projectTypeId);
+    }
+
+    @Override
     public Page<ProjectStageTemplate> getProjectStageTemplatePage(Integer current, Integer pageSize) {
         return projectStageTemplateMapper.selectPage(new Page<>(current, pageSize), null);
     }

@@ -2,6 +2,8 @@ package com.qsy.edifice.domain.vo;
 
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -22,11 +24,13 @@ public class ProjectStageVo implements Serializable {
     /**
      * 项目阶段id
      */
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long projectStageId;
 
     /**
      * 项目id
      */
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long projectId;
 
     /**

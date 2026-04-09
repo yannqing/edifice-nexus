@@ -16,6 +16,13 @@ public interface ContractService {
     Contract getContractById(Long contractId);
 
     /**
+     * 根据项目id查询合同
+     * @param projectId 项目id
+     * @return 合同信息
+     */
+    Contract getContractByProjectId(Long projectId);
+
+    /**
      * 根据合同编码查询合同
      * @param contractCode 合同编码
      * @return 合同信息

@@ -1,5 +1,7 @@
 package com.qsy.edifice.domain.vo;
 
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.qsy.edifice.domain.entity.Project;
 import com.qsy.edifice.domain.entity.ProjectStage;
 import com.qsy.edifice.domain.entity.ProjectType;
@@ -29,6 +31,7 @@ public class ProjectListVo implements Serializable {
     /**
      * 项目id
      */
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long projectId;
 
     /**
@@ -52,9 +55,14 @@ public class ProjectListVo implements Serializable {
     private Integer projectStatus;
 
     /**
-     * 项目阶段
+     * 当前项目阶段（最新）
      */
     private ProjectStageVo projectStage;
+
+    /**
+     * 所有项目阶段列表
+     */
+    private List<ProjectStageVo> projectStages;
 
     /**
      * 合同金额

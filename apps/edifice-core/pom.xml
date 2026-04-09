@@ -143,6 +143,12 @@
             <artifactId>dotenv-java</artifactId>
             <version>${dotenv.version}</version>
         </dependency>
+        <!--        easyexcel-->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>easyexcel</artifactId>
+            <version>4.0.3</version>
+        </dependency>
         <!--        knife4j-->
         <dependency>
             <groupId>com.github.xiaoymin</groupId>

@@ -72,13 +72,22 @@ public class MyLoginSuccessHandler implements AuthenticationSuccessHandler {
         userTokens.put("refreshToken", refreshToken);
         redisCache.setCacheObject("user_tokens:" + user.getUserId(), JSON.toJSONString(userTokens), 7, TimeUnit.DAYS);
 
-        // 构建返回的 VO，包含双 token
-        LoginVo userInfoVo = new LoginVo(user, accessToken, roles);
-        // 在响应中添加 refreshToken
+        // 构建返回的用户信息（userId 转为字符串，避免前端 JS 精度丢失）
+        java.util.Map<String, Object> userInfoMap = new java.util.LinkedHashMap<>();
+        userInfoMap.put("userId", String.valueOf(user.getUserId()));
+        userInfoMap.put("username", user.getUsername());
+        userInfoMap.put("realName", user.getRealName());
+        userInfoMap.put("email", user.getEmail());
+        userInfoMap.put("phone", user.getPhone());
+        userInfoMap.put("status", user.getStatus());
+        userInfoMap.put("lastLoginIp", user.getLastLoginIp());
+        userInfoMap.put("lastLoginTime", user.getLastLoginTime());
+
+        // 构建返回数据
         java.util.Map<String, Object> responseData = new java.util.HashMap<>();
         responseData.put("accessToken", accessToken);
         responseData.put("refreshToken", refreshToken);
-        responseData.put("userInfo", user);
+        responseData.put("userInfo", userInfoMap);
         responseData.put("roles", roles);
 
         response.getWriter().write(JSON.toJSONString(ResultUtils.success(Code.LOGIN_SUCCESS, responseData, "登录成功")));

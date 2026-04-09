@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   FolderOpen,
@@ -19,7 +19,10 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { navigationConfig, currentUser } from "@/data/mock-data";
+import { toast } from "sonner";
+import { navigationConfig } from "@/data/mock-data";
+import { useAuth } from "@/store/auth-context";
+import { post } from "@/lib/request";
 
 // Icon mapping
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -37,6 +40,19 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await post("/auth/logout", {});
+    } catch {
+      // 即使后端请求失败也清除本地状态
+    }
+    logout();
+    toast.success("已安全退出登录");
+    router.push("/login");
+  };
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen overflow-hidden">
@@ -109,18 +125,27 @@ export function Sidebar() {
 
       {/* User Profile */}
       <div className="flex-shrink-0 p-4 border-t border-slate-100">
-        <div className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl cursor-pointer">
+        <div className="flex items-center gap-3 p-2">
           <Avatar className="w-10 h-10">
-            <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
-            <AvatarFallback>{currentUser.name.charAt(0)}</AvatarFallback>
+            <AvatarFallback>
+              {(user?.realName ?? user?.username ?? "U").charAt(0)}
+            </AvatarFallback>
           </Avatar>
           <div className="flex-1 overflow-hidden">
             <p className="text-sm font-semibold text-slate-800 truncate">
-              {currentUser.name}
+              {user?.realName || user?.username || "用户"}
             </p>
-            <p className="text-xs text-slate-400 truncate">{currentUser.role}</p>
+            <p className="text-xs text-slate-400 truncate">
+              {user?.email || user?.phone || ""}
+            </p>
           </div>
-          <LogOut className="w-4 h-4 text-slate-400" />
+          <button
+            onClick={handleLogout}
+            className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+            title="退出登录"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </aside>

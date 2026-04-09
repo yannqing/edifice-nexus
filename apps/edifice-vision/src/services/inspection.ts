@@ -1,0 +1,64 @@
+import { get, post, put } from "@/lib/request";
+import type { BaseResponse } from "@/types/api";
+import type { PageResult } from "@/types/project";
+import type {
+  InspectionFormListVo,
+  InspectionFormDetailVo,
+  InspectionOverviewVo,
+  GetInspectionListParams,
+  ApplyInspectionParams,
+  ApprovalInspectionParams,
+} from "@/types/inspection";
+
+/**
+ * 查询验工单列表
+ */
+export async function getInspectionList(
+  params?: GetInspectionListParams
+): Promise<BaseResponse<PageResult<InspectionFormListVo>>> {
+  const query: Record<string, string> = {};
+  if (params?.inspectionFormCode) query.inspectionFormCode = params.inspectionFormCode;
+  if (params?.projectId) query.projectId = params.projectId;
+  if (params?.inspectionFormStatus !== undefined)
+    query.inspectionFormStatus = String(params.inspectionFormStatus);
+  if (params?.current !== undefined) query.current = String(params.current);
+  if (params?.pageSize !== undefined) query.pageSize = String(params.pageSize);
+
+  return get<PageResult<InspectionFormListVo>>("/inspections/my-list", { params: query });
+}
+
+/**
+ * 查询验工单详情
+ */
+export async function getInspectionDetail(
+  id: string
+): Promise<BaseResponse<InspectionFormDetailVo>> {
+  return get<InspectionFormDetailVo>(`/inspections/${id}`);
+}
+
+/**
+ * 验工单统计总览
+ */
+export async function getInspectionOverview(): Promise<
+  BaseResponse<InspectionOverviewVo>
+> {
+  return get<InspectionOverviewVo>("/inspections/my-list/statistic");
+}
+
+/**
+ * 提交验工单
+ */
+export async function applyInspection(
+  params: ApplyInspectionParams
+): Promise<BaseResponse<number>> {
+  return post<number>("/inspections/apply", { body: params });
+}
+
+/**
+ * 审批验工单
+ */
+export async function approvalInspection(
+  params: ApprovalInspectionParams
+): Promise<BaseResponse<boolean>> {
+  return put<boolean>("/inspections/approval", { body: params });
+}

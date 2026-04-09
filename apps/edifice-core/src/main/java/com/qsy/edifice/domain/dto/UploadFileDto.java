@@ -10,7 +10,4 @@ public class UploadFileDto {
 
     @Schema(description = "要上传的文件", requiredMode = Schema.RequiredMode.REQUIRED)
     private MultipartFile file;
-
-    @Schema(description = "会话id", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
-    private String sessionId;
 }

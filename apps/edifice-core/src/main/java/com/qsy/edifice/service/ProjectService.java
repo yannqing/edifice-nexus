@@ -1,7 +1,10 @@
 package com.qsy.edifice.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.qsy.edifice.domain.dto.CreateProjectDto;
+import com.qsy.edifice.domain.dto.GetAllProjectListDto;
 import com.qsy.edifice.domain.dto.GetMyProjectListDto;
+import com.qsy.edifice.domain.dto.UpdateProjectDto;
 import com.qsy.edifice.domain.entity.Project;
 import com.qsy.edifice.domain.vo.ProjectDetailVo;
 import com.qsy.edifice.domain.vo.ProjectListVo;
@@ -58,6 +61,14 @@ public interface ProjectService {
     boolean saveProject(Project project);
 
     /**
+     * 创建项目（含合同、阶段、成员）
+     * @param dto 创建项目请求参数
+     * @param userId 当前登录用户id
+     * @return 项目id
+     */
+    Long createProject(CreateProjectDto dto, Long userId);
+
+    /**
      * 更新项目
      * @param project 项目信息
      * @return 是否成功
@@ -65,11 +76,24 @@ public interface ProjectService {
     boolean updateProject(Project project);
 
     /**
+     * 更新项目（含合同、成员）
+     * @param dto 更新参数
+     */
+    void updateProjectFull(UpdateProjectDto dto);
+
+    /**
      * 删除项目
      * @param projectId 项目id
      * @return 是否成功
      */
     boolean deleteProject(Long projectId);
+
+    /**
+     * 分页查询全部项目列表
+     * @param dto 查询条件
+     * @return 分页结果
+     */
+    Page<ProjectListVo> getAllProjectPage(GetAllProjectListDto dto);
 
     /**
      * 分页查询本人参与的项目列表
@@ -95,8 +119,15 @@ public interface ProjectService {
     boolean checkProjectExists(Long projectId);
 
     /**
-     * 获取项目统计信息
+     * 获取项目统计信息（全部项目）
      * @return 统计信息
      */
     ProjectStatisticsVo getProjectStatistics();
+
+    /**
+     * 获取我参与的项目统计信息
+     * @param userId 当前用户id
+     * @return 统计信息
+     */
+    ProjectStatisticsVo getMyProjectStatistics(Long userId);
 }

@@ -15,10 +15,10 @@ public interface ProjectTypeMapper extends BaseMapper<ProjectType> {
 
     /**
      * 根据项目类型编码查询项目类型
-     * @param projectCode 项目类型编码
+     * @param projectTypeCode 项目类型编码
      * @return 项目类型信息
      */
-    ProjectType selectByProjectCode(@Param("projectCode") String projectCode);
+    ProjectType selectByProjectTypeCode(@Param("projectTypeCode") String projectTypeCode);
 
     /**
      * 查询所有启用的项目类型

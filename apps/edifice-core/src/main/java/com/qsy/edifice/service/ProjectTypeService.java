@@ -19,10 +19,10 @@ public interface ProjectTypeService {
 
     /**
      * 根据项目类型编码查询项目类型
-     * @param projectCode 项目类型编码
+     * @param projectTypeCode 项目类型编码
      * @return 项目类型信息
      */
-    ProjectType getProjectTypeByCode(String projectCode);
+    ProjectType getProjectTypeByCode(String projectTypeCode);
 
     /**
      * 查询所有启用的项目类型

@@ -10,9 +10,7 @@ import org.apache.ibatis.annotations.Update;
 import java.util.List;
 
 /**
- * @author yanqing
- * @description 针对表【files(文件表)】的数据库操作Mapper
- * @Entity com.cmswe.alumni.common.entity.Files
+ * 文件表 Mapper 接口
  */
 @Mapper
 public interface FilesMapper extends BaseMapper<Files> {
@@ -26,20 +24,12 @@ public interface FilesMapper extends BaseMapper<Files> {
     Files findByFileId(@Param("fileId") Long fileId);
 
     /**
-     * 根据用户ID查询文件列表
-     * @param wxId 用户ID
+     * 根据上传用户ID查询文件列表
+     * @param uploadUserId 上传用户ID
      * @return 文件列表
      */
-    @Select("SELECT * FROM files WHERE wx_id = #{wxId} AND is_deleted = 0 ORDER BY created_time DESC")
-    List<Files> findByWxId(@Param("wxId") Long wxId);
-
-    /**
-     * 根据会话ID查询文件列表
-     * @param sessionId 会话ID
-     * @return 文件列表
-     */
-    @Select("SELECT * FROM files WHERE session_id = #{sessionId} AND is_deleted = 0 ORDER BY created_time DESC")
-    List<Files> findBySessionId(@Param("sessionId") String sessionId);
+    @Select("SELECT * FROM files WHERE upload_user_id = #{uploadUserId} AND is_deleted = 0 ORDER BY created_time DESC")
+    List<Files> findByUploadUserId(@Param("uploadUserId") Long uploadUserId);
 
     /**
      * 根据文件MD5查询文件（用于去重）

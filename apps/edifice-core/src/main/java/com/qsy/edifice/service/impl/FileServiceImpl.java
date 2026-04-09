@@ -116,8 +116,8 @@ public class FileServiceImpl extends ServiceImpl<FilesMapper, Files> implements 
         UUID uuid = UUID.randomUUID();
         String newFilename = replaceFilename(fileName, uuid.toString());
 
-        // 获取用户 ID 和 openid
-        Long wxId = jwtUtils.getUserIdFromToken(request.getHeader("token"));
+        // 获取当前登录用户ID
+        Long uploadUserId = jwtUtils.getUserIdFromToken(request.getHeader("token"));
 
         String accessUrl = fileUtils.uploadFile(file, subPath, type, fileName, newFilename, fileExtension);
 
@@ -130,7 +130,7 @@ public class FileServiceImpl extends ServiceImpl<FilesMapper, Files> implements 
 
         // 保存文件信息到数据库并返回FilesVo
         FilesVo filesVo = saveFileRecord(
-            wxId,
+            uploadUserId,
             newFilename,
             fileName,
             fileExtension,
@@ -173,23 +173,10 @@ public class FileServiceImpl extends ServiceImpl<FilesMapper, Files> implements 
 
     /**
      * 保存文件到数据库
-     * @param wxId
-     * @param fileName
-     * @param OriginalName
-     * @param fileExtension
-     * @param filePath
-     * @param fileUrl
-     * @param fileMd5
-     * @param fileHash
-     * @param fileSize
-     * @param mimeType
-     * @param fileType
-     * @param request
-     * @return
      */
-    private FilesVo saveFileRecord(Long wxId, String fileName, String OriginalName, String fileExtension, String filePath, String fileUrl, String fileMd5, String fileHash, Long fileSize, String mimeType, String fileType, HttpServletRequest request) {
+    private FilesVo saveFileRecord(Long uploadUserId, String fileName, String OriginalName, String fileExtension, String filePath, String fileUrl, String fileMd5, String fileHash, Long fileSize, String mimeType, String fileType, HttpServletRequest request) {
         Files file = new Files();
-        file.setWxId(wxId);
+        file.setUploadUserId(uploadUserId);
         file.setFileType(fileType);
         file.setFileName(fileName);
         file.setOriginalName(OriginalName);
@@ -210,7 +197,7 @@ public class FileServiceImpl extends ServiceImpl<FilesMapper, Files> implements 
 
         this.save(file);
 
-        log.info("保存文件记录成功: wxId={}, fileName={}, fileUrl={}", wxId, fileName, fileUrl);
+        log.info("保存文件记录成功: uploadUserId={}, fileName={}, fileUrl={}", uploadUserId, fileName, fileUrl);
 
         return FilesVo.objToVo(file);
     }

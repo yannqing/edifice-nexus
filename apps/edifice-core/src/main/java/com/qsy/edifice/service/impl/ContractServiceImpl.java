@@ -1,5 +1,6 @@
 package com.qsy.edifice.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.entity.Contract;
 import com.qsy.edifice.mapper.ContractMapper;
@@ -21,6 +22,15 @@ public class ContractServiceImpl implements ContractService {
     @Override
     public Contract getContractById(Long contractId) {
         return contractMapper.selectById(contractId);
+    }
+
+    @Override
+    public Contract getContractByProjectId(Long projectId) {
+        LambdaQueryWrapper<Contract> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Contract::getProjectId, projectId)
+               .orderByDesc(Contract::getCreatedTime)
+               .last("LIMIT 1");
+        return contractMapper.selectOne(wrapper);
     }
 
     @Override
