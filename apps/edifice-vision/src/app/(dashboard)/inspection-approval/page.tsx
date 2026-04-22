@@ -34,7 +34,9 @@ import {
   getInspectionDetail,
   getInspectionOverview,
   approvalInspection,
+  getMyInspectionExportUrl,
 } from "@/services/inspection";
+import { getAccessToken } from "@/lib/token";
 import { ResponseCode } from "@/types/api";
 import type {
   InspectionFormListVo,
@@ -182,11 +184,9 @@ export default function InspectionApprovalPage() {
         setDetailOpen(false);
         fetchList();
         fetchStats();
-      } else {
-        toast.error(res.msg || "审批失败");
       }
     } catch {
-      toast.error("网络异常，请稍后重试");
+      /* 网络错误由 request.ts 提示 */
     } finally {
       setApproving(false);
     }
@@ -211,7 +211,19 @@ export default function InspectionApprovalPage() {
             审核项目阶段验工申请，确保工作质量与文档完整性。
           </p>
         </div>
-        <Button variant="outline" className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          className="flex items-center gap-2"
+          onClick={() => {
+            const url = getMyInspectionExportUrl({
+              inspectionFormCode: debouncedSearch || undefined,
+              inspectionFormStatus: statusFilterMap[activeTab],
+            });
+            const token = getAccessToken();
+            const separator = url.includes("?") ? "&" : "?";
+            window.open(token ? `${url}${separator}token=${token}` : url, "_blank");
+          }}
+        >
           <Download className="w-4 h-4" /> 导出
         </Button>
       </div>

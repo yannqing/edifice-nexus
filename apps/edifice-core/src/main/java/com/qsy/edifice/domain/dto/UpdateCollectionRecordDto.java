@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Data
@@ -20,7 +21,7 @@ public class UpdateCollectionRecordDto {
     private Long projectStageId;
 
     @Schema(description = "回款金额（元）")
-    private Integer amount;
+    private BigDecimal amount;
 
     @Schema(description = "实际回款日期")
     private LocalDate collectDate;

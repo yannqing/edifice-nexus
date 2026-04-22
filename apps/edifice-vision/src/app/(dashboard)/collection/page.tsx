@@ -165,11 +165,9 @@ export default function CollectionPage() {
       const res = await getCollectionDetail(projectId);
       if (res.code === ResponseCode.SUCCESS && res.data) {
         setDetail(res.data);
-      } else {
-        toast.error(res.msg || "加载失败");
       }
     } catch {
-      toast.error("网络异常");
+      /* 网络错误由 request.ts 提示 */
     } finally {
       setDetailLoading(false);
     }
@@ -184,11 +182,9 @@ export default function CollectionPage() {
         if (detail) await openDetail(detail.summary.projectId);
         fetchList();
         fetchStats();
-      } else {
-        toast.error(res.msg || "删除失败");
       }
     } catch {
-      toast.error("网络异常");
+      /* 网络错误由 request.ts 提示 */
     }
   };
 
@@ -725,11 +721,9 @@ function AddCollectionDialog({
         toast.success("录入成功");
         onOpenChange(false);
         onSuccess();
-      } else {
-        toast.error(res.msg || "提交失败");
       }
     } catch {
-      toast.error("网络异常");
+      /* 网络错误由 request.ts 提示 */
     } finally {
       setSubmitting(false);
     }

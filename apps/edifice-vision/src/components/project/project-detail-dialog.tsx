@@ -129,11 +129,10 @@ export function ProjectDetailDialog({
         toast.success("阶段启动成功");
         await reloadDetail();
         onStageChange?.();
-      } else {
-        toast.error(res.msg || "启动失败");
       }
+      // 错误 toast 由 request.ts 统一处理
     } catch {
-      toast.error("操作失败");
+      /* 网络错误由 request.ts 提示 */
     } finally {
       setStageActionLoading(false);
     }
@@ -148,11 +147,9 @@ export function ProjectDetailDialog({
         toast.success("阶段已重新启动");
         await reloadDetail();
         onStageChange?.();
-      } else {
-        toast.error(res.msg || "重启失败");
       }
     } catch {
-      toast.error("操作失败");
+      /* 网络错误由 request.ts 提示 */
     } finally {
       setStageActionLoading(false);
     }

@@ -88,3 +88,35 @@ export async function approvalInspection(
 ): Promise<BaseResponse<boolean>> {
   return put<boolean>("/inspections/approval", { body: params });
 }
+
+// ==================== 导出 Excel ====================
+
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+
+function buildExportQueryString(params?: Pick<GetInspectionListParams, "inspectionFormCode" | "inspectionFormStatus">): string {
+  const query = new URLSearchParams();
+  if (params?.inspectionFormCode) query.append("inspectionFormCode", params.inspectionFormCode);
+  if (params?.inspectionFormStatus !== undefined) {
+    query.append("inspectionFormStatus", String(params.inspectionFormStatus));
+  }
+  const qs = query.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/**
+ * 导出「我的验工单」Excel URL（用于 window.open 直接下载）
+ */
+export function getMyInspectionExportUrl(
+  params?: Pick<GetInspectionListParams, "inspectionFormCode" | "inspectionFormStatus">
+): string {
+  return `${BASE_URL}/inspections/my-list/export${buildExportQueryString(params)}`;
+}
+
+/**
+ * 导出「全部验工单」Excel URL（用于 window.open 直接下载）
+ */
+export function getAllInspectionExportUrl(
+  params?: Pick<GetInspectionListParams, "inspectionFormCode" | "inspectionFormStatus">
+): string {
+  return `${BASE_URL}/inspections/export${buildExportQueryString(params)}`;
+}

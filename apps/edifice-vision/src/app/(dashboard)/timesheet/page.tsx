@@ -145,10 +145,11 @@ export default function TimesheetPage() {
       if (res.code === ResponseCode.SUCCESS) {
         toast.success("删除成功");
         fetchData();
-      } else {
-        toast.error(res.msg || "删除失败");
       }
-    } catch { toast.error("操作失败"); }
+      // 业务错误由 request.ts 统一提示
+    } catch {
+      /* 网络错误由 request.ts 提示 */
+    }
   };
 
   // 周标题
@@ -451,10 +452,10 @@ function TimesheetFormDialog({ open, onOpenChange, editing, defaultDate, onSucce
         toast.success(status === 1 ? "提交成功" : "草稿已保存");
         onOpenChange(false);
         onSuccess();
-      } else {
-        toast.error(res.msg || "保存失败");
       }
-    } catch { toast.error("网络异常"); }
+    } catch {
+      /* 网络错误由 request.ts 提示 */
+    }
     finally { setSubmitting(false); }
   };
 

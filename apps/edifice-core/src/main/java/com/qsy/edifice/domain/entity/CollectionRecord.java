@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -35,9 +36,9 @@ public class CollectionRecord implements Serializable {
     @TableField("project_stage_id")
     private Long projectStageId;
 
-    /** 回款金额（元） */
+    /** 回款金额（元，DECIMAL(20,2)） */
     @TableField("amount")
-    private Integer amount;
+    private BigDecimal amount;
 
     /** 实际回款日期 */
     @TableField("collect_date")

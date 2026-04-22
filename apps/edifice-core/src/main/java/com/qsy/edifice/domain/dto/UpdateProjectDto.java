@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -57,13 +58,13 @@ public class UpdateProjectDto {
      * 合同金额
      */
     @Schema(description = "合同金额")
-    private Integer contractAmount;
+    private BigDecimal contractAmount;
 
     /**
      * 基础金额
      */
     @Schema(description = "基础金额")
-    private Integer baseAmount;
+    private BigDecimal baseAmount;
 
     /**
      * 效益规则

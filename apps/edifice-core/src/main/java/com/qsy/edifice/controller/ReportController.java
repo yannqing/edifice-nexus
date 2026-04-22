@@ -31,7 +31,13 @@ public class ReportController {
     @Resource
     private ProjectTypeService projectTypeService;
     @Resource
+    private ProjectTypeMapper projectTypeMapper;
+    @Resource
     private ContractService contractService;
+    @Resource
+    private ContractMapper contractMapper;
+    @Resource
+    private ProjectStageMapper projectStageMapper;
     @Resource
     private OutputValueMapper outputValueMapper;
     @Resource
@@ -47,6 +53,30 @@ public class ReportController {
     @Autowired
     private JwtUtils jwtUtils;
 
+    /** 根据项目 ID 集合一次性拉取合同，避免 N+1 */
+    private Map<Long, Contract> loadContractsByProjectIds(Collection<Long> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) return Collections.emptyMap();
+        LambdaQueryWrapper<Contract> w = new LambdaQueryWrapper<>();
+        w.in(Contract::getProjectId, projectIds);
+        return contractMapper.selectList(w).stream()
+                .collect(Collectors.toMap(Contract::getProjectId, c -> c, (a, b) -> a));
+    }
+
+    /** 根据项目 ID 集合一次性拉取产值分配单 */
+    private Map<Long, List<OutputValue>> loadOutputValuesByProjectIds(Collection<Long> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) return Collections.emptyMap();
+        LambdaQueryWrapper<OutputValue> w = new LambdaQueryWrapper<>();
+        w.in(OutputValue::getProjectId, projectIds);
+        return outputValueMapper.selectList(w).stream()
+                .collect(Collectors.groupingBy(OutputValue::getProjectId));
+    }
+
+    private Map<Long, ProjectType> loadTypesByIds(Collection<Long> typeIds) {
+        if (typeIds == null || typeIds.isEmpty()) return Collections.emptyMap();
+        return projectTypeMapper.selectBatchIds(typeIds).stream()
+                .collect(Collectors.toMap(ProjectType::getProjectTypeId, t -> t, (a, b) -> a));
+    }
+
     // ==================== 统计报表 ====================
 
     @GetMapping("/overview")
@@ -55,24 +85,27 @@ public class ReportController {
         List<Project> projects = projectMapper.selectList(null);
         int totalProjects = projects.size();
 
-        // 合同总额
-        long totalContract = 0;
-        for (Project p : projects) {
-            Contract c = contractService.getContractByProjectId(p.getProjectId());
-            if (c != null && c.getContractAmount() != null) {
-                totalContract += c.getContractAmount();
-            }
-        }
+        // 合同总额（批量）
+        Set<Long> projectIds = projects.stream().map(Project::getProjectId).collect(Collectors.toSet());
+        Map<Long, Contract> contractMap = loadContractsByProjectIds(projectIds);
+        BigDecimal totalContract = contractMap.values().stream()
+                .map(Contract::getContractAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 已发放产值
         LambdaQueryWrapper<OutputValue> paidWrapper = new LambdaQueryWrapper<>();
         paidWrapper.eq(OutputValue::getStatus, 3);
         List<OutputValue> paidList = outputValueMapper.selectList(paidWrapper);
-        long paidAmount = paidList.stream().mapToLong(OutputValue::getTotalAmount).sum();
+        BigDecimal paidAmount = paidList.stream()
+                .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 全部产值
         List<OutputValue> allOv = outputValueMapper.selectList(null);
-        long totalOutputValue = allOv.stream().mapToLong(OutputValue::getTotalAmount).sum();
+        BigDecimal totalOutputValue = allOv.stream()
+                .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("totalProjects", totalProjects);
@@ -86,31 +119,39 @@ public class ReportController {
     @Operation(summary = "项目产值统计", description = "每个项目的合同额、已完成产值、待处理产值")
     public BaseResponse<List<Map<String, Object>>> getProjectStats() {
         List<Project> projects = projectMapper.selectList(null);
-        List<Map<String, Object>> result = new ArrayList<>();
+        if (projects.isEmpty()) return ResultUtils.success(Code.SUCCESS, Collections.emptyList());
 
+        // 批量预取：合同 / 类型 / 产值分配单
+        Set<Long> projectIds = projects.stream().map(Project::getProjectId).collect(Collectors.toSet());
+        Set<Long> typeIds = projects.stream().map(Project::getProjectType)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, Contract> contractMap = loadContractsByProjectIds(projectIds);
+        Map<Long, ProjectType> typeMap = loadTypesByIds(typeIds);
+        Map<Long, List<OutputValue>> ovByProject = loadOutputValuesByProjectIds(projectIds);
+
+        List<Map<String, Object>> result = new ArrayList<>();
         for (Project p : projects) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("projectId", String.valueOf(p.getProjectId()));
             item.put("projectName", p.getProjectName());
 
-            // 项目类型
-            if (p.getProjectType() != null) {
-                ProjectType type = projectTypeService.getProjectTypeById(p.getProjectType());
-                item.put("category", type != null ? type.getProjectTypeCode() + "类" : "");
-            }
+            ProjectType type = p.getProjectType() == null ? null : typeMap.get(p.getProjectType());
+            item.put("category", type != null ? type.getProjectTypeCode() + "类" : "");
 
-            // 合同金额
-            Contract c = contractService.getContractByProjectId(p.getProjectId());
-            int contractAmount = c != null && c.getContractAmount() != null ? c.getContractAmount() : 0;
+            Contract c = contractMap.get(p.getProjectId());
+            BigDecimal contractAmount = c != null && c.getContractAmount() != null
+                    ? c.getContractAmount() : BigDecimal.ZERO;
             item.put("contractAmount", contractAmount);
 
-            // 产值统计
-            LambdaQueryWrapper<OutputValue> ovWrapper = new LambdaQueryWrapper<>();
-            ovWrapper.eq(OutputValue::getProjectId, p.getProjectId());
-            List<OutputValue> ovList = outputValueMapper.selectList(ovWrapper);
-
-            long completedAmount = ovList.stream().filter(o -> o.getStatus() == 3).mapToLong(OutputValue::getTotalAmount).sum();
-            long pendingAmount = ovList.stream().filter(o -> o.getStatus() < 3).mapToLong(OutputValue::getTotalAmount).sum();
+            List<OutputValue> ovList = ovByProject.getOrDefault(p.getProjectId(), Collections.emptyList());
+            BigDecimal completedAmount = ovList.stream()
+                    .filter(o -> o.getStatus() == 3)
+                    .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal pendingAmount = ovList.stream()
+                    .filter(o -> o.getStatus() < 3)
+                    .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
             item.put("completedAmount", completedAmount);
             item.put("outputValue", completedAmount);
             item.put("pendingValue", pendingAmount);
@@ -128,22 +169,30 @@ public class ReportController {
         List<Project> allProjects = projectMapper.selectList(null);
         int totalCount = allProjects.size();
 
+        // 批量预取合同 + 已发放产值
+        Set<Long> projectIds = allProjects.stream().map(Project::getProjectId).collect(Collectors.toSet());
+        Map<Long, Contract> contractMap = loadContractsByProjectIds(projectIds);
+        Map<Long, List<OutputValue>> ovByProject = loadOutputValuesByProjectIds(projectIds);
+
         List<Map<String, Object>> result = new ArrayList<>();
         for (ProjectType type : types) {
             List<Project> typeProjects = allProjects.stream()
                     .filter(p -> type.getProjectTypeId().equals(p.getProjectType()))
                     .collect(Collectors.toList());
 
-            long contractTotal = 0;
-            long completedTotal = 0;
+            BigDecimal contractTotal = BigDecimal.ZERO;
+            BigDecimal completedTotal = BigDecimal.ZERO;
             for (Project p : typeProjects) {
-                Contract c = contractService.getContractByProjectId(p.getProjectId());
-                if (c != null && c.getContractAmount() != null) contractTotal += c.getContractAmount();
+                Contract c = contractMap.get(p.getProjectId());
+                if (c != null && c.getContractAmount() != null) {
+                    contractTotal = contractTotal.add(c.getContractAmount());
+                }
 
-                LambdaQueryWrapper<OutputValue> w = new LambdaQueryWrapper<>();
-                w.eq(OutputValue::getProjectId, p.getProjectId()).eq(OutputValue::getStatus, 3);
-                List<OutputValue> paid = outputValueMapper.selectList(w);
-                completedTotal += paid.stream().mapToLong(OutputValue::getTotalAmount).sum();
+                BigDecimal projectCompleted = ovByProject.getOrDefault(p.getProjectId(), Collections.emptyList()).stream()
+                        .filter(o -> o.getStatus() == 3)
+                        .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                completedTotal = completedTotal.add(projectCompleted);
             }
 
             Map<String, Object> item = new LinkedHashMap<>();
@@ -175,11 +224,11 @@ public class ReportController {
                 .map(OutputValue::getOutputValueId).collect(Collectors.toSet());
 
         // 按用户汇总
-        Map<Long, Integer> userAmountMap = new HashMap<>();
-        Map<Long, Integer> userProjectCountMap = new HashMap<>();
+        Map<Long, BigDecimal> userAmountMap = new HashMap<>();
         for (OutputValueDistribution d : allDists) {
             if (paidIds.contains(d.getOutputValueId())) {
-                userAmountMap.merge(d.getUserId(), d.getAmount(), Integer::sum);
+                BigDecimal amt = d.getAmount() != null ? d.getAmount() : BigDecimal.ZERO;
+                userAmountMap.merge(d.getUserId(), amt, BigDecimal::add);
             }
         }
 
@@ -251,12 +300,14 @@ public class ReportController {
         Set<Long> paidIds = outputValueMapper.selectList(paidWrapper).stream()
                 .map(OutputValue::getOutputValueId).collect(Collectors.toSet());
 
-        long paidOutputValue = myDists.stream()
+        BigDecimal paidOutputValue = myDists.stream()
                 .filter(d -> paidIds.contains(d.getOutputValueId()))
-                .mapToLong(OutputValueDistribution::getAmount).sum();
+                .map(OutputValueDistribution::getAmount).filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        long totalOutputValue = myDists.stream()
-                .mapToLong(OutputValueDistribution::getAmount).sum();
+        BigDecimal totalOutputValue = myDists.stream()
+                .map(OutputValueDistribution::getAmount).filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("projectCount", projectCount);
@@ -321,12 +372,14 @@ public class ReportController {
             if (!ovIds.isEmpty()) {
                 dW.in(OutputValueDistribution::getOutputValueId, ovIds);
             } else {
-                item.put("outputValue", 0);
+                item.put("outputValue", BigDecimal.ZERO);
                 result.add(item);
                 continue;
             }
             List<OutputValueDistribution> dists = distributionMapper.selectList(dW);
-            long outputValue = dists.stream().mapToLong(OutputValueDistribution::getAmount).sum();
+            BigDecimal outputValue = dists.stream()
+                    .map(OutputValueDistribution::getAmount).filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
             item.put("outputValue", outputValue);
 
             result.add(item);
@@ -388,8 +441,13 @@ public class ReportController {
 
         // 产值总额
         List<OutputValue> allOv = outputValueMapper.selectList(null);
-        long totalOutputValue = allOv.stream().mapToLong(OutputValue::getTotalAmount).sum();
-        long paidOutputValue = allOv.stream().filter(o -> o.getStatus() == 3).mapToLong(OutputValue::getTotalAmount).sum();
+        BigDecimal totalOutputValue = allOv.stream()
+                .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal paidOutputValue = allOv.stream()
+                .filter(o -> o.getStatus() == 3)
+                .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 待审批验工单数
         long pendingInspections = inspectionFormMapper.selectCount(
@@ -403,36 +461,48 @@ public class ReportController {
         result.put("stats", stats);
 
         // 2. 关键项目（合同金额最大的前5个）
-        List<Map<String, Object>> topProjects = new ArrayList<>();
-        List<Project> sorted = new ArrayList<>(allProjects);
-        // 按合同金额排序
-        Map<Long, Integer> contractAmounts = new HashMap<>();
-        for (Project p : sorted) {
-            Contract c = contractService.getContractByProjectId(p.getProjectId());
-            contractAmounts.put(p.getProjectId(), c != null && c.getContractAmount() != null ? c.getContractAmount() : 0);
-        }
-        sorted.sort((a, b) -> contractAmounts.getOrDefault(b.getProjectId(), 0) - contractAmounts.getOrDefault(a.getProjectId(), 0));
+        // 批量预取：全部项目的合同 / 类型 / 产值
+        Set<Long> allProjectIds = allProjects.stream().map(Project::getProjectId).collect(Collectors.toSet());
+        Map<Long, Contract> contractMap = loadContractsByProjectIds(allProjectIds);
+        Map<Long, List<OutputValue>> ovByProject = loadOutputValuesByProjectIds(allProjectIds);
+        Set<Long> allTypeIds = allProjects.stream().map(Project::getProjectType)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, ProjectType> typeMap = loadTypesByIds(allTypeIds);
 
+        Map<Long, BigDecimal> contractAmounts = new HashMap<>();
+        for (Project p : allProjects) {
+            Contract c = contractMap.get(p.getProjectId());
+            contractAmounts.put(p.getProjectId(),
+                    c != null && c.getContractAmount() != null ? c.getContractAmount() : BigDecimal.ZERO);
+        }
+
+        List<Project> sorted = new ArrayList<>(allProjects);
+        sorted.sort((a, b) -> contractAmounts.getOrDefault(b.getProjectId(), BigDecimal.ZERO)
+                .compareTo(contractAmounts.getOrDefault(a.getProjectId(), BigDecimal.ZERO)));
+
+        List<Map<String, Object>> topProjects = new ArrayList<>();
         for (Project p : sorted.stream().limit(5).toList()) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("projectId", String.valueOf(p.getProjectId()));
             item.put("projectName", p.getProjectName());
 
-            if (p.getProjectType() != null) {
-                ProjectType type = projectTypeService.getProjectTypeById(p.getProjectType());
-                item.put("type", type != null ? type.getProjectTypeCode() + "类" : "");
-            }
+            ProjectType type = p.getProjectType() == null ? null : typeMap.get(p.getProjectType());
+            item.put("type", type != null ? type.getProjectTypeCode() + "类" : "");
 
-            int contractAmt = contractAmounts.getOrDefault(p.getProjectId(), 0);
+            BigDecimal contractAmt = contractAmounts.getOrDefault(p.getProjectId(), BigDecimal.ZERO);
             item.put("contractAmount", contractAmt);
             item.put("projectStatus", p.getProjectStatus());
 
-            // 产值完成度
-            LambdaQueryWrapper<OutputValue> ovW = new LambdaQueryWrapper<>();
-            ovW.eq(OutputValue::getProjectId, p.getProjectId()).eq(OutputValue::getStatus, 3);
-            long completed = outputValueMapper.selectList(ovW).stream().mapToLong(OutputValue::getTotalAmount).sum();
+            BigDecimal completed = ovByProject.getOrDefault(p.getProjectId(), Collections.emptyList()).stream()
+                    .filter(o -> o.getStatus() == 3)
+                    .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
             item.put("completedValue", completed);
-            item.put("progress", contractAmt > 0 ? (int) (completed * 100 / contractAmt) : 0);
+            int progress = contractAmt.signum() > 0
+                    ? completed.multiply(BigDecimal.valueOf(100))
+                        .divide(contractAmt, 0, RoundingMode.DOWN).intValue()
+                    : 0;
+            item.put("progress", progress);
 
             topProjects.add(item);
         }
@@ -441,34 +511,42 @@ public class ReportController {
         // 3. 待办事项（当前用户的待审批验工单 + 待确认产值）
         List<Map<String, Object>> todos = new ArrayList<>();
 
-        // 待审批验工单
+        // 待审批验工单（批量查申请人姓名）
         LambdaQueryWrapper<InspectionForm> insW = new LambdaQueryWrapper<>();
         insW.eq(InspectionForm::getInspectionFormStatus, 0).orderByDesc(InspectionForm::getCreatedTime).last("LIMIT 5");
         List<InspectionForm> pendingIns = inspectionFormMapper.selectList(insW);
+        Set<Long> applyUserIds = pendingIns.stream()
+                .map(InspectionForm::getApplyUserId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, SysUser> applyUserMap = applyUserIds.isEmpty() ? Collections.emptyMap()
+                : sysUserMapper.selectBatchIds(applyUserIds).stream()
+                    .collect(Collectors.toMap(SysUser::getUserId, u -> u, (a, b) -> a));
         for (InspectionForm ins : pendingIns) {
             Map<String, Object> todo = new LinkedHashMap<>();
             todo.put("id", String.valueOf(ins.getInspectionFormId()));
             todo.put("type", "验工审批");
             todo.put("title", ins.getInspectionFormCode());
-
             if (ins.getApplyUserId() != null) {
-                SysUser u = sysUserMapper.selectById(ins.getApplyUserId());
+                SysUser u = applyUserMap.get(ins.getApplyUserId());
                 todo.put("from", u != null ? u.getRealName() : "-");
             }
             todo.put("time", ins.getCreatedTime());
             todos.add(todo);
         }
 
-        // 待确认产值分配
+        // 待确认产值分配（批量查项目名）
         LambdaQueryWrapper<OutputValue> ovPendingW = new LambdaQueryWrapper<>();
         ovPendingW.eq(OutputValue::getStatus, 0).orderByDesc(OutputValue::getCreatedTime).last("LIMIT 3");
         List<OutputValue> pendingOv = outputValueMapper.selectList(ovPendingW);
+        Set<Long> pendingOvProjectIds = pendingOv.stream()
+                .map(OutputValue::getProjectId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, Project> pendingOvProjectMap = pendingOvProjectIds.isEmpty() ? Collections.emptyMap()
+                : projectMapper.selectBatchIds(pendingOvProjectIds).stream()
+                    .collect(Collectors.toMap(Project::getProjectId, p -> p, (a, b) -> a));
         for (OutputValue ov : pendingOv) {
             Map<String, Object> todo = new LinkedHashMap<>();
             todo.put("id", String.valueOf(ov.getOutputValueId()));
             todo.put("type", "产值确认");
-
-            Project p = projectMapper.selectById(ov.getProjectId());
+            Project p = pendingOvProjectMap.get(ov.getProjectId());
             todo.put("title", p != null ? p.getProjectName() + " 产值分配" : "产值分配");
             todo.put("from", "系统");
             todo.put("time", ov.getCreatedTime());
@@ -479,9 +557,21 @@ public class ReportController {
         // 4. 我的项目进度（当前用户参与的项目）
         List<Long> myProjectIds = projectMapper.selectProjectIdsByUserId(userId);
         List<Map<String, Object>> myProjects = new ArrayList<>();
-        if (myProjectIds != null) {
-            for (Long pid : myProjectIds.stream().limit(4).toList()) {
-                Project p = projectMapper.selectById(pid);
+        if (myProjectIds != null && !myProjectIds.isEmpty()) {
+            List<Long> limited = myProjectIds.stream().limit(4).toList();
+
+            // 批量取项目
+            Map<Long, Project> myProjectMap = projectMapper.selectBatchIds(limited).stream()
+                    .collect(Collectors.toMap(Project::getProjectId, p -> p, (a, b) -> a));
+
+            // 批量取阶段
+            LambdaQueryWrapper<ProjectStage> sw = new LambdaQueryWrapper<>();
+            sw.in(ProjectStage::getProjectId, limited);
+            Map<Long, List<ProjectStage>> stagesGrouped = projectStageMapper.selectList(sw).stream()
+                    .collect(Collectors.groupingBy(ProjectStage::getProjectId));
+
+            for (Long pid : limited) {
+                Project p = myProjectMap.get(pid);
                 if (p == null) continue;
 
                 Map<String, Object> item = new LinkedHashMap<>();
@@ -489,15 +579,12 @@ public class ReportController {
                 item.put("projectName", p.getProjectName());
                 item.put("projectStatus", p.getProjectStatus());
 
-                if (p.getProjectType() != null) {
-                    ProjectType type = projectTypeService.getProjectTypeById(p.getProjectType());
-                    item.put("category", type != null ? type.getProjectTypeCode() + "类" : "");
-                }
+                ProjectType type = p.getProjectType() == null ? null : typeMap.get(p.getProjectType());
+                item.put("category", type != null ? type.getProjectTypeCode() + "类" : "");
 
-                // 阶段进度
-                List<ProjectStage> stages = projectStageService.getProjectStagesByProjectId(pid);
-                item.put("phases", stages != null ? stages.size() : 0);
-                int completed = stages != null ? (int) stages.stream().filter(s -> s.getStageStatus() == 3 || s.getStageStatus() == 6).count() : 0;
+                List<ProjectStage> stages = stagesGrouped.getOrDefault(pid, Collections.emptyList());
+                item.put("phases", stages.size());
+                int completed = (int) stages.stream().filter(s -> s.getStageStatus() == 3 || s.getStageStatus() == 6).count();
                 item.put("currentPhase", completed);
 
                 myProjects.add(item);

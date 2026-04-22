@@ -1,5 +1,6 @@
 package com.qsy.edifice.service.impl;
 
+import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -7,22 +8,38 @@ import com.qsy.edifice.domain.dto.ApplyInspectionDto;
 import com.qsy.edifice.domain.dto.ApprovalInspectionDto;
 import com.qsy.edifice.domain.dto.GetInspectionFormListDto;
 import com.qsy.edifice.domain.entity.*;
+import com.qsy.edifice.domain.excel.InspectionFormExcelData;
 import com.qsy.edifice.domain.vo.*;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
+import com.qsy.edifice.mapper.ContractMapper;
 import com.qsy.edifice.mapper.InspectionFormMapper;
+import com.qsy.edifice.mapper.ProjectMapper;
+import com.qsy.edifice.mapper.ProjectStageMapper;
+import com.qsy.edifice.mapper.ProjectTypeMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
 import com.qsy.edifice.service.*;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -37,6 +54,19 @@ public class InspectionFormServiceImpl implements InspectionFormService {
 
     @Resource
     private SysUserMapper sysUserMapper;
+
+    /** 直接注入 Mapper 用于批量查询，消灭 N+1 */
+    @Resource
+    private ProjectMapper projectMapper;
+
+    @Resource
+    private ProjectTypeMapper projectTypeMapper;
+
+    @Resource
+    private ContractMapper contractMapper;
+
+    @Resource
+    private ProjectStageMapper projectStageMapper;
 
     @Resource
     private ProjectService projectService;
@@ -92,13 +122,85 @@ public class InspectionFormServiceImpl implements InspectionFormService {
 
         Page<InspectionForm> page = inspectionFormMapper.selectPage(new Page<>(current, pageSize), wrapper);
 
+        // 一次性批量预取本页所需的项目/类型/合同/阶段/用户，避免每行 N+1
+        ListResolveCtx ctx = prefetchForList(page.getRecords());
+
         List<InspectionFormListVo> voList = page.getRecords().stream()
-                .map(this::convertToListVo)
+                .map(f -> convertToListVo(f, ctx))
                 .collect(Collectors.toList());
 
         Page<InspectionFormListVo> voPage = new Page<>(current, pageSize, page.getTotal());
         voPage.setRecords(voList);
         return voPage;
+    }
+
+    /**
+     * 批量预取列表页需要的关联数据：1 次 SQL 查完 project / type / contract / stage / user
+     */
+    private ListResolveCtx prefetchForList(List<InspectionForm> forms) {
+        if (forms == null || forms.isEmpty()) return ListResolveCtx.empty();
+
+        Set<Long> projectIds = forms.stream()
+                .map(f -> parseProjectId(f.getProjectId()))
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Long> stageIds = forms.stream()
+                .map(InspectionForm::getProjectStageId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<Long> userIds = forms.stream()
+                .map(InspectionForm::getApplyUserId)
+                .filter(Objects::nonNull).collect(Collectors.toSet());
+
+        Map<Long, Project> projects = projectIds.isEmpty() ? Collections.emptyMap()
+                : projectMapper.selectBatchIds(projectIds).stream()
+                    .collect(Collectors.toMap(Project::getProjectId, p -> p, (a, b) -> a));
+
+        Set<Long> typeIds = projects.values().stream()
+                .map(Project::getProjectType).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, ProjectType> types = typeIds.isEmpty() ? Collections.emptyMap()
+                : projectTypeMapper.selectBatchIds(typeIds).stream()
+                    .collect(Collectors.toMap(ProjectType::getProjectTypeId, t -> t, (a, b) -> a));
+
+        Map<Long, Contract> contracts = new HashMap<>();
+        if (!projectIds.isEmpty()) {
+            LambdaQueryWrapper<Contract> cw = new LambdaQueryWrapper<>();
+            cw.in(Contract::getProjectId, projectIds);
+            for (Contract c : contractMapper.selectList(cw)) {
+                contracts.put(c.getProjectId(), c);
+            }
+        }
+
+        Map<Long, ProjectStage> stages = stageIds.isEmpty() ? Collections.emptyMap()
+                : projectStageMapper.selectBatchIds(stageIds).stream()
+                    .collect(Collectors.toMap(ProjectStage::getProjectStageId, s -> s, (a, b) -> a));
+
+        Map<Long, SysUser> users = userIds.isEmpty() ? Collections.emptyMap()
+                : sysUserMapper.selectBatchIds(userIds).stream()
+                    .collect(Collectors.toMap(SysUser::getUserId, u -> u, (a, b) -> a));
+
+        return new ListResolveCtx(projects, types, contracts, stages, users);
+    }
+
+    private static Long parseProjectId(String raw) {
+        if (!StringUtils.hasText(raw)) return null;
+        try {
+            return Long.parseLong(raw);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /** 列表页批量预取的上下文 */
+    private record ListResolveCtx(
+            Map<Long, Project> projects,
+            Map<Long, ProjectType> types,
+            Map<Long, Contract> contracts,
+            Map<Long, ProjectStage> stages,
+            Map<Long, SysUser> users
+    ) {
+        static ListResolveCtx empty() {
+            return new ListResolveCtx(Collections.emptyMap(), Collections.emptyMap(),
+                    Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap());
+        }
     }
 
     // ==================== 查询详情 ====================
@@ -235,12 +337,12 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         // 查询验工单
         InspectionForm form = inspectionFormMapper.selectById(dto.getInspectionFormId());
         if (form == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "验工单不存在");
+            throw new BusinessException(ErrorType.INSPECTION_FORM_NOT_FOUND);
         }
 
         // 只有待审核(0)和审核中(1)的验工单可以审批
         if (form.getInspectionFormStatus() != 0 && form.getInspectionFormStatus() != 1) {
-            throw new BusinessException(ErrorType.OPERATION_FAILED, "该验工单已审批完成，无法重复审批");
+            throw new BusinessException(ErrorType.INSPECTION_FORM_STATUS_INVALID, "该验工单已审批完成，无法重复审批");
         }
 
         // 创建审批记录
@@ -283,62 +385,43 @@ public class InspectionFormServiceImpl implements InspectionFormService {
     // ==================== 私有方法 ====================
 
     /**
-     * 转换为列表VO，填充关联数据
+     * 转换为列表VO，填充关联数据（使用批量预取的 ctx）
      */
-    private InspectionFormListVo convertToListVo(InspectionForm form) {
+    private InspectionFormListVo convertToListVo(InspectionForm form, ListResolveCtx ctx) {
         InspectionFormListVo vo = InspectionFormListVo.objToVo(form);
 
-        fillProjectInfoForList(vo, form);
-
-        // 申请人姓名
-        if (form.getApplyUserId() != null) {
-            SysUser user = sysUserMapper.selectById(form.getApplyUserId());
-            if (user != null) {
-                vo.setApplyUserName(user.getRealName());
-            }
-        }
-
-        return vo;
-    }
-
-    /**
-     * 填充列表VO的项目信息
-     */
-    private void fillProjectInfoForList(InspectionFormListVo vo, InspectionForm form) {
-        // 项目信息
-        if (StringUtils.hasText(form.getProjectId())) {
-            try {
-                Long projectId = Long.parseLong(form.getProjectId());
-                Project project = projectService.getProjectById(projectId);
-                if (project != null) {
-                    vo.setProjectName(project.getProjectName());
-                    vo.setProjectCode(project.getProjectCode());
-                    // 项目类型
-                    if (project.getProjectType() != null) {
-                        ProjectType type = projectTypeService.getProjectTypeById(project.getProjectType());
-                        if (type != null) {
-                            vo.setProjectTypeName(type.getProjectTypeName());
-                        }
-                    }
-                    // 合同金额
-                    Contract contract = contractService.getContractByProjectId(projectId);
-                    if (contract != null) {
-                        vo.setContractAmount(contract.getContractAmount());
-                    }
+        // 项目 / 类型 / 合同
+        Long projectId = parseProjectId(form.getProjectId());
+        if (projectId != null) {
+            Project project = ctx.projects().get(projectId);
+            if (project != null) {
+                vo.setProjectName(project.getProjectName());
+                vo.setProjectCode(project.getProjectCode());
+                if (project.getProjectType() != null) {
+                    ProjectType type = ctx.types().get(project.getProjectType());
+                    if (type != null) vo.setProjectTypeName(type.getProjectTypeName());
                 }
-            } catch (NumberFormatException e) {
-                log.warn("项目ID格式异常: {}", form.getProjectId());
+                Contract contract = ctx.contracts().get(projectId);
+                if (contract != null) vo.setContractAmount(contract.getContractAmount());
             }
         }
 
-        // 阶段信息
+        // 阶段
         if (form.getProjectStageId() != null) {
-            ProjectStage stage = projectStageService.getProjectStageById(form.getProjectStageId());
+            ProjectStage stage = ctx.stages().get(form.getProjectStageId());
             if (stage != null) {
                 vo.setStageName(stage.getStageName());
                 vo.setStageOutput(stage.getStageOutput());
             }
         }
+
+        // 申请人
+        if (form.getApplyUserId() != null) {
+            SysUser user = ctx.users().get(form.getApplyUserId());
+            if (user != null) vo.setApplyUserName(user.getRealName());
+        }
+
+        return vo;
     }
 
     /**
@@ -375,5 +458,132 @@ public class InspectionFormServiceImpl implements InspectionFormService {
                 vo.setStageOutput(stage.getStageOutput());
             }
         }
+    }
+
+    // ==================== 导出 Excel ====================
+
+    private static final Map<Integer, String> STATUS_MAP = Map.of(
+            0, "待审核", 1, "审核中", 2, "已驳回", 3, "已通过", 4, "草稿"
+    );
+
+    private static final DateTimeFormatter EXPORT_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+    @Override
+    public void exportInspections(GetInspectionFormListDto dto, HttpServletResponse response) throws IOException {
+        // 1. 查询符合条件的所有验工单（不分页）
+        LambdaQueryWrapper<InspectionForm> wrapper = new LambdaQueryWrapper<>();
+        if (dto != null) {
+            if (StringUtils.hasText(dto.getInspectionFormCode())) {
+                wrapper.like(InspectionForm::getInspectionFormCode, dto.getInspectionFormCode());
+            }
+            if (StringUtils.hasText(dto.getProjectId())) {
+                wrapper.eq(InspectionForm::getProjectId, dto.getProjectId());
+            }
+            if (dto.getInspectionFormStatus() != null) {
+                wrapper.eq(InspectionForm::getInspectionFormStatus, dto.getInspectionFormStatus());
+            }
+            if (dto.getApplyUserId() != null) {
+                wrapper.eq(InspectionForm::getApplyUserId, dto.getApplyUserId());
+            }
+        }
+        wrapper.orderByDesc(InspectionForm::getCreatedTime);
+
+        List<InspectionForm> forms = inspectionFormMapper.selectList(wrapper);
+
+        // 2. 转换为导出数据（用本地 cache 避免同项目/阶段/用户重复查询）
+        ExportCache cache = new ExportCache();
+        List<InspectionFormExcelData> data = forms.stream()
+                .map(f -> convertToExcelData(f, cache))
+                .collect(Collectors.toList());
+
+        // 3. 写出响应
+        String fileName = "验工单数据_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        setExcelResponseHeader(response, fileName);
+        EasyExcel.write(response.getOutputStream(), InspectionFormExcelData.class)
+                .sheet("验工单")
+                .doWrite(data);
+    }
+
+    private InspectionFormExcelData convertToExcelData(InspectionForm form, ExportCache cache) {
+        InspectionFormExcelData data = new InspectionFormExcelData();
+        data.setInspectionFormCode(form.getInspectionFormCode());
+        data.setDescription(form.getInspectionFormDescription());
+        data.setStatus(STATUS_MAP.getOrDefault(form.getInspectionFormStatus(), "未知"));
+
+        // 项目信息
+        Long projectId = null;
+        if (StringUtils.hasText(form.getProjectId())) {
+            try {
+                projectId = Long.parseLong(form.getProjectId());
+            } catch (NumberFormatException e) {
+                log.warn("项目ID格式异常: {}", form.getProjectId());
+            }
+        }
+        if (projectId != null) {
+            Project project = cache.projects.computeIfAbsent(projectId, projectService::getProjectById);
+            if (project != null) {
+                data.setProjectName(project.getProjectName());
+                data.setProjectCode(project.getProjectCode());
+                if (project.getProjectType() != null) {
+                    ProjectType type = cache.types.computeIfAbsent(
+                            project.getProjectType(), projectTypeService::getProjectTypeById);
+                    if (type != null) data.setProjectTypeName(type.getProjectTypeName());
+                }
+                Contract contract = cache.contracts.computeIfAbsent(
+                        projectId, contractService::getContractByProjectId);
+                if (contract != null && contract.getContractAmount() != null) {
+                    data.setContractAmount(contract.getContractAmount());
+                }
+            }
+        }
+
+        // 阶段信息 + 阶段金额
+        if (form.getProjectStageId() != null) {
+            ProjectStage stage = cache.stages.computeIfAbsent(
+                    form.getProjectStageId(), projectStageService::getProjectStageById);
+            if (stage != null) {
+                data.setStageName(stage.getStageName());
+                data.setStageOutput(stage.getStageOutput());
+                if (data.getContractAmount() != null && stage.getStageOutput() != null) {
+                    BigDecimal stageAmount = data.getContractAmount()
+                            .multiply(stage.getStageOutput())
+                            .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+                    data.setStageAmount(stageAmount);
+                }
+            }
+        }
+
+        // 申请人
+        if (form.getApplyUserId() != null) {
+            SysUser user = cache.users.computeIfAbsent(form.getApplyUserId(), sysUserMapper::selectById);
+            if (user != null) {
+                data.setApplyUserName(user.getRealName() != null ? user.getRealName() : user.getUsername());
+            }
+        }
+
+        if (form.getCreatedTime() != null) {
+            data.setApplyTime(form.getCreatedTime().format(EXPORT_TIME_FMT));
+        }
+
+        return data;
+    }
+
+    private void setExcelResponseHeader(HttpServletResponse response, String fileName) {
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+        response.setHeader("Content-Disposition", "attachment;filename=" + encodedFileName + ".xlsx");
+        response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    }
+
+    /**
+     * 导出期间的本地缓存，避免同一次导出里同 projectId / stageId / userId 反复查库
+     */
+    private static final class ExportCache {
+        final Map<Long, Project> projects = new HashMap<>();
+        final Map<Long, ProjectStage> stages = new HashMap<>();
+        final Map<Long, ProjectType> types = new HashMap<>();
+        final Map<Long, Contract> contracts = new HashMap<>();
+        final Map<Long, SysUser> users = new HashMap<>();
     }
 }

@@ -10,53 +10,70 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 项目阶段模版实体类
+ * 公告实体类
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@TableName("project_stage_template")
-public class ProjectStageTemplate implements Serializable {
+@TableName("announcement")
+public class Announcement implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
     /**
-     * 阶段id
+     * 公告id
      */
-    @TableId(value = "stage_id", type = IdType.ASSIGN_ID)
+    @TableId(value = "announcement_id", type = IdType.ASSIGN_ID)
     @JsonSerialize(using = ToStringSerializer.class)
-    private Long stageId;
+    private Long announcementId;
 
     /**
-     * 阶段名称
+     * 公告标题
      */
-    @TableField("stage_name")
-    private String stageName;
+    @TableField("title")
+    private String title;
 
     /**
-     * 关联项目类型id
+     * 公告内容
      */
-    @TableField("project_type_id")
+    @TableField("content")
+    private String content;
+
+    /**
+     * 优先级：0-普通/1-重要/2-紧急
+     */
+    @TableField("priority")
+    private Integer priority;
+
+    /**
+     * 状态：0-草稿/1-已发布/2-已下线
+     */
+    @TableField("status")
+    private Integer status;
+
+    /**
+     * 发布时间
+     */
+    @TableField("publish_time")
+    private LocalDateTime publishTime;
+
+    /**
+     * 过期时间
+     */
+    @TableField("expire_time")
+    private LocalDateTime expireTime;
+
+    /**
+     * 发布人id
+     */
+    @TableField("publish_user_id")
     @JsonSerialize(using = ToStringSerializer.class)
-    private Long projectTypeId;
-
-    /**
-     * 阶段默认产值比例
-     */
-    @TableField("stage_output")
-    private BigDecimal stageOutput;
-
-    /**
-     * 阶段状态：0-禁用/1-启用
-     */
-    @TableField("stage_status")
-    private Integer stageStatus;
+    private Long publishUserId;
 
     /**
      * 创建时间

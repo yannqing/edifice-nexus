@@ -47,14 +47,23 @@ function forceLogout(msg: string): never {
 type RequestOptions = Omit<RequestInit, "body"> & {
   params?: Record<string, string>;
   body?: unknown;
+  /** 业务 code != SUCCESS 时是否自动 toast.error(res.msg)。默认 true；调用方需要自行提示时可传 false。 */
+  toastOnBizError?: boolean;
 };
+
+/** 已知的"SUCCESS 性质"状态码，收到这些不算业务失败 */
+const SUCCESS_CODES: readonly number[] = [
+  ResponseCode.SUCCESS,
+  ResponseCode.LOGIN_SUCCESS,
+  ResponseCode.LOGOUT_SUCCESS,
+];
 
 async function request<T>(
   url: string,
   options: RequestOptions = {},
   _retried = false
 ): Promise<BaseResponse<T>> {
-  const { params, body, headers: customHeaders, ...rest } = options;
+  const { params, body, headers: customHeaders, toastOnBizError = true, ...rest } = options;
 
   // 构建完整 URL
   let fullUrl = `${BASE_URL}${url}`;
@@ -88,6 +97,8 @@ async function request<T>(
   });
 
   if (!response.ok) {
+    const msg = response.status >= 500 ? "服务器异常，请稍后重试" : "网络异常，请稍后重试";
+    toast.error(msg);
     throw new Error(`HTTP error: ${response.status}`);
   }
 
@@ -107,6 +118,11 @@ async function request<T>(
   // 其他认证失败：无法自愈，直接登出
   if (AUTH_FAILED_CODES.includes(data.code) || data.code === ResponseCode.ACCESS_TOKEN_EXPIRE) {
     forceLogout(data.msg || "登录已过期，请重新登录");
+  }
+
+  // 业务错误统一提示（调用方可通过 toastOnBizError=false 关闭）
+  if (!SUCCESS_CODES.includes(data.code) && toastOnBizError) {
+    toast.error(data.msg || "操作失败");
   }
 
   return data;

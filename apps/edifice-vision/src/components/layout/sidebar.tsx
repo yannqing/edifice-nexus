@@ -13,6 +13,7 @@ import {
   Wallet,
   BarChart3,
   UserCircle,
+  Megaphone,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Wallet,
   BarChart3,
   UserCircle,
+  Megaphone,
 };
 
 export function Sidebar() {

@@ -213,11 +213,10 @@ export function CreateProjectDialog({
         onOpenChange(false);
         onSuccess();
       } else {
-        toast.error(res.msg || "创建失败");
+        // toast 由 request.ts 统一提示；这里仅同步到表单错误态
         setError(res.msg || "创建失败");
       }
     } catch {
-      toast.error("网络异常，请稍后重试");
       setError("网络异常，请稍后重试");
     } finally {
       setSubmitting(false);

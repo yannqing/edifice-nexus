@@ -52,10 +52,10 @@ public class CollectionDetailVo implements Serializable {
         private BigDecimal stageOutput;
 
         /** 阶段计划回款金额 = 合同金额 × stageOutput% */
-        private Integer planAmount;
+        private BigDecimal planAmount;
 
         /** 该阶段已回款金额（元） */
-        private Integer actualAmount;
+        private BigDecimal actualAmount;
 
         /** 0-未回款/1-部分回款/2-已回款 */
         private Integer status;

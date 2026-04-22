@@ -1,6 +1,8 @@
 package com.qsy.edifice.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -27,6 +29,7 @@ public class ProjectType implements Serializable {
      * 项目类型id
      */
     @TableId(value = "project_type_id", type = IdType.ASSIGN_ID)
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long projectTypeId;
 
     /**

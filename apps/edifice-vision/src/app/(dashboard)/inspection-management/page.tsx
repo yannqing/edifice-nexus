@@ -35,8 +35,10 @@ import {
   getInspectionDetail,
   getInspectionOverview,
   applyInspection,
+  getAllInspectionExportUrl,
 } from "@/services/inspection";
 import { getMyProjects, getProjectDetail, uploadDocument } from "@/services/project";
+import { getAccessToken } from "@/lib/token";
 import { ResponseCode } from "@/types/api";
 import type {
   InspectionFormListVo,
@@ -184,7 +186,19 @@ export default function InspectionManagementPage() {
           <p className="text-slate-500 text-sm mt-1">管理所有验工单，发起新的阶段验收申请。</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            className="flex items-center gap-2"
+            onClick={() => {
+              const url = getAllInspectionExportUrl({
+                inspectionFormCode: debouncedSearch || undefined,
+                inspectionFormStatus: statusFilterMap[activeTab],
+              });
+              const token = getAccessToken();
+              const separator = url.includes("?") ? "&" : "?";
+              window.open(token ? `${url}${separator}token=${token}` : url, "_blank");
+            }}
+          >
             <Download className="w-4 h-4" /> 导出
           </Button>
           <Button
@@ -536,11 +550,10 @@ function CreateInspectionDialog({ open, onOpenChange, onSuccess }: {
       const res = await uploadDocument(file);
       if (res.code === ResponseCode.SUCCESS && res.data) {
         setFiles((prev) => [...prev, res.data]);
-      } else {
-        toast.error(res.msg || "文件上传失败");
       }
+      // 业务/网络错误由 request.ts 统一提示
     } catch {
-      toast.error("文件上传失败");
+      /* 由 request.ts 提示 */
     } finally {
       setUploading(false);
     }
@@ -568,11 +581,9 @@ function CreateInspectionDialog({ open, onOpenChange, onSuccess }: {
         toast.success("验工单提交成功");
         onOpenChange(false);
         onSuccess();
-      } else {
-        toast.error(res.msg || "提交失败");
       }
     } catch {
-      toast.error("网络异常，请稍后重试");
+      /* 网络错误由 request.ts 提示 */
     } finally {
       setSubmitting(false);
     }

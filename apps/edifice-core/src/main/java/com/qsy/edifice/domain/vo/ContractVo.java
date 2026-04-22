@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -45,7 +46,7 @@ public class ContractVo implements Serializable {
     /**
      * 合同金额
      */
-    private Integer contractAmount;
+    private BigDecimal contractAmount;
 
     /**
      * 合同主文件id
@@ -61,7 +62,7 @@ public class ContractVo implements Serializable {
     /**
      * 基本收益金额
      */
-    private Integer baseAmount;
+    private BigDecimal baseAmount;
 
     /**
      * 效益收益规则

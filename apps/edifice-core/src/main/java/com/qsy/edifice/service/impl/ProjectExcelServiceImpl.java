@@ -138,8 +138,8 @@ public class ProjectExcelServiceImpl implements ProjectExcelService {
                         .projectTypeCode("A")
                         .projectStatus("")
                         .contractType("基本+效益")
-                        .contractAmount(500000)
-                        .baseAmount(300000)
+                        .contractAmount(new java.math.BigDecimal("500000"))
+                        .baseAmount(new java.math.BigDecimal("300000"))
                         .benefitRules("按审减额5%")
                         .preStartDate("2026-01-01")
                         .preEndDate("2026-12-31")
@@ -286,7 +286,7 @@ public class ProjectExcelServiceImpl implements ProjectExcelService {
                 dto.setProjectCode(projectCode);
                 dto.setProjectType(typeId);
                 dto.setContractType(contractType);
-                dto.setContractAmount(data.getContractAmount() != null ? data.getContractAmount() : 0);
+                dto.setContractAmount(data.getContractAmount() != null ? data.getContractAmount() : java.math.BigDecimal.ZERO);
                 dto.setBaseAmount(data.getBaseAmount());
                 dto.setBenefitRule(data.getBenefitRules());
                 dto.setProjectCharges(chargeIds);

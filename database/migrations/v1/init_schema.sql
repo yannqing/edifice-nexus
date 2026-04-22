@@ -59,10 +59,10 @@ create table contract
     contract_name varchar(100)                       not null comment '合同名称',
     contract_code varchar(100)                       not null comment '合同唯一编码（项目编号）',
     contract_type	tinyint				default 0						not null comment '合同类型：0-基本收费/1-基本+效益',
-    contract_amount int																null	comment '合同金额',
+    contract_amount decimal(20, 2)                                  null    comment '合同金额（元）',
     contract_file	bigint								not null				comment '合同主文件id',
     contract_other_files	json												null	comment '合同其他附件(id json 数组)',
-      	base_amount			int																	null comment '基本收益金额',
+    base_amount    decimal(20, 2)                                   null    comment '基本收益金额（元）',
     benefit_rules		varchar(255)										null			comment '效益收益规则',
     signing_date		datetime	default CURRENT_TIMESTAMP not null comment '项目签订日期',
     pre_start_date datetime	default CURRENT_TIMESTAMP	not null comment '项目预计开始日期',
@@ -255,7 +255,7 @@ create table output_value
         primary key,
     project_id         bigint                             not null comment '项目id',
     project_stage_id   bigint                             not null comment '项目阶段id',
-    total_amount       int                                not null comment '产值总额（元）',
+    total_amount       decimal(20, 2)                     not null comment '产值总额（元）',
     status             tinyint  default 0                 not null comment '状态：0-待确认/1-待审核/2-已审批/3-已发放',
     submit_user_id     bigint                             null     comment '提交人id',
     submit_time        datetime                           null     comment '提交时间',
@@ -280,7 +280,7 @@ create table output_value_distribution
     user_id           bigint                             not null comment '分配用户id',
     work_type         tinyint                            not null comment '工作类型：0-管理工作/1-基础工作/2-智励工作',
     ratio             decimal(10, 2) default 0.00        not null comment '分配比例（%）',
-    amount            int            default 0           not null comment '分配金额（元）',
+    amount            decimal(20, 2) default 0.00        not null comment '分配金额（元）',
     created_time      datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updated_time      datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
     is_delete         tinyint  default 0                 not null comment '逻辑删除',
@@ -323,7 +323,7 @@ create table collection_record
         primary key,
     project_id            bigint                             not null comment '项目id',
     project_stage_id      bigint                             null     comment '项目阶段id（可选）',
-    amount                int                                not null comment '回款金额（元）',
+    amount                decimal(20, 2)                     not null comment '回款金额（元）',
     collect_date          date                               not null comment '实际回款日期',
     voucher_file_id       bigint                             null     comment '凭证文件id',
     remark                varchar(1024)                      null     comment '备注',
@@ -373,3 +373,27 @@ create table files
     key idx_files_user (upload_user_id)
 )
     comment '文件表';
+
+
+-- ==================== 公告模块 ====================
+
+-- auto-generated definition
+create table announcement
+(
+    announcement_id   bigint                             not null comment '公告id'
+        primary key,
+    title             varchar(200)                       not null comment '公告标题',
+    content           text                               not null comment '公告内容（支持纯文本或简单 HTML）',
+    priority          tinyint  default 0                 not null comment '优先级：0-普通/1-重要/2-紧急',
+    status            tinyint  default 0                 not null comment '状态：0-草稿/1-已发布/2-已下线',
+    publish_time      datetime                           null     comment '发布时间',
+    expire_time       datetime                           null     comment '过期时间（可选，到期自动视为下线）',
+    publish_user_id   bigint                             null     comment '发布人id',
+    created_time      datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updated_time      datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_delete         tinyint  default 0                 not null comment '逻辑删除',
+    key idx_announcement_status (status),
+    key idx_announcement_publish_time (publish_time),
+    key idx_announcement_priority (priority)
+)
+    comment '公告表';

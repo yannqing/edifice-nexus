@@ -73,10 +73,10 @@ public class TimesheetServiceImpl implements TimesheetService {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择工作日期");
         }
         if (dto.getHours() == null || dto.getHours().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "工作时长必须大于0");
+            throw new BusinessException(ErrorType.ARGS_INVALID, "工作时长必须大于0");
         }
         if (dto.getHours().compareTo(new BigDecimal("24")) > 0) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "单日工时不能超过24小时");
+            throw new BusinessException(ErrorType.ARGS_INVALID, "单日工时不能超过24小时");
         }
 
         if (dto.getTimesheetId() != null) {

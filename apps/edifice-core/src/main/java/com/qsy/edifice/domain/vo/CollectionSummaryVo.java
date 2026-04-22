@@ -39,16 +39,16 @@ public class CollectionSummaryVo implements Serializable {
     private String managerName;
 
     /** 合同金额（元） */
-    private Integer contractAmount;
+    private BigDecimal contractAmount;
 
     /** 已完成阶段的描述，如 "1-3" */
     private String completedPhases;
 
     /** 应收金额 = 合同金额 × 已完成阶段产值比例之和（元） */
-    private Integer expectedAmount;
+    private BigDecimal expectedAmount;
 
     /** 已回款金额（元） */
-    private Integer collectedAmount;
+    private BigDecimal collectedAmount;
 
     /** 回款率 (%), 保留 1 位小数 */
     private BigDecimal collectionRate;

@@ -38,7 +38,7 @@ public class OutputValueVo implements Serializable {
     private String stageName;
     private BigDecimal stageOutput;
 
-    private Integer totalAmount;
+    private BigDecimal totalAmount;
 
     /** 0-待确认/1-待审核/2-已审批/3-已发放 */
     private Integer status;
@@ -71,6 +71,6 @@ public class OutputValueVo implements Serializable {
         /** 0-管理工作/1-基础工作/2-智励工作 */
         private Integer workType;
         private BigDecimal ratio;
-        private Integer amount;
+        private BigDecimal amount;
     }
 }

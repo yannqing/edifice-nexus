@@ -13,6 +13,7 @@ import org.springframework.beans.BeanUtils;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -51,10 +52,10 @@ public class InspectionFormListVo implements Serializable {
     private String stageName;
 
     @Schema(description = "阶段产值比例")
-    private java.math.BigDecimal stageOutput;
+    private BigDecimal stageOutput;
 
     @Schema(description = "合同金额")
-    private Integer contractAmount;
+    private BigDecimal contractAmount;
 
     @Schema(description = "申请人id")
     @JsonSerialize(using = ToStringSerializer.class)

@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -64,8 +65,8 @@ public class OutputValueServiceImpl implements OutputValueService {
         if (dto.getProjectId() == null || dto.getProjectStageId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择项目和阶段");
         }
-        if (dto.getTotalAmount() == null || dto.getTotalAmount() <= 0) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "产值总额必须大于0");
+        if (dto.getTotalAmount() == null || dto.getTotalAmount().signum() <= 0) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "产值总额必须大于0");
         }
         if (dto.getDistributions() == null || dto.getDistributions().isEmpty()) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请添加至少一条分配明细");
@@ -98,9 +99,10 @@ public class OutputValueServiceImpl implements OutputValueService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void confirmOutputValue(Long outputValueId) {
         OutputValue ov = outputValueMapper.selectById(outputValueId);
-        if (ov == null) throw new BusinessException(ErrorType.ARGS_NOT_NULL, "分配单不存在");
+        if (ov == null) throw new BusinessException(ErrorType.OUTPUT_VALUE_NOT_FOUND);
         if (ov.getStatus() != 0) throw new BusinessException(ErrorType.OPERATION_FAILED, "当前状态无法确认");
 
         ov.setStatus(1); // 待审核
@@ -108,9 +110,10 @@ public class OutputValueServiceImpl implements OutputValueService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void approveOutputValue(Long outputValueId, Long userId) {
         OutputValue ov = outputValueMapper.selectById(outputValueId);
-        if (ov == null) throw new BusinessException(ErrorType.ARGS_NOT_NULL, "分配单不存在");
+        if (ov == null) throw new BusinessException(ErrorType.OUTPUT_VALUE_NOT_FOUND);
         if (ov.getStatus() != 1) throw new BusinessException(ErrorType.OPERATION_FAILED, "当前状态无法审批");
 
         ov.setStatus(2); // 已审批
@@ -119,9 +122,10 @@ public class OutputValueServiceImpl implements OutputValueService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void payOutputValue(Long outputValueId) {
         OutputValue ov = outputValueMapper.selectById(outputValueId);
-        if (ov == null) throw new BusinessException(ErrorType.ARGS_NOT_NULL, "分配单不存在");
+        if (ov == null) throw new BusinessException(ErrorType.OUTPUT_VALUE_NOT_FOUND);
         if (ov.getStatus() != 2) throw new BusinessException(ErrorType.OPERATION_FAILED, "当前状态无法发放");
 
         ov.setStatus(3); // 已发放
@@ -135,8 +139,15 @@ public class OutputValueServiceImpl implements OutputValueService {
         Map<String, Object> stats = new HashMap<>();
         stats.put("pendingCount", all.stream().filter(o -> o.getStatus() == 0 || o.getStatus() == 1).count());
         stats.put("approvedCount", all.stream().filter(o -> o.getStatus() == 2).count());
-        stats.put("paidAmount", all.stream().filter(o -> o.getStatus() == 3).mapToInt(OutputValue::getTotalAmount).sum());
-        stats.put("totalAmount", all.stream().mapToInt(OutputValue::getTotalAmount).sum());
+        stats.put("paidAmount", all.stream()
+                .filter(o -> o.getStatus() == 3)
+                .map(OutputValue::getTotalAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
+        stats.put("totalAmount", all.stream()
+                .map(OutputValue::getTotalAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add));
         return stats;
     }
 

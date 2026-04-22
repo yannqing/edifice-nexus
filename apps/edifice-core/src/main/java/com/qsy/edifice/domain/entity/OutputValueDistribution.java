@@ -38,7 +38,7 @@ public class OutputValueDistribution implements Serializable {
     private BigDecimal ratio;
 
     @TableField("amount")
-    private Integer amount;
+    private BigDecimal amount;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;

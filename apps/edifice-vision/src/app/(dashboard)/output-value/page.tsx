@@ -101,10 +101,11 @@ export default function OutputValuePage() {
       if (res.code === ResponseCode.SUCCESS) {
         toast.success(labelMap[action]);
         fetchData();
-      } else {
-        toast.error(res.msg || "操作失败");
       }
-    } catch { toast.error("操作失败"); }
+      // 业务错误由 request.ts 统一提示
+    } catch {
+      /* 网络错误由 request.ts 提示 */
+    }
     finally { setActionLoading(null); }
   };
 

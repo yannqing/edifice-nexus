@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -30,7 +31,7 @@ public class OutputValue implements Serializable {
     private Long projectStageId;
 
     @TableField("total_amount")
-    private Integer totalAmount;
+    private BigDecimal totalAmount;
 
     /** 0-待确认/1-待审核/2-已审批/3-已发放 */
     @TableField("status")

@@ -23,8 +23,10 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -139,47 +141,67 @@ public class ProjectServiceImpl implements ProjectService {
             }
         }
 
-        // 3. 更新成员（如果传了成员列表，先删后插）
+        // 3. 更新成员（diff 式：仅删除变更的、只插入新增的、角色变化的则更新）
         if (dto.getProjectCharges() != null || dto.getProjectMembers() != null) {
-            // 删除现有成员
-            List<ProjectMember> existingMembers = projectMemberService.getProjectMembersByProjectId(dto.getProjectId());
-            if (existingMembers != null) {
-                for (ProjectMember m : existingMembers) {
-                    projectMemberService.deleteProjectMember(m.getProjectMemberId());
-                }
-            }
-
-            Set<Long> addedUserIds = new HashSet<>();
-
-            // 插入项目经理
-            if (dto.getProjectCharges() != null) {
-                for (Long chargeId : dto.getProjectCharges()) {
-                    ProjectMember member = ProjectMember.builder()
-                            .projectId(dto.getProjectId())
-                            .userId(chargeId)
-                            .projectRole(101L)
-                            .build();
-                    projectMemberService.saveProjectMember(member);
-                    addedUserIds.add(chargeId);
-                }
-            }
-
-            // 插入普通成员
-            if (dto.getProjectMembers() != null) {
-                for (Long memberId : dto.getProjectMembers()) {
-                    if (!addedUserIds.contains(memberId)) {
-                        ProjectMember member = ProjectMember.builder()
-                                .projectId(dto.getProjectId())
-                                .userId(memberId)
-                                .projectRole(102L)
-                                .build();
-                        projectMemberService.saveProjectMember(member);
-                        addedUserIds.add(memberId);
-                    }
-                }
-            }
+            applyMemberDiff(dto.getProjectId(),
+                    dto.getProjectCharges() != null ? dto.getProjectCharges() : Collections.emptyList(),
+                    dto.getProjectMembers() != null ? dto.getProjectMembers() : Collections.emptyList());
         }
     }
+
+    /**
+     * 成员 diff 更新：保留 (userId, roleId) 相同的记录，仅处理差异
+     *
+     * - 经理 ID 集合和成员 ID 集合中同时出现时，以经理为准（角色优先级高）
+     * - 期望集 - 当前集 = 需新增
+     * - 当前集 - 期望集 = 需删除（逻辑删）
+     * - 同一 userId 但 roleId 变化 = updateById
+     */
+    private void applyMemberDiff(Long projectId, List<Long> chargeIds, List<Long> memberIds) {
+        // 期望状态：userId -> roleId（经理优先）
+        Map<Long, Long> desired = new java.util.LinkedHashMap<>();
+        for (Long id : memberIds) {
+            if (id != null) desired.put(id, ROLE_MEMBER_ID);
+        }
+        for (Long id : chargeIds) {
+            if (id != null) desired.put(id, ROLE_MANAGER_ID); // 覆盖成员角色
+        }
+
+        // 当前状态
+        List<ProjectMember> current = projectMemberService.getProjectMembersByProjectId(projectId);
+        if (current == null) current = Collections.emptyList();
+        Map<Long, ProjectMember> currentByUser = current.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        ProjectMember::getUserId, m -> m, (a, b) -> a));
+
+        // 1) 删除不再需要的成员
+        for (ProjectMember m : current) {
+            if (!desired.containsKey(m.getUserId())) {
+                projectMemberService.deleteProjectMember(m.getProjectMemberId());
+            }
+        }
+
+        // 2) 新增 或 更新角色
+        for (Map.Entry<Long, Long> e : desired.entrySet()) {
+            Long userId = e.getKey();
+            Long roleId = e.getValue();
+            ProjectMember existing = currentByUser.get(userId);
+            if (existing == null) {
+                projectMemberService.saveProjectMember(ProjectMember.builder()
+                        .projectId(projectId)
+                        .userId(userId)
+                        .projectRole(roleId)
+                        .build());
+            } else if (!roleId.equals(existing.getProjectRole())) {
+                existing.setProjectRole(roleId);
+                projectMemberService.updateProjectMember(existing);
+            }
+            // 角色相同则不动，保留原 created_time 和 member_id
+        }
+    }
+
+    private static final Long ROLE_MANAGER_ID = 101L;
+    private static final Long ROLE_MEMBER_ID = 102L;
 
     @Override
     public boolean deleteProject(Long projectId) {
@@ -249,8 +271,8 @@ public class ProjectServiceImpl implements ProjectService {
         if (dto.getContractType() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择合同类型");
         }
-        if (dto.getContractAmount() == null || dto.getContractAmount() <= 0) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "合同金额必须大于0");
+        if (dto.getContractAmount() == null || dto.getContractAmount().signum() <= 0) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "合同金额必须大于0");
         }
         if (dto.getContractFile() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请上传合同主文件");

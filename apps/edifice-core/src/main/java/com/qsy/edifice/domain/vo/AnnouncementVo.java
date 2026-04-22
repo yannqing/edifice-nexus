@@ -10,46 +10,37 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
-import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-@Schema(description = "回款记录VO")
-public class CollectionRecordVo implements Serializable {
+@Schema(description = "公告VO")
+public class AnnouncementVo implements Serializable {
 
     @Serial
     private static final long serialVersionUID = 1L;
 
     @JsonSerialize(using = ToStringSerializer.class)
-    private Long collectionRecordId;
+    private Long announcementId;
+
+    private String title;
+    private String content;
+
+    /** 0-普通/1-重要/2-紧急 */
+    private Integer priority;
+
+    /** 0-草稿/1-已发布/2-已下线 */
+    private Integer status;
+
+    private LocalDateTime publishTime;
+    private LocalDateTime expireTime;
 
     @JsonSerialize(using = ToStringSerializer.class)
-    private Long projectId;
+    private Long publishUserId;
 
-    private String projectName;
-    private String projectCode;
-
-    @JsonSerialize(using = ToStringSerializer.class)
-    private Long projectStageId;
-
-    private String stageName;
-
-    private BigDecimal amount;
-    private LocalDate collectDate;
-
-    @JsonSerialize(using = ToStringSerializer.class)
-    private Long voucherFileId;
-
-    private String remark;
-
-    @JsonSerialize(using = ToStringSerializer.class)
-    private Long recordUserId;
-
-    private String recordUserName;
+    private String publishUserName;
 
     private LocalDateTime createdTime;
     private LocalDateTime updatedTime;

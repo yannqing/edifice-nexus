@@ -36,10 +36,12 @@ import org.springframework.util.StringUtils;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -107,12 +109,13 @@ public class CollectionServiceImpl implements CollectionService {
 
         // 2. 批量预取相关数据，避免 N+1
         Set<Long> projectIds = allProjects.stream().map(Project::getProjectId).collect(Collectors.toSet());
-        Map<Long, Integer> collectedMap = loadCollectedAmountByProjects(projectIds);
+        Map<Long, BigDecimal> collectedMap = loadCollectedAmountByProjects(projectIds);
         Map<Long, ProjectType> typeMap = loadProjectTypeMap(allProjects);
 
         // 3. 构造汇总
         List<CollectionSummaryVo> all = allProjects.stream()
-                .map(p -> buildSummary(p, typeMap.get(p.getProjectType()), collectedMap.getOrDefault(p.getProjectId(), 0)))
+                .map(p -> buildSummary(p, typeMap.get(p.getProjectType()),
+                        collectedMap.getOrDefault(p.getProjectId(), BigDecimal.ZERO)))
                 .collect(Collectors.toList());
 
         // 4. 状态过滤
@@ -138,26 +141,36 @@ public class CollectionServiceImpl implements CollectionService {
         List<Project> projects = projectMapper.selectList(null);
         Set<Long> projectIds = projects.stream().map(Project::getProjectId).collect(Collectors.toSet());
 
-        long totalExpected = 0;
+        // 批量预取合同 + 阶段，避免 N+1
+        Map<Long, Contract> contractMap = loadContractsByProjectIds(projectIds);
+        Map<Long, List<ProjectStage>> stagesByProject = loadStagesByProjectIds(projectIds);
+
+        BigDecimal totalExpected = BigDecimal.ZERO;
         for (Project p : projects) {
-            totalExpected += calcExpectedAmount(p.getProjectId());
+            totalExpected = totalExpected.add(calcExpectedAmount(
+                    contractMap.get(p.getProjectId()),
+                    stagesByProject.getOrDefault(p.getProjectId(), Collections.emptyList())));
         }
 
-        long totalCollected = 0;
+        BigDecimal totalCollected = BigDecimal.ZERO;
         if (!projectIds.isEmpty()) {
-            Map<Long, Integer> collected = loadCollectedAmountByProjects(projectIds);
-            totalCollected = collected.values().stream().mapToLong(Integer::longValue).sum();
+            Map<Long, BigDecimal> collected = loadCollectedAmountByProjects(projectIds);
+            totalCollected = collected.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
         }
 
-        BigDecimal rate = totalExpected > 0
-                ? BigDecimal.valueOf(totalCollected * 100.0 / totalExpected).setScale(1, RoundingMode.HALF_UP)
+        BigDecimal rate = totalExpected.signum() > 0
+                ? totalCollected.multiply(BigDecimal.valueOf(100))
+                    .divide(totalExpected, 1, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO;
+
+        BigDecimal pending = totalExpected.subtract(totalCollected);
+        if (pending.signum() < 0) pending = BigDecimal.ZERO;
 
         return CollectionStatisticsVo.builder()
                 .totalExpected(totalExpected)
                 .totalCollected(totalCollected)
                 .overallRate(rate)
-                .totalPending(Math.max(0, totalExpected - totalCollected))
+                .totalPending(pending)
                 .build();
     }
 
@@ -177,25 +190,25 @@ public class CollectionServiceImpl implements CollectionService {
         ProjectType type = project.getProjectType() != null
                 ? projectTypeService.getProjectTypeById(project.getProjectType())
                 : null;
-        int collected = sumCollectedAmount(projectId);
+        BigDecimal collected = sumCollectedAmount(projectId);
         CollectionSummaryVo summary = buildSummary(project, type, collected);
 
         // 阶段维度
         List<ProjectStage> stages = projectStageService.getProjectStagesByProjectId(projectId);
         Contract contract = contractService.getContractByProjectId(projectId);
-        int contractAmount = contract != null && contract.getContractAmount() != null ? contract.getContractAmount() : 0;
+        BigDecimal contractAmount = contract != null && contract.getContractAmount() != null
+                ? contract.getContractAmount() : BigDecimal.ZERO;
 
-        Map<Long, Integer> collectedByStage = loadCollectedAmountByStages(projectId);
+        Map<Long, BigDecimal> collectedByStage = loadCollectedAmountByStages(projectId);
 
         List<CollectionDetailVo.StageCollectionVo> stageVos = new ArrayList<>();
         if (stages != null) {
             for (ProjectStage s : stages) {
                 BigDecimal ratio = s.getStageOutput() != null ? s.getStageOutput() : BigDecimal.ZERO;
-                int planAmount = BigDecimal.valueOf(contractAmount)
+                BigDecimal planAmount = contractAmount
                         .multiply(ratio)
-                        .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
-                        .intValue();
-                int actualAmount = collectedByStage.getOrDefault(s.getProjectStageId(), 0);
+                        .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+                BigDecimal actualAmount = collectedByStage.getOrDefault(s.getProjectStageId(), BigDecimal.ZERO);
 
                 stageVos.add(CollectionDetailVo.StageCollectionVo.builder()
                         .projectStageId(s.getProjectStageId())
@@ -236,8 +249,8 @@ public class CollectionServiceImpl implements CollectionService {
         if (dto.getProjectId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择项目");
         }
-        if (dto.getAmount() == null || dto.getAmount() <= 0) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "回款金额必须大于 0");
+        if (dto.getAmount() == null || dto.getAmount().signum() <= 0) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "回款金额必须大于 0");
         }
         if (dto.getCollectDate() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择回款日期");
@@ -273,12 +286,12 @@ public class CollectionServiceImpl implements CollectionService {
         }
         CollectionRecord existing = collectionRecordMapper.selectById(dto.getCollectionRecordId());
         if (existing == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "回款记录不存在");
+            throw new BusinessException(ErrorType.COLLECTION_RECORD_NOT_FOUND);
         }
 
         if (dto.getAmount() != null) {
-            if (dto.getAmount() <= 0) {
-                throw new BusinessException(ErrorType.ARGS_NOT_NULL, "回款金额必须大于 0");
+            if (dto.getAmount().signum() <= 0) {
+                throw new BusinessException(ErrorType.ARGS_INVALID, "回款金额必须大于 0");
             }
             existing.setAmount(dto.getAmount());
         }
@@ -302,20 +315,22 @@ public class CollectionServiceImpl implements CollectionService {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL);
         }
         if (collectionRecordMapper.selectById(collectionRecordId) == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "回款记录不存在");
+            throw new BusinessException(ErrorType.COLLECTION_RECORD_NOT_FOUND);
         }
         collectionRecordMapper.deleteById(collectionRecordId);
     }
 
     // ==================== 私有辅助 ====================
 
-    private CollectionSummaryVo buildSummary(Project project, ProjectType type, int collected) {
+    private CollectionSummaryVo buildSummary(Project project, ProjectType type, BigDecimal collected) {
         Contract contract = contractService.getContractByProjectId(project.getProjectId());
-        int contractAmount = contract != null && contract.getContractAmount() != null ? contract.getContractAmount() : 0;
-        int expected = calcExpectedAmount(project.getProjectId(), contract);
+        BigDecimal contractAmount = contract != null && contract.getContractAmount() != null
+                ? contract.getContractAmount() : BigDecimal.ZERO;
+        BigDecimal expected = calcExpectedAmount(project.getProjectId(), contract);
 
-        BigDecimal rate = expected > 0
-                ? BigDecimal.valueOf(collected * 100.0 / expected).setScale(1, RoundingMode.HALF_UP)
+        BigDecimal rate = expected.signum() > 0
+                ? collected.multiply(BigDecimal.valueOf(100))
+                    .divide(expected, 1, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO;
 
         String managerName = findManagerName(project.getProjectId());
@@ -338,54 +353,78 @@ public class CollectionServiceImpl implements CollectionService {
     }
 
     /** 应收额：合同金额 × 已完成阶段产值比例之和 */
-    private int calcExpectedAmount(Long projectId) {
-        return calcExpectedAmount(projectId, contractService.getContractByProjectId(projectId));
-    }
-
-    private int calcExpectedAmount(Long projectId, Contract contract) {
-        if (contract == null || contract.getContractAmount() == null) return 0;
-        List<ProjectStage> stages = projectStageService.getProjectStagesByProjectId(projectId);
-        if (stages == null || stages.isEmpty()) return 0;
+    private BigDecimal calcExpectedAmount(Contract contract, List<ProjectStage> stages) {
+        if (contract == null || contract.getContractAmount() == null) return BigDecimal.ZERO;
+        if (stages == null || stages.isEmpty()) return BigDecimal.ZERO;
 
         BigDecimal completedRatioSum = stages.stream()
                 .filter(s -> STAGE_COMPLETED_STATUSES.contains(s.getStageStatus()))
                 .map(s -> s.getStageOutput() != null ? s.getStageOutput() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        return BigDecimal.valueOf(contract.getContractAmount())
+        return contract.getContractAmount()
                 .multiply(completedRatioSum)
-                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
-                .intValue();
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
     }
 
-    /** 按项目汇总已收金额 */
-    private Map<Long, Integer> loadCollectedAmountByProjects(Set<Long> projectIds) {
+    private BigDecimal calcExpectedAmount(Long projectId, Contract contract) {
+        List<ProjectStage> stages = projectStageService.getProjectStagesByProjectId(projectId);
+        return calcExpectedAmount(contract, stages);
+    }
+
+    /** 按项目 ID 集合一次性拉取合同，避免 N+1 */
+    private Map<Long, Contract> loadContractsByProjectIds(Collection<Long> projectIds) {
         if (projectIds == null || projectIds.isEmpty()) return Collections.emptyMap();
-        LambdaQueryWrapper<CollectionRecord> w = new LambdaQueryWrapper<>();
-        w.in(CollectionRecord::getProjectId, projectIds);
-        List<CollectionRecord> records = collectionRecordMapper.selectList(w);
-        Map<Long, Integer> result = new HashMap<>();
-        for (CollectionRecord r : records) {
-            result.merge(r.getProjectId(), r.getAmount() != null ? r.getAmount() : 0, Integer::sum);
+        Map<Long, Contract> result = new HashMap<>();
+        for (Long pid : projectIds) {
+            Contract c = contractService.getContractByProjectId(pid);
+            if (c != null) result.put(pid, c);
         }
         return result;
     }
 
-    private int sumCollectedAmount(Long projectId) {
+    /** 按项目 ID 集合一次性拉取阶段 */
+    private Map<Long, List<ProjectStage>> loadStagesByProjectIds(Collection<Long> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) return Collections.emptyMap();
+        Map<Long, List<ProjectStage>> result = new HashMap<>();
+        for (Long pid : projectIds) {
+            List<ProjectStage> stages = projectStageService.getProjectStagesByProjectId(pid);
+            if (stages != null) result.put(pid, stages);
+        }
+        return result;
+    }
+
+    /** 按项目汇总已收金额 */
+    private Map<Long, BigDecimal> loadCollectedAmountByProjects(Set<Long> projectIds) {
+        if (projectIds == null || projectIds.isEmpty()) return Collections.emptyMap();
+        LambdaQueryWrapper<CollectionRecord> w = new LambdaQueryWrapper<>();
+        w.in(CollectionRecord::getProjectId, projectIds);
+        List<CollectionRecord> records = collectionRecordMapper.selectList(w);
+        Map<Long, BigDecimal> result = new HashMap<>();
+        for (CollectionRecord r : records) {
+            BigDecimal amt = r.getAmount() != null ? r.getAmount() : BigDecimal.ZERO;
+            result.merge(r.getProjectId(), amt, BigDecimal::add);
+        }
+        return result;
+    }
+
+    private BigDecimal sumCollectedAmount(Long projectId) {
         LambdaQueryWrapper<CollectionRecord> w = new LambdaQueryWrapper<>();
         w.eq(CollectionRecord::getProjectId, projectId);
         return collectionRecordMapper.selectList(w).stream()
-                .mapToInt(r -> r.getAmount() != null ? r.getAmount() : 0)
-                .sum();
+                .map(CollectionRecord::getAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    private Map<Long, Integer> loadCollectedAmountByStages(Long projectId) {
+    private Map<Long, BigDecimal> loadCollectedAmountByStages(Long projectId) {
         LambdaQueryWrapper<CollectionRecord> w = new LambdaQueryWrapper<>();
         w.eq(CollectionRecord::getProjectId, projectId).isNotNull(CollectionRecord::getProjectStageId);
         List<CollectionRecord> records = collectionRecordMapper.selectList(w);
-        Map<Long, Integer> result = new HashMap<>();
+        Map<Long, BigDecimal> result = new HashMap<>();
         for (CollectionRecord r : records) {
-            result.merge(r.getProjectStageId(), r.getAmount() != null ? r.getAmount() : 0, Integer::sum);
+            BigDecimal amt = r.getAmount() != null ? r.getAmount() : BigDecimal.ZERO;
+            result.merge(r.getProjectStageId(), amt, BigDecimal::add);
         }
         return result;
     }
@@ -442,10 +481,11 @@ public class CollectionServiceImpl implements CollectionService {
     }
 
     /** 状态推断：应收 vs 已收 */
-    private int deriveStatus(int expected, int collected) {
-        if (expected <= 0 && collected <= 0) return 0; // 未回款
-        if (collected <= 0) return 0;
-        if (collected >= expected) return 2;  // 已回款
+    private int deriveStatus(BigDecimal expected, BigDecimal collected) {
+        BigDecimal safeExpected = expected != null ? expected : BigDecimal.ZERO;
+        BigDecimal safeCollected = collected != null ? collected : BigDecimal.ZERO;
+        if (safeCollected.signum() <= 0) return 0; // 未回款
+        if (safeCollected.compareTo(safeExpected) >= 0) return 2;  // 已回款
         return 1; // 部分回款
     }
 

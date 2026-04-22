@@ -7,6 +7,9 @@ import com.qsy.edifice.domain.dto.GetInspectionFormListDto;
 import com.qsy.edifice.domain.vo.InspectionFormDetailVo;
 import com.qsy.edifice.domain.vo.InspectionFormListVo;
 import com.qsy.edifice.domain.vo.InspectionOverviewVo;
+import jakarta.servlet.http.HttpServletResponse;
+
+import java.io.IOException;
 
 /**
  * 验工单服务接口
@@ -55,4 +58,12 @@ public interface InspectionFormService {
      * @param userId 审批人id
      */
     void approvalInspection(ApprovalInspectionDto dto, Long userId);
+
+    /**
+     * 导出验工单为 Excel（不分页，按当前筛选条件）
+     * @param dto 查询条件；applyUserId 非空时表示"只导出我的"
+     * @param response HTTP响应
+     * @throws IOException IO异常
+     */
+    void exportInspections(GetInspectionFormListDto dto, HttpServletResponse response) throws IOException;
 }

@@ -56,7 +56,7 @@ public class InspectionFormDetailVo implements Serializable {
     private BigDecimal stageOutput;
 
     @Schema(description = "合同金额")
-    private Integer contractAmount;
+    private BigDecimal contractAmount;
 
     @Schema(description = "验工说明")
     private String inspectionFormDescription;

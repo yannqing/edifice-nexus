@@ -7,6 +7,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 /**
  * 项目信息 Excel 数据模型（Sheet1）
  */
@@ -38,11 +40,11 @@ public class ProjectExcelData {
 
     @ExcelProperty("合同金额（元）")
     @ColumnWidth(15)
-    private Integer contractAmount;
+    private BigDecimal contractAmount;
 
     @ExcelProperty("基础金额（元）")
     @ColumnWidth(15)
-    private Integer baseAmount;
+    private BigDecimal baseAmount;
 
     @ExcelProperty("效益规则")
     @ColumnWidth(20)

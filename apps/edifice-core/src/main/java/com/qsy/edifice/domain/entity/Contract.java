@@ -55,10 +55,10 @@ public class Contract implements Serializable {
     private Integer contractType;
 
     /**
-     * 合同金额
+     * 合同金额（元，DECIMAL(20,2)）
      */
     @TableField("contract_amount")
-    private Integer contractAmount;
+    private BigDecimal contractAmount;
 
     /**
      * 合同主文件id
@@ -73,10 +73,10 @@ public class Contract implements Serializable {
     private String contractOtherFiles;
 
     /**
-     * 基本收益金额
+     * 基本收益金额（元，DECIMAL(20,2)）
      */
     @TableField("base_amount")
-    private Integer baseAmount;
+    private BigDecimal baseAmount;
 
     /**
      * 效益收益规则

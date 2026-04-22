@@ -21,7 +21,7 @@ public class CreateOutputValueDto {
     private Long projectStageId;
 
     @Schema(description = "阶段产值总额（元）", requiredMode = Schema.RequiredMode.REQUIRED)
-    private Integer totalAmount;
+    private BigDecimal totalAmount;
 
     @Schema(description = "分配明细列表", requiredMode = Schema.RequiredMode.REQUIRED)
     private List<DistributionItem> distributions;
@@ -41,6 +41,6 @@ public class CreateOutputValueDto {
         private BigDecimal ratio;
 
         @Schema(description = "分配金额（元）")
-        private Integer amount;
+        private BigDecimal amount;
     }
 }

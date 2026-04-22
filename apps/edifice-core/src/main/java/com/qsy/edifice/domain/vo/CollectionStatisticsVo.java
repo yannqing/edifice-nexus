@@ -24,14 +24,14 @@ public class CollectionStatisticsVo implements Serializable {
     private static final long serialVersionUID = 1L;
 
     /** 应收款总额（元） */
-    private Long totalExpected;
+    private BigDecimal totalExpected;
 
     /** 已回款金额（元） */
-    private Long totalCollected;
+    private BigDecimal totalCollected;
 
     /** 整体回款率 (%) */
     private BigDecimal overallRate;
 
     /** 待回款金额 = 应收 - 已收（元） */
-    private Long totalPending;
+    private BigDecimal totalPending;
 }

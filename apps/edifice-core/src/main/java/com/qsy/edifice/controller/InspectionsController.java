@@ -18,8 +18,11 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+
+import java.io.IOException;
 
 @Tag(name = "验工单管理")
 @RestController
@@ -78,5 +81,28 @@ public class InspectionsController {
         SysUser loginUser = jwtUtils.getUserFromToken(token);
         inspectionFormService.approvalInspection(dto, loginUser.getUserId());
         return ResultUtils.success(Code.SUCCESS, true, "审批完成");
+    }
+
+    @GetMapping("/export")
+    @Operation(summary = "导出全部验工单", description = "按当前筛选条件导出所有验工单为 Excel，不分页")
+    public void exportAllInspections(GetInspectionFormListDto dto, HttpServletResponse response) throws IOException {
+        // 不带 applyUserId 约束 = 全部
+        if (dto != null) dto.setApplyUserId(null);
+        inspectionFormService.exportInspections(dto, response);
+    }
+
+    @GetMapping("/my-list/export")
+    @Operation(summary = "导出我的验工单", description = "仅导出当前用户提交的验工单，按当前筛选条件")
+    public void exportMyInspections(GetInspectionFormListDto dto,
+                                    HttpServletRequest request,
+                                    HttpServletResponse response) throws IOException, JsonProcessingException {
+        // 下载链接场景下 token 可能挂在 query，兼容两种方式（与 JwtAuthenticationTokenFilter 一致）
+        String token = request.getHeader("token");
+        if (token == null || token.isEmpty()) {
+            token = request.getParameter("token");
+        }
+        SysUser loginUser = jwtUtils.getUserFromToken(token);
+        dto.setApplyUserId(loginUser.getUserId());
+        inspectionFormService.exportInspections(dto, response);
     }
 }

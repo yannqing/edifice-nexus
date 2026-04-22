@@ -279,6 +279,18 @@ export const navigationConfig: NavSection[] = [
       },
     ],
   },
+  {
+    id: "system",
+    title: "系统管理",
+    items: [
+      {
+        id: "announcement-management",
+        label: "公告管理",
+        icon: "Megaphone",
+        href: "/announcement-management",
+      },
+    ],
+  },
 ];
 
 // 用户信息

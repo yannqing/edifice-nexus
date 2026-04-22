@@ -8,12 +8,28 @@ import {
   ClipboardCheck,
   Banknote,
   ArrowRight,
+  Megaphone,
+  Plus,
+  Loader2,
+  X,
+  Trash2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CardPageSkeleton } from "@/components/ui/skeleton";
 import { getDashboard } from "@/services/report";
 import type { DashboardData } from "@/services/report";
+import {
+  getRecentAnnouncements,
+  createAnnouncement,
+  deleteAnnouncement,
+} from "@/services/announcement";
+import {
+  ANNOUNCEMENT_PRIORITY_MAP,
+  type AnnouncementVo,
+} from "@/types/announcement";
 import { ResponseCode } from "@/types/api";
 import { PROJECT_STATUS_MAP } from "@/types/project";
 import { useAuth } from "@/store/auth-context";
@@ -51,6 +67,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
 
+  const [announcements, setAnnouncements] = useState<AnnouncementVo[]>([]);
+  const [announcementLoading, setAnnouncementLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -58,11 +78,35 @@ export default function DashboardPage() {
       if (res.code === ResponseCode.SUCCESS) {
         setData(res.data);
       }
-    } catch { /* 静默 */ }
+    } catch { /* 由 request.ts 提示 */ }
     finally { setLoading(false); }
   }, []);
 
+  const fetchAnnouncements = useCallback(async () => {
+    setAnnouncementLoading(true);
+    try {
+      const res = await getRecentAnnouncements(5);
+      if (res.code === ResponseCode.SUCCESS) {
+        setAnnouncements(res.data ?? []);
+      }
+      setAnnouncementLoading(false);
+    } catch {
+      setAnnouncementLoading(false);
+    }
+  }, []);
+
   useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchAnnouncements(); }, [fetchAnnouncements]);
+
+  const handleDeleteAnnouncement = async (id: string) => {
+    try {
+      const res = await deleteAnnouncement(id);
+      if (res.code === ResponseCode.SUCCESS) {
+        toast.success("公告已删除");
+        fetchAnnouncements();
+      }
+    } catch { /* 由 request.ts 提示 */ }
+  };
 
   const totalCategoryCount = data?.categoryDistribution?.reduce((sum, c) => sum + c.count, 0) ?? 0;
 
@@ -77,6 +121,14 @@ export default function DashboardPage() {
           欢迎回来{user?.realName ? `，${user.realName}` : ""}，这是截至目前的产值分配与核算概览信息。
         </p>
       </div>
+
+      {/* 公告 */}
+      <AnnouncementCard
+        loading={announcementLoading}
+        items={announcements}
+        onCreate={() => setCreateOpen(true)}
+        onDelete={handleDeleteAnnouncement}
+      />
 
       {loading && <CardPageSkeleton cards={4} />}
 
@@ -251,6 +303,268 @@ export default function DashboardPage() {
           </div>
         </>
       )}
+
+      {/* 发布公告弹窗 */}
+      <CreateAnnouncementDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSuccess={fetchAnnouncements}
+      />
+    </div>
+  );
+}
+
+// ==================== 公告卡片 ====================
+
+const priorityStyles: Record<number, string> = {
+  0: "bg-slate-100 text-slate-600",
+  1: "bg-amber-100 text-amber-700",
+  2: "bg-rose-100 text-rose-700",
+};
+
+function formatPublishTime(t: string | null): string {
+  if (!t) return "";
+  return t.replace("T", " ").slice(0, 16);
+}
+
+function AnnouncementCard({
+  loading,
+  items,
+  onCreate,
+  onDelete,
+}: {
+  loading: boolean;
+  items: AnnouncementVo[];
+  onCreate: () => void;
+  onDelete: (id: string) => void;
+}) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  return (
+    <div className="glass-card rounded-2xl p-6 shadow-sm">
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex items-center gap-2">
+          <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+            <Megaphone className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-800">系统公告</h3>
+            <p className="text-xs text-slate-400">{items.length} 条最新公告</p>
+          </div>
+        </div>
+        <Button
+          onClick={onCreate}
+          size="sm"
+          className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1"
+        >
+          <Plus className="w-4 h-4" /> 发布公告
+        </Button>
+      </div>
+
+      {loading && (
+        <div className="py-8 text-center">
+          <Loader2 className="w-5 h-5 animate-spin text-blue-500 mx-auto" />
+        </div>
+      )}
+
+      {!loading && items.length === 0 && (
+        <div className="py-8 text-center">
+          <Megaphone className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+          <p className="text-sm text-slate-400">暂无公告</p>
+        </div>
+      )}
+
+      {!loading && items.length > 0 && (
+        <div className="space-y-2">
+          {items.map((a) => {
+            const isExpanded = expandedId === a.announcementId;
+            return (
+              <div
+                key={a.announcementId}
+                className="p-3 rounded-xl bg-slate-50/50 hover:bg-slate-100/60 transition-colors group"
+              >
+                <div className="flex items-start gap-3">
+                  <Badge
+                    variant="secondary"
+                    className={cn("text-xs shrink-0 mt-0.5", priorityStyles[a.priority] ?? priorityStyles[0])}
+                  >
+                    {ANNOUNCEMENT_PRIORITY_MAP[a.priority] ?? "普通"}
+                  </Badge>
+                  <button
+                    onClick={() => setExpandedId(isExpanded ? null : a.announcementId)}
+                    className="flex-1 min-w-0 text-left"
+                  >
+                    <p className="text-sm font-semibold text-slate-800 truncate">{a.title}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-slate-400">
+                        {a.publishUserName ?? "-"}
+                      </span>
+                      <span className="text-xs text-slate-300">·</span>
+                      <span className="text-xs text-slate-400">{formatPublishTime(a.publishTime)}</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => onDelete(a.announcementId)}
+                    title="删除"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-rose-500 shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                {isExpanded && (
+                  <div className="mt-3 pl-16 pr-2 text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
+                    {a.content}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ==================== 发布公告弹窗 ====================
+
+function CreateAnnouncementDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [priority, setPriority] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setTitle("");
+      setContent("");
+      setPriority(0);
+    }
+  }, [open]);
+
+  const handleSubmit = async (status: number) => {
+    if (!title.trim()) { toast.error("请输入标题"); return; }
+    if (!content.trim()) { toast.error("请输入内容"); return; }
+
+    setSubmitting(true);
+    try {
+      const res = await createAnnouncement({
+        title: title.trim(),
+        content,
+        priority,
+        status,
+      });
+      if (res.code === ResponseCode.SUCCESS) {
+        toast.success(status === 1 ? "公告已发布" : "已保存为草稿");
+        onOpenChange(false);
+        onSuccess();
+      }
+    } catch { /* 由 request.ts 提示 */ }
+    finally { setSubmitting(false); }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-xl overflow-hidden">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-slate-800">发布公告</h2>
+          <button
+            onClick={() => onOpenChange(false)}
+            className="text-slate-400 hover:text-slate-600"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              标题 <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="请输入公告标题"
+              maxLength={200}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">优先级</label>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { value: 0, label: "普通", color: "bg-slate-500" },
+                { value: 1, label: "重要", color: "bg-amber-500" },
+                { value: 2, label: "紧急", color: "bg-rose-500" },
+              ].map((p) => (
+                <label key={p.value} className="relative cursor-pointer">
+                  <input
+                    type="radio"
+                    name="priority"
+                    value={p.value}
+                    checked={priority === p.value}
+                    onChange={() => setPriority(p.value)}
+                    className="peer sr-only"
+                  />
+                  <div className="p-3 border border-slate-200 rounded-xl text-center peer-checked:border-blue-500 peer-checked:bg-blue-50 transition-all">
+                    <div className={cn("w-3 h-3 rounded-full mx-auto mb-2", p.color)} />
+                    <p className="text-sm font-medium text-slate-700">{p.label}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+              内容 <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              rows={6}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="请输入公告内容..."
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={submitting}
+          >
+            取消
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => handleSubmit(0)}
+            disabled={submitting}
+          >
+            保存草稿
+          </Button>
+          <Button
+            onClick={() => handleSubmit(1)}
+            disabled={submitting}
+            className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2"
+          >
+            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+            立即发布
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

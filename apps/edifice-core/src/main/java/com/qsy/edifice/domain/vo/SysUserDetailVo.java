@@ -1,7 +1,8 @@
 package com.qsy.edifice.domain.vo;
 
 
-import com.qsy.edifice.domain.entity.SysRole;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
@@ -28,6 +29,7 @@ public class SysUserDetailVo implements Serializable {
      * 用户id
      */
     @Schema(description = "用户id")
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long userId;
 
     /**

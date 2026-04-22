@@ -163,11 +163,11 @@ export function EditProjectDialog({
         onOpenChange(false);
         onSuccess();
       } else {
-        toast.error(res.msg || "更新失败");
+        // toast 由 request.ts 统一提示；这里仅同步到表单错误态
         setError(res.msg || "更新失败");
       }
     } catch {
-      toast.error("网络异常，请稍后重试");
+      // 网络错误也由 request.ts 提示
       setError("网络异常，请稍后重试");
     } finally {
       setSubmitting(false);

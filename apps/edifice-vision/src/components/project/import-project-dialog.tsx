@@ -64,12 +64,11 @@ export function ImportProjectDialog({
         setIsError(false);
         onSuccess();
       } else {
-        toast.error(res.msg || "导入失败");
+        // toast 由 request.ts 统一提示
         setResult(res.msg || "导入失败");
         setIsError(true);
       }
     } catch {
-      toast.error("网络异常，请稍后重试");
       setResult("网络异常，请稍后重试");
       setIsError(true);
     } finally {
