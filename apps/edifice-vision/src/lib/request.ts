@@ -1,8 +1,48 @@
 import { toast } from "sonner";
 import { BaseResponse, ResponseCode } from "@/types/api";
-import { getAccessToken, clearAuth } from "@/lib/token";
+import { getAccessToken, getRefreshToken, setTokens, clearAuth } from "@/lib/token";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+
+/** 需要被视为"需重新登录"的 code 列表 */
+const AUTH_FAILED_CODES: readonly number[] = [
+  ResponseCode.TOKEN_ERROR,
+  ResponseCode.TOKEN_AUTHENTICATE_FAILURE,
+  ResponseCode.REFRESH_TOKEN_EXPIRE,
+];
+
+/** 进行中的刷新 Promise，防止并发重复刷新 */
+let refreshPromise: Promise<string | null> | null = null;
+
+async function doRefresh(): Promise<string | null> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  try {
+    const res = await fetch(`${BASE_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return null;
+    const data: BaseResponse<{ accessToken: string }> = await res.json();
+    if (data.code === ResponseCode.SUCCESS && data.data?.accessToken) {
+      setTokens(data.data.accessToken, refreshToken);
+      return data.data.accessToken;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** 触发强制登出：清理本地状态并跳登录页 */
+function forceLogout(msg: string): never {
+  clearAuth();
+  toast.error(msg);
+  window.location.href = "/login";
+  throw new Error(msg);
+}
 
 type RequestOptions = Omit<RequestInit, "body"> & {
   params?: Record<string, string>;
@@ -11,7 +51,8 @@ type RequestOptions = Omit<RequestInit, "body"> & {
 
 async function request<T>(
   url: string,
-  options: RequestOptions = {}
+  options: RequestOptions = {},
+  _retried = false
 ): Promise<BaseResponse<T>> {
   const { params, body, headers: customHeaders, ...rest } = options;
 
@@ -52,15 +93,20 @@ async function request<T>(
 
   const data: BaseResponse<T> = await response.json();
 
-  // Token 过期处理
-  if (
-    data.code === ResponseCode.ACCESS_TOKEN_EXPIRE ||
-    data.code === ResponseCode.TOKEN_AUTHENTICATE_FAILURE
-  ) {
-    clearAuth();
-    toast.error("登录已过期，请重新登录");
-    window.location.href = "/login";
-    throw new Error(data.msg || "登录已过期，请重新登录");
+  // Access Token 过期：尝试使用 Refresh Token 静默刷新，然后重放一次原请求
+  if (data.code === ResponseCode.ACCESS_TOKEN_EXPIRE && !_retried) {
+    refreshPromise = refreshPromise ?? doRefresh();
+    const newToken = await refreshPromise;
+    refreshPromise = null;
+    if (newToken) {
+      return request<T>(url, options, true);
+    }
+    forceLogout("登录已过期，请重新登录");
+  }
+
+  // 其他认证失败：无法自愈，直接登出
+  if (AUTH_FAILED_CODES.includes(data.code) || data.code === ResponseCode.ACCESS_TOKEN_EXPIRE) {
+    forceLogout(data.msg || "登录已过期，请重新登录");
   }
 
   return data;

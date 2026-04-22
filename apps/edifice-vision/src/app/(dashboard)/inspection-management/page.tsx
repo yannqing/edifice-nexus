@@ -108,6 +108,8 @@ export default function InspectionManagementPage() {
   }, [activeTab, debouncedSearch]);
 
   // 加载列表
+  // 注意：abort 时不能关闭 loading——否则 StrictMode 双调用或快速切 tab 时，
+  // 被 abort 的请求会把 loading 置 false，导致骨架提前消失、闪出空态。
   const fetchList = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
@@ -121,11 +123,11 @@ export default function InspectionManagementPage() {
         setInspections(res.data.records ?? []);
         setTotal(res.data.total ?? 0);
       }
+      setLoading(false);
     } catch (err) {
-      if (isAbortError(err)) return;
+      if (isAbortError(err)) return; // 被取消的请求，保持 loading 让新请求接管
       setInspections([]);
       setTotal(0);
-    } finally {
       setLoading(false);
     }
   }, [activeTab, debouncedSearch, currentPage]);

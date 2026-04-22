@@ -129,6 +129,8 @@ export default function AllProjectsPage() {
   }, [selectedStatus, selectedType, debouncedSearch]);
 
   // 加载项目列表（带请求取消，防止切换筛选时旧数据闪现）
+  // 注意：abort 时不能关闭 loading——否则 StrictMode 双调用或快速切筛选时，
+  // 被 abort 的请求会把 loading 置 false，导致骨架提前消失、闪出空态。
   const fetchProjects = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
@@ -146,11 +148,11 @@ export default function AllProjectsPage() {
         setProjects(response.data.records ?? []);
         setTotal(response.data.total ?? 0);
       }
+      setLoading(false);
     } catch (err) {
-      if (isAbortError(err)) return;
+      if (isAbortError(err)) return; // 被取消的请求，保持 loading 让新请求接管
       setProjects([]);
       setTotal(0);
-    } finally {
       setLoading(false);
     }
   }, [debouncedSearch, selectedStatus, selectedType, currentPage]);

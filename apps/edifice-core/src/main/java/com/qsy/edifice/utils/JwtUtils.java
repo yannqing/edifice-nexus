@@ -251,15 +251,20 @@ public class JwtUtils {
         }
     }
 
+    /** Access Token 有效期：2 小时 */
+    public static final long ACCESS_TOKEN_TTL_MS = 1000L * 60 * 60 * 2;
+    /** Refresh Token 有效期：7 天 */
+    public static final long REFRESH_TOKEN_TTL_MS = 1000L * 60 * 60 * 24 * 7;
+
     /**
-     * 生成 Access Token（长期有效，用于日常API访问）
+     * 生成 Access Token（短期有效，用于日常API访问）
      * @param userInfo 用户详细信息JSON字符串
      * @param roles 用户角色JSON字符串
      * @return Access Token
      */
     public String generateAccessToken(String userInfo, String roles) {
         return JWT.create()
-                .withExpiresAt(new Date(System.currentTimeMillis() + 1000L * 60 * 60 * 24 * 7))  // 7天过期
+                .withExpiresAt(new Date(System.currentTimeMillis() + ACCESS_TOKEN_TTL_MS))
                 .withClaim("userInfo", userInfo)
                 .withClaim("roles", roles)
                 .withClaim("type", "access")  // 标记为 access token
@@ -267,16 +272,27 @@ public class JwtUtils {
     }
 
     /**
-     * 生成 Refresh Token（短期有效，仅用于刷新 Access Token）
+     * 生成 Refresh Token（长期有效，仅用于刷新 Access Token）
      * @param userId 用户ID
      * @return Refresh Token
      */
     public String generateRefreshToken(String userId) {
         return JWT.create()
-                .withExpiresAt(new Date(System.currentTimeMillis() + 1000L * 60 * 60 * 2))  // 2小时过期
+                .withExpiresAt(new Date(System.currentTimeMillis() + REFRESH_TOKEN_TTL_MS))
                 .withClaim("userId", userId)
                 .withClaim("type", "refresh")  // 标记为 refresh token
                 .sign(Algorithm.HMAC256(secret));
+    }
+
+    /**
+     * 从 Refresh Token 中获取 userId（已校验合法性）
+     * @param refreshToken Refresh Token
+     * @return userId
+     */
+    public String getUserIdFromRefreshToken(String refreshToken) {
+        JWTVerifier jwtVerifier = JWT.require(Algorithm.HMAC256(secret)).build();
+        DecodedJWT decodedJWT = jwtVerifier.verify(refreshToken);
+        return decodedJWT.getClaim("userId").asString();
     }
 
     public List<String> getUserAuthorizationFromToken(String token){

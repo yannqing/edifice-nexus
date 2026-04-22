@@ -51,53 +51,61 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
         }
         //验证token的合法性，不报错即合法
 
+        // Token 未携带
+        if (token == null || token.isEmpty()) {
+            writeJson(response, Code.TOKEN_ERROR, "未携带 Access Token，请先登录");
+            log.warn("请求未携带 token: {}", requestURI);
+            return;
+        }
+
         // 使用双 Token 策略：检查 access_token 前缀
         Object redisTokenObj = redisCache.getCacheObject("access_token:" + token);
 
         if (redisTokenObj == null) {
-            response.setStatus(500);
-            response.setContentType("application/json;charset=utf-8");
-            response.getWriter().write(JSON.toJSONString(ResultUtils.failure(Code.TOKEN_EXPIRE, null, "Access Token 已过期，请使用 Refresh Token 刷新")));
-            log.error("Access Token 已过期或不存在");
+            // 统一用 ACCESS_TOKEN_EXPIRE(10003) + HTTP 200，前端据此跳转登录
+            writeJson(response, Code.ACCESS_TOKEN_EXPIRE, "Access Token 已过期，请使用 Refresh Token 刷新");
+            log.info("Access Token 已过期或不存在");
             return;
         }
 
-        if (token!=null){
-            try {
-                //验证token的合法性，不抛异常则合法
-                log.info("开始验证 Access Token: {}", token.substring(0, Math.min(50, token.length())) + "...");
-                jwtUtils.tokenVerify(token);
-                log.info("Access Token 格式验证通过");
+        try {
+            // 验证 token 签名与有效期
+            jwtUtils.tokenVerify(token);
 
-                // 验证 Token 类型（确保是 Access Token）
-                String tokenType = jwtUtils.getTokenType(token);
-                if (!"access".equals(tokenType)) {
-                    response.setStatus(403);
-                    response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write(JSON.toJSONString(ResultUtils.failure(Code.TOKEN_AUTHENTICATE_FAILURE, null, "无效的 Token 类型，请使用 Access Token")));
-                    log.error("Token 类型错误：期望 access，实际 {}", tokenType);
-                    return;
-                }
-
-                //从token中获取到用户的信息，以及对应用户的权限信息
-                SysUser user = jwtUtils.getUserFromToken(token);
-                log.info("成功从 Access Token 获取用户信息: {}", user.getUsername());
-
-//                List<String> userAuthorization = JwtUtils.getUserAuthorizationFromToken(token);
-//                List<SimpleGrantedAuthority> authorities = userAuthorization.stream().map(SimpleGrantedAuthority::new).collect(Collectors.toList());
-                //放行后面的用户名密码过滤器
-//                UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = new UsernamePasswordAuthenticationToken(user,null,authorities);
-                UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = new UsernamePasswordAuthenticationToken(user,null,null);
-                SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);
-                log.info("JWT验证成功，用户: {}", user.getUsername());
-            }catch (Exception e){
-                response.setStatus(200);
-                response.setContentType("application/json;charset=UTF-8");
-                response.getWriter().write(JSON.toJSONString(ResultUtils.failure(Code.TOKEN_AUTHENTICATE_FAILURE,null,"非法 Access Token")));
-                log.error("非法 Access Token({}) - 错误详情: {}", token, e.getMessage());
+            // 验证 Token 类型（确保是 Access Token）
+            String tokenType = JwtUtils.getTokenType(token);
+            if (!"access".equals(tokenType)) {
+                writeJson(response, Code.TOKEN_AUTHENTICATE_FAILURE, "无效的 Token 类型，请使用 Access Token");
+                log.warn("Token 类型错误：期望 access，实际 {}", tokenType);
                 return;
             }
+
+            // 从token中获取用户信息
+            SysUser user = jwtUtils.getUserFromToken(token);
+
+            UsernamePasswordAuthenticationToken authToken =
+                    new UsernamePasswordAuthenticationToken(user, null, null);
+            SecurityContextHolder.getContext().setAuthentication(authToken);
+            log.debug("JWT 验证成功，用户: {}", user.getUsername());
+        } catch (com.auth0.jwt.exceptions.TokenExpiredException e) {
+            writeJson(response, Code.ACCESS_TOKEN_EXPIRE, "Access Token 已过期，请使用 Refresh Token 刷新");
+            log.info("Access Token 已过期: {}", e.getMessage());
+            return;
+        } catch (Exception e) {
+            writeJson(response, Code.TOKEN_AUTHENTICATE_FAILURE, "非法 Access Token");
+            log.error("非法 Access Token - 错误详情: {}", e.getMessage());
+            return;
         }
-        filterChain.doFilter(request,response);
+
+        filterChain.doFilter(request, response);
+    }
+
+    /**
+     * 统一的 JSON 响应：HTTP 200 + code 语义化，避免前端看到 5xx 直接抛错
+     */
+    private void writeJson(HttpServletResponse response, Integer code, String message) throws IOException {
+        response.setStatus(HttpServletResponse.SC_OK);
+        response.setContentType("application/json;charset=UTF-8");
+        response.getWriter().write(JSON.toJSONString(ResultUtils.failure(code, null, message)));
     }
 }

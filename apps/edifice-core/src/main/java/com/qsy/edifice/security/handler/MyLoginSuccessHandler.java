@@ -60,17 +60,20 @@ public class MyLoginSuccessHandler implements AuthenticationSuccessHandler {
         String accessToken = jwtUtils.generateAccessToken(userInfo, JSON.toJSONString(roles));
         String refreshToken = jwtUtils.generateRefreshToken(String.valueOf(user.getUserId()));
 
-        // 将双 token 存储到 Redis
-        // Access Token: 7天过期
-        redisCache.setCacheObject("access_token:" + accessToken, userInfo, 7, TimeUnit.DAYS);
-        // Refresh Token: 2小时过期
-        redisCache.setCacheObject("refresh_token:" + refreshToken, String.valueOf(user.getUserId()), 2, TimeUnit.HOURS);
+        // 将双 token 存储到 Redis（TTL 与 JWT 自身保持一致）
+        // Access Token: 2 小时过期
+        redisCache.setCacheObject("access_token:" + accessToken, userInfo,
+                (int) (JwtUtils.ACCESS_TOKEN_TTL_MS / 1000), TimeUnit.SECONDS);
+        // Refresh Token: 7 天过期
+        redisCache.setCacheObject("refresh_token:" + refreshToken, String.valueOf(user.getUserId()),
+                (int) (JwtUtils.REFRESH_TOKEN_TTL_MS / 1000), TimeUnit.SECONDS);
 
-        // 用户 token 映射（用于强制下线）
+        // 用户 token 映射（用于强制下线），按 refresh 生命周期存储
         java.util.Map<String, String> userTokens = new java.util.HashMap<>();
         userTokens.put("accessToken", accessToken);
         userTokens.put("refreshToken", refreshToken);
-        redisCache.setCacheObject("user_tokens:" + user.getUserId(), JSON.toJSONString(userTokens), 7, TimeUnit.DAYS);
+        redisCache.setCacheObject("user_tokens:" + user.getUserId(), JSON.toJSONString(userTokens),
+                (int) (JwtUtils.REFRESH_TOKEN_TTL_MS / 1000), TimeUnit.SECONDS);
 
         // 构建返回的用户信息（userId 转为字符串，避免前端 JS 精度丢失）
         java.util.Map<String, Object> userInfoMap = new java.util.LinkedHashMap<>();
@@ -91,6 +94,6 @@ public class MyLoginSuccessHandler implements AuthenticationSuccessHandler {
         responseData.put("roles", roles);
 
         response.getWriter().write(JSON.toJSONString(ResultUtils.success(Code.LOGIN_SUCCESS, responseData, "登录成功")));
-        log.info("用户{}登录成功！Access Token 有效期7天，Refresh Token 有效期2小时", user.getUsername());
+        log.info("用户{}登录成功！Access Token 有效期2小时，Refresh Token 有效期7天", user.getUsername());
     }
 }
