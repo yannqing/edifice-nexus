@@ -32,10 +32,19 @@ public class InspectionsController {
     @Autowired
     private JwtUtils jwtUtils;
 
+    @GetMapping("/all")
+    @Operation(summary = "全部验工单列表", description = "分页+条件查询所有验工单")
+    public BaseResponse<Page<InspectionFormListVo>> getAllInspections(GetInspectionFormListDto dto) {
+        Page<InspectionFormListVo> result = inspectionFormService.getAllInspections(dto);
+        return ResultUtils.success(Code.SUCCESS, result);
+    }
+
     @GetMapping("/my-list")
-    @Operation(summary = "我的验工单列表", description = "分页+条件查询")
-    public BaseResponse<Page<InspectionFormListVo>> getMyInspections(GetInspectionFormListDto dto) {
-        Page<InspectionFormListVo> result = inspectionFormService.getMyInspections(dto);
+    @Operation(summary = "我的验工单列表", description = "查询当前用户提交的验工单")
+    public BaseResponse<Page<InspectionFormListVo>> getMyInspections(GetInspectionFormListDto dto, HttpServletRequest request) throws JsonProcessingException {
+        String token = request.getHeader("token");
+        SysUser loginUser = jwtUtils.getUserFromToken(token);
+        Page<InspectionFormListVo> result = inspectionFormService.getMyInspections(dto, loginUser.getUserId());
         return ResultUtils.success(Code.SUCCESS, result);
     }
 

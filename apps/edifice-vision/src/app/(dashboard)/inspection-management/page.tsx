@@ -1,14 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Download,
   Plus,
   Search,
   Eye,
-  RefreshCw,
-  Undo2,
-  MoreHorizontal,
   FileText,
   Clock,
   CheckCircle,
@@ -16,76 +13,165 @@ import {
   Banknote,
   ChevronLeft,
   ChevronRight,
+  Loader2,
+  Upload,
   X,
-  Send,
-  UploadCloud,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { inspectionManagementData, allProjectsData } from "@/data/mock-data";
-import type { ProjectCategory, InspectionStatus } from "@/types";
+import { isAbortError } from "@/lib/request";
+import { TablePageSkeleton, DialogSkeleton } from "@/components/ui/skeleton";
+import {
+  getAllInspectionList,
+  getInspectionDetail,
+  getInspectionOverview,
+  applyInspection,
+} from "@/services/inspection";
+import { getMyProjects, getProjectDetail, uploadDocument } from "@/services/project";
+import { ResponseCode } from "@/types/api";
+import type {
+  InspectionFormListVo,
+  InspectionFormDetailVo,
+  InspectionOverviewVo,
+} from "@/types/inspection";
+import { INSPECTION_STATUS_MAP } from "@/types/inspection";
+import type { ProjectListVo, ProjectStageVo, FilesVo } from "@/types/project";
 
 type TabKey = "all" | "pending" | "passed" | "rejected";
 
-const statusStyles: Record<InspectionStatus, string> = {
-  待初审: "bg-amber-100 text-amber-600",
-  待终审: "bg-blue-100 text-blue-600",
+const statusStyles: Record<string, string> = {
+  待审核: "bg-amber-100 text-amber-600",
+  审核中: "bg-blue-100 text-blue-600",
   已通过: "bg-emerald-100 text-emerald-600",
   已驳回: "bg-rose-100 text-rose-600",
+  草稿: "bg-slate-100 text-slate-500",
 };
 
-const categoryStyles: Record<ProjectCategory, string> = {
-  A类: "text-blue-600",
-  B类: "text-emerald-600",
-  C类: "text-amber-600",
-  D类: "text-purple-600",
-  E类: "text-rose-600",
+const statusFilterMap: Record<TabKey, number | undefined> = {
+  all: undefined,
+  pending: 0,
+  passed: 3,
+  rejected: 2,
 };
+
+function getStatusLabel(status: number): string {
+  return INSPECTION_STATUS_MAP[status] ?? "未知";
+}
+
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "-";
+  return dateStr.replace("T", " ").slice(0, 16);
+}
+
+function formatAmount(amount: number | null | undefined): string {
+  if (!amount) return "-";
+  return `¥${(amount / 10000).toFixed(2)}万`;
+}
+
+const PAGE_SIZE = 10;
 
 export default function InspectionManagementPage() {
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [searchText, setSearchText] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [selectedProject, setSelectedProject] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [inspections, setInspections] = useState<InspectionFormListVo[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [statistics, setStatistics] = useState<InspectionOverviewVo | null>(null);
 
-  const stats = {
-    total: inspectionManagementData.length,
-    pending: inspectionManagementData.filter(
-      (i) => i.status === "待初审" || i.status === "待终审"
-    ).length,
-    passed: inspectionManagementData.filter((i) => i.status === "已通过").length,
-    rejected: inspectionManagementData.filter((i) => i.status === "已驳回").length,
-    totalAmount: inspectionManagementData
-      .filter((i) => i.status === "已通过")
-      .reduce((sum, i) => sum + i.phaseAmount, 0),
+  // 详情弹窗
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detail, setDetail] = useState<InspectionFormDetailVo | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  // 发起验工弹窗
+  const [createOpen, setCreateOpen] = useState(false);
+
+  // 搜索防抖
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchText), 300);
+    return () => clearTimeout(timer);
+  }, [searchText]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, debouncedSearch]);
+
+  // 加载列表
+  const fetchList = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
+    try {
+      const res = await getAllInspectionList({
+        inspectionFormCode: debouncedSearch || undefined,
+        inspectionFormStatus: statusFilterMap[activeTab],
+        current: currentPage,
+        pageSize: PAGE_SIZE,
+      }, signal);
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setInspections(res.data.records ?? []);
+        setTotal(res.data.total ?? 0);
+      }
+    } catch (err) {
+      if (isAbortError(err)) return;
+      setInspections([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeTab, debouncedSearch, currentPage]);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await getInspectionOverview();
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setStatistics(res.data);
+      }
+    } catch { /* 静默 */ }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchList(controller.signal);
+    return () => controller.abort();
+  }, [fetchList]);
+
+  useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+
+  // 查看详情
+  const openDetail = async (id: string) => {
+    setDetailOpen(true);
+    setDetailLoading(true);
+    setDetail(null);
+    try {
+      const res = await getInspectionDetail(id);
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setDetail(res.data);
+      }
+    } catch { /* 静默 */ }
+    finally { setDetailLoading(false); }
   };
 
-  const filteredInspections = inspectionManagementData.filter((i) => {
-    if (activeTab === "pending" && i.status !== "待初审" && i.status !== "待终审") return false;
-    if (activeTab === "passed" && i.status !== "已通过") return false;
-    if (activeTab === "rejected" && i.status !== "已驳回") return false;
-    if (selectedCategory !== "all" && i.category !== selectedCategory) return false;
-    if (searchText && !i.projectName.includes(searchText) && !i.code.includes(searchText))
-      return false;
-    return true;
-  });
+  const allCount = (statistics?.pendingApproval ?? 0) + (statistics?.pendingFirstReview ?? 0)
+    + (statistics?.approved ?? 0) + (statistics?.rejected ?? 0);
 
   const tabs: { key: TabKey; label: string; count: number }[] = [
-    { key: "all", label: "全部", count: stats.total },
-    { key: "pending", label: "审批中", count: stats.pending },
-    { key: "passed", label: "已通过", count: stats.passed },
-    { key: "rejected", label: "已驳回", count: stats.rejected },
+    { key: "all", label: "全部", count: allCount },
+    { key: "pending", label: "审批中", count: statistics?.pendingApproval ?? 0 },
+    { key: "passed", label: "已通过", count: statistics?.approved ?? 0 },
+    { key: "rejected", label: "已驳回", count: statistics?.rejected ?? 0 },
   ];
-
-  const resetFilters = () => {
-    setActiveTab("all");
-    setSelectedCategory("all");
-    setSearchText("");
-  };
-
-  const projectOptions = allProjectsData.filter((p) => p.status === "进行中").slice(0, 3);
 
   return (
     <div className="p-8 space-y-6">
@@ -100,7 +186,7 @@ export default function InspectionManagementPage() {
             <Download className="w-4 h-4" /> 导出
           </Button>
           <Button
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => setCreateOpen(true)}
             className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
           >
             <Plus className="w-4 h-4" /> 发起验工
@@ -110,63 +196,11 @@ export default function InspectionManagementPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-5 gap-4">
-        <div className="glass-card p-4 rounded-xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-slate-100 text-slate-600 rounded-lg">
-              <FileText className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">验工单总数</p>
-              <p className="text-xl font-bold text-slate-800">{stats.total}</p>
-            </div>
-          </div>
-        </div>
-        <div className="glass-card p-4 rounded-xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-amber-100 text-amber-600 rounded-lg">
-              <Clock className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">审批中</p>
-              <p className="text-xl font-bold text-slate-800">{stats.pending}</p>
-            </div>
-          </div>
-        </div>
-        <div className="glass-card p-4 rounded-xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
-              <CheckCircle className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">已通过</p>
-              <p className="text-xl font-bold text-slate-800">{stats.passed}</p>
-            </div>
-          </div>
-        </div>
-        <div className="glass-card p-4 rounded-xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
-              <XCircle className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">已驳回</p>
-              <p className="text-xl font-bold text-slate-800">{stats.rejected}</p>
-            </div>
-          </div>
-        </div>
-        <div className="glass-card p-4 rounded-xl">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-              <Banknote className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">已确认产值</p>
-              <p className="text-xl font-bold text-slate-800">
-                ¥{(stats.totalAmount / 10000).toFixed(1)}万
-              </p>
-            </div>
-          </div>
-        </div>
+        <StatCard icon={<FileText className="w-5 h-5" />} label="验工单总数" value={allCount} color="slate" />
+        <StatCard icon={<Clock className="w-5 h-5" />} label="审批中" value={statistics?.pendingApproval ?? 0} color="amber" />
+        <StatCard icon={<CheckCircle className="w-5 h-5" />} label="已通过" value={statistics?.approved ?? 0} color="emerald" />
+        <StatCard icon={<XCircle className="w-5 h-5" />} label="已驳回" value={statistics?.rejected ?? 0} color="rose" />
+        <StatCard icon={<Banknote className="w-5 h-5" />} label="审核中" value={statistics?.pendingFirstReview ?? 0} color="blue" />
       </div>
 
       {/* Filters */}
@@ -178,44 +212,23 @@ export default function InspectionManagementPage() {
               onClick={() => setActiveTab(item.key)}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
-                activeTab === item.key
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
+                activeTab === item.key ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:text-slate-700"
               )}
             >
               {item.label}
-              <span
-                className={cn(
-                  "text-xs px-1.5 py-0.5 rounded-full",
-                  activeTab === item.key ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-500"
-                )}
-              >
+              <span className={cn("text-xs px-1.5 py-0.5 rounded-full",
+                activeTab === item.key ? "bg-blue-500 text-white" : "bg-slate-100 text-slate-500")}>
                 {item.count}
               </span>
             </button>
           ))}
         </div>
-
-        <select
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="all">全部分类</option>
-          <option value="A类">A类 · 全程结算</option>
-          <option value="B类">B类 · 全过程</option>
-          <option value="C类">C类 · 单项</option>
-          <option value="D类">D类 · 技术咨询</option>
-          <option value="E类">E类 · 零星</option>
-        </select>
-
         <div className="flex-1" />
-
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="搜索验工单号或项目名称..."
+            placeholder="搜索验工单号..."
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
             className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -223,222 +236,462 @@ export default function InspectionManagementPage() {
         </div>
       </div>
 
-      {/* Inspection Table */}
-      <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-slate-50/50">
-            <tr className="text-slate-500 text-xs uppercase tracking-wider">
-              <th className="text-left py-4 px-6 font-semibold">验工单信息</th>
-              <th className="text-left py-4 px-4 font-semibold">项目阶段</th>
-              <th className="text-left py-4 px-4 font-semibold">阶段产值</th>
-              <th className="text-left py-4 px-4 font-semibold">发起人</th>
-              <th className="text-left py-4 px-4 font-semibold">发起时间</th>
-              <th className="text-left py-4 px-4 font-semibold">当前审批人</th>
-              <th className="text-center py-4 px-4 font-semibold">状态</th>
-              <th className="text-right py-4 px-6 font-semibold">操作</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filteredInspections.map((item) => (
-              <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                <td className="py-4 px-6">
-                  <p className="text-sm font-semibold text-slate-800">{item.projectName}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{item.code}</p>
-                </td>
-                <td className="py-4 px-4">
-                  <span className="text-sm text-slate-600">
-                    {item.phase} · {item.phaseName}
-                  </span>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    <span className={categoryStyles[item.category]}>{item.category}</span>
-                    <span className="mx-1">·</span>
-                    产值比例 {item.phaseRatio}
-                  </p>
-                </td>
-                <td className="py-4 px-4">
-                  <span className="text-sm font-semibold text-slate-800">
-                    ¥{(item.phaseAmount / 10000).toFixed(2)}万
-                  </span>
-                </td>
-                <td className="py-4 px-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-600">
-                      {item.submitter[0]}
-                    </div>
-                    <span className="text-sm text-slate-600">{item.submitter}</span>
-                  </div>
-                </td>
-                <td className="py-4 px-4">
-                  <span className="text-sm text-slate-500">{item.submitTime}</span>
-                </td>
-                <td className="py-4 px-4">
-                  {item.currentApprover !== "-" ? (
-                    <span className="text-sm text-slate-600">{item.currentApprover}</span>
-                  ) : (
-                    <span className="text-sm text-slate-400">-</span>
-                  )}
-                </td>
-                <td className="py-4 px-4 text-center">
-                  <Badge variant="secondary" className={cn("text-xs", statusStyles[item.status])}>
-                    {item.status}
-                  </Badge>
-                </td>
-                <td className="py-4 px-6 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <button className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    {item.status === "已驳回" && (
-                      <button className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors">
-                        <RefreshCw className="w-4 h-4" />
-                      </button>
-                    )}
-                    {(item.status === "待初审" || item.status === "待终审") && (
-                      <button className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
-                        <Undo2 className="w-4 h-4" />
-                      </button>
-                    )}
-                    <button className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Loading */}
+      {loading && <TablePageSkeleton columns={5} rows={5} />}
 
-        {filteredInspections.length === 0 && (
-          <div className="py-16 text-center">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FileText className="w-8 h-8 text-slate-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-800 mb-2">暂无验工单</h3>
-            <p className="text-sm text-slate-500 mb-4">当前筛选条件下没有找到验工单</p>
-            <button
-              onClick={resetFilters}
-              className="px-4 py-2 text-sm text-blue-600 font-medium hover:bg-blue-50 rounded-lg transition-colors"
-            >
-              清除筛选条件
-            </button>
+      {/* Table */}
+      {!loading && inspections.length > 0 && (
+        <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-slate-50/50">
+              <tr className="text-slate-500 text-xs uppercase tracking-wider">
+                <th className="text-left py-4 px-6 font-semibold">验工单信息</th>
+                <th className="text-left py-4 px-4 font-semibold">项目阶段</th>
+                <th className="text-left py-4 px-4 font-semibold">阶段产值</th>
+                <th className="text-left py-4 px-4 font-semibold">发起人</th>
+                <th className="text-left py-4 px-4 font-semibold">发起时间</th>
+                <th className="text-center py-4 px-4 font-semibold">状态</th>
+                <th className="text-right py-4 px-6 font-semibold">操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {inspections.map((item) => {
+                const statusLabel = getStatusLabel(item.inspectionFormStatus);
+                const phaseAmount = item.contractAmount && item.stageOutput
+                  ? (item.contractAmount * item.stageOutput) / 100 : 0;
+
+                return (
+                  <tr key={item.inspectionFormId} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="py-4 px-6">
+                      <p className="text-sm font-semibold text-slate-800">{item.projectName || "-"}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{item.inspectionFormCode}</p>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className="text-sm text-slate-600">{item.stageName || "-"}</span>
+                      {item.projectTypeName && (
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {item.projectTypeName} · 产值比例 {item.stageOutput ?? 0}%
+                        </p>
+                      )}
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className="text-sm font-semibold text-slate-800">
+                        {phaseAmount > 0 ? formatAmount(phaseAmount) : "-"}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-600">
+                          {(item.applyUserName ?? "?")[0]}
+                        </div>
+                        <span className="text-sm text-slate-600">{item.applyUserName || "-"}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className="text-sm text-slate-500">{formatDate(item.createdTime)}</span>
+                    </td>
+                    <td className="py-4 px-4 text-center">
+                      <Badge variant="secondary" className={cn("text-xs font-medium", statusStyles[statusLabel] ?? "")}>
+                        {statusLabel}
+                      </Badge>
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <button
+                        onClick={() => openDetail(item.inspectionFormId)}
+                        className="px-3 py-1.5 text-xs text-slate-600 font-medium bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                      >
+                        查看详情
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Empty */}
+      {!loading && inspections.length === 0 && (
+        <div className="glass-card rounded-2xl py-16 text-center">
+          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <FileText className="w-8 h-8 text-slate-400" />
           </div>
-        )}
-      </div>
+          <h3 className="text-lg font-semibold text-slate-800 mb-2">暂无验工单</h3>
+          <p className="text-sm text-slate-500">当前筛选条件下没有找到验工单</p>
+        </div>
+      )}
 
       {/* Pagination */}
-      {filteredInspections.length > 0 && (
+      {!loading && total > 0 && (
         <div className="flex justify-between items-center pt-2">
           <p className="text-sm text-slate-500">
-            共 <span className="font-semibold text-slate-800">{filteredInspections.length}</span>{" "}
-            条记录
+            共 <span className="font-semibold text-slate-800">{total}</span> 条记录
           </p>
           <div className="flex items-center gap-2">
-            <button
-              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
-              disabled
-            >
+            <button disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}
+              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <button className="px-3 py-1.5 text-sm font-medium bg-blue-600 text-white rounded-lg">
-              1
-            </button>
-            <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <button key={page} onClick={() => setCurrentPage(page)}
+                className={cn("px-3 py-1.5 text-sm font-medium rounded-lg",
+                  page === currentPage ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100")}>
+                {page}
+              </button>
+            ))}
+            <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}
+              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50">
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
 
-      {/* Create Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-8">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-slate-900">发起验工申请</h2>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* Detail Dialog */}
+      <InspectionDetailDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        detail={detail}
+        loading={detailLoading}
+      />
 
-            <div className="p-6 space-y-5">
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-2 block">
-                  选择项目 <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  value={selectedProject}
-                  onChange={(e) => setSelectedProject(e.target.value)}
-                  className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                >
-                  <option value="">请选择项目</option>
-                  {projectOptions.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.code}) - {p.category}
-                    </option>
-                  ))}
-                </select>
+      {/* Create Dialog */}
+      <CreateInspectionDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSuccess={() => { fetchList(); fetchStats(); }}
+      />
+    </div>
+  );
+}
+
+// ==================== 统计卡片 ====================
+
+function StatCard({ icon, label, value, color }: {
+  icon: React.ReactNode; label: string; value: number; color: string;
+}) {
+  const colorMap: Record<string, string> = {
+    slate: "bg-slate-100 text-slate-600",
+    amber: "bg-amber-100 text-amber-600",
+    emerald: "bg-emerald-100 text-emerald-600",
+    rose: "bg-rose-100 text-rose-600",
+    blue: "bg-blue-100 text-blue-600",
+  };
+  return (
+    <div className="glass-card p-4 rounded-xl">
+      <div className="flex items-center gap-3">
+        <div className={cn("p-2 rounded-lg", colorMap[color])}>{icon}</div>
+        <div>
+          <p className="text-xs text-slate-500">{label}</p>
+          <p className="text-xl font-bold text-slate-800">{value}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==================== 验工单详情弹窗 ====================
+
+function InspectionDetailDialog({ open, onOpenChange, detail, loading }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  detail: InspectionFormDetailVo | null;
+  loading: boolean;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        {loading && (
+          <>
+            <DialogHeader><DialogTitle>验工单详情</DialogTitle></DialogHeader>
+            <DialogSkeleton />
+          </>
+        )}
+        {!loading && detail && (
+          <>
+            <DialogHeader>
+              <div className="flex items-center gap-3 mb-1">
+                <DialogTitle>验工单详情</DialogTitle>
+                <Badge variant="secondary" className={cn("text-xs font-medium",
+                  statusStyles[getStatusLabel(detail.inspectionFormStatus)] ?? "")}>
+                  {getStatusLabel(detail.inspectionFormStatus)}
+                </Badge>
               </div>
-
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-2 block">
-                  验工阶段 <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                  disabled={!selectedProject}
-                >
-                  <option value="">请先选择项目</option>
-                  <option value="1">阶段4 · 核对 (产值比例 20%)</option>
-                </select>
-                <p className="text-xs text-slate-400 mt-1">只能选择当前可验工的阶段（按阶段顺序）</p>
+              <DialogDescription>{detail.inspectionFormCode}</DialogDescription>
+            </DialogHeader>
+            <div className="mt-4 space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <InfoItem label="项目名称" value={detail.projectName || "-"} />
+                <InfoItem label="项目分类" value={detail.projectTypeName || "-"} />
+                <InfoItem label="验工阶段" value={detail.stageName || "-"} />
+                <InfoItem label="产值比例" value={detail.stageOutput ? `${detail.stageOutput}%` : "-"} />
+                <InfoItem label="发起人" value={detail.applyUserName || "-"} />
+                <InfoItem label="发起时间" value={formatDate(detail.createdTime)} />
               </div>
-
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-2 block">
-                  验工说明 <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  rows={4}
-                  placeholder="请描述本阶段完成的主要工作内容..."
-                  className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium text-slate-700 mb-2 block">
-                  验收材料 <span className="text-rose-500">*</span>
-                </label>
-                <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center hover:border-blue-400 transition-colors cursor-pointer">
-                  <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <UploadCloud className="w-6 h-6 text-slate-400" />
+              {detail.inspectionFormDescription && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-2">验工说明</p>
+                  <div className="p-4 bg-slate-50 rounded-xl text-sm text-slate-600 leading-relaxed">
+                    {detail.inspectionFormDescription}
                   </div>
-                  <p className="text-sm text-slate-600 mb-1">点击或拖拽文件到此处上传</p>
-                  <p className="text-xs text-slate-400">支持 PDF、Word、Excel 等格式，单个文件不超过 20MB</p>
                 </div>
-                <p className="text-xs text-slate-400 mt-2">请上传：台账、计算底稿、成果文件等验收材料</p>
-              </div>
+              )}
+              {detail.approvalRecords && detail.approvalRecords.length > 0 && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-2">审批记录</p>
+                  <div className="space-y-3">
+                    {detail.approvalRecords.map((record) => (
+                      <div key={record.approvalRecordId} className="flex gap-4 p-4 bg-slate-50 rounded-xl">
+                        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0",
+                          record.inspectionFormStatus === 1 ? "bg-emerald-500" : "bg-rose-500")}>
+                          {record.inspectionFormStatus === 1 ? "✓" : "✗"}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium text-slate-800">{record.approverName || "审批人"}</span>
+                            <Badge variant="secondary" className={cn("text-xs",
+                              record.inspectionFormStatus === 1 ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600")}>
+                              {record.inspectionFormStatus === 1 ? "通过" : "驳回"}
+                            </Badge>
+                          </div>
+                          {record.approvalDescription && <p className="text-sm text-slate-600">{record.approvalDescription}</p>}
+                          <p className="text-xs text-slate-400 mt-1">{formatDate(record.createdTime)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-            <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
-              >
-                取消
-              </button>
-              <button className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors">
-                保存草稿
-              </button>
-              <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-colors flex items-center gap-2">
-                <Send className="w-4 h-4" /> 提交验工
-              </button>
-            </div>
+// ==================== 发起验工弹窗 ====================
+
+function CreateInspectionDialog({ open, onOpenChange, onSuccess }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const [projects, setProjects] = useState<ProjectListVo[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [stages, setStages] = useState<ProjectStageVo[]>([]);
+  const [selectedStageId, setSelectedStageId] = useState("");
+  const [description, setDescription] = useState("");
+  const [files, setFiles] = useState<FilesVo[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // 加载我的项目（进行中的）
+  useEffect(() => {
+    if (!open) {
+      setSelectedProjectId("");
+      setSelectedStageId("");
+      setDescription("");
+      setFiles([]);
+      setStages([]);
+      return;
+    }
+    async function loadProjects() {
+      try {
+        const res = await getMyProjects({ projectStatus: 1, pageSize: 100 });
+        if (res.code === ResponseCode.SUCCESS && res.data) {
+          setProjects(res.data.records ?? []);
+        }
+      } catch { /* 静默 */ }
+    }
+    loadProjects();
+  }, [open]);
+
+  // 选择项目后加载阶段
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setStages([]);
+      setSelectedStageId("");
+      return;
+    }
+    async function loadStages() {
+      try {
+        const res = await getProjectDetail(selectedProjectId);
+        if (res.code === ResponseCode.SUCCESS && res.data?.projectStages) {
+          // 只显示状态为 1(进行中) 的阶段
+          const inProgressStages = res.data.projectStages.filter((s) => s.stageStatus === 1);
+          setStages(inProgressStages);
+        }
+      } catch { /* 静默 */ }
+    }
+    loadStages();
+  }, [selectedProjectId]);
+
+  const handleFileUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const res = await uploadDocument(file);
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setFiles((prev) => [...prev, res.data]);
+      } else {
+        toast.error(res.msg || "文件上传失败");
+      }
+    } catch {
+      toast.error("文件上传失败");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!selectedProjectId) { toast.error("请选择项目"); return; }
+    if (!selectedStageId) { toast.error("请选择验工阶段"); return; }
+    if (!description.trim()) { toast.error("请填写验工说明"); return; }
+
+    setSubmitting(true);
+    try {
+      const fileIds = files.length > 0
+        ? JSON.stringify(files.map((f) => f.fileId))
+        : undefined;
+
+      const res = await applyInspection({
+        projectId: Number(selectedProjectId),
+        projectStageId: Number(selectedStageId),
+        inspectionFormDescription: description,
+        fileIds,
+      });
+
+      if (res.code === ResponseCode.SUCCESS) {
+        toast.success("验工单提交成功");
+        onOpenChange(false);
+        onSuccess();
+      } else {
+        toast.error(res.msg || "提交失败");
+      }
+    } catch {
+      toast.error("网络异常，请稍后重试");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>发起验工申请</DialogTitle>
+          <DialogDescription>选择项目和阶段，提交验工材料</DialogDescription>
+        </DialogHeader>
+
+        <div className="mt-4 space-y-5">
+          {/* 选择项目 */}
+          <div>
+            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+              选择项目 <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="form-input"
+            >
+              <option value="">请选择进行中的项目</option>
+              {projects.map((p) => (
+                <option key={p.projectId} value={p.projectId}>
+                  {p.projectName} ({p.projectCode})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 选择阶段 */}
+          <div>
+            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+              验工阶段 <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={selectedStageId}
+              onChange={(e) => setSelectedStageId(e.target.value)}
+              className="form-input"
+              disabled={!selectedProjectId}
+            >
+              <option value="">{selectedProjectId ? "请选择阶段" : "请先选择项目"}</option>
+              {stages.map((s) => (
+                <option key={s.projectStageId} value={s.projectStageId}>
+                  {s.stageName} (产值比例 {s.stageOutput}%)
+                </option>
+              ))}
+            </select>
+            {selectedProjectId && stages.length === 0 && (
+              <p className="text-xs text-amber-500 mt-1">该项目暂无进行中的阶段，请先在项目详情中启动阶段</p>
+            )}
+          </div>
+
+          {/* 验工说明 */}
+          <div>
+            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+              验工说明 <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              rows={4}
+              placeholder="请描述本阶段完成的主要工作内容..."
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="form-input resize-none"
+            />
+          </div>
+
+          {/* 附件上传 */}
+          <div>
+            <label className="text-sm font-medium text-slate-700 mb-1.5 block">验收材料</label>
+            {files.length > 0 && (
+              <div className="space-y-2 mb-2">
+                {files.map((f) => (
+                  <div key={f.fileId} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
+                    <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                    <span className="text-xs text-slate-600 truncate flex-1">{f.displayName}</span>
+                    <button onClick={() => setFiles((prev) => prev.filter((x) => x.fileId !== f.fileId))}
+                      className="p-0.5 text-slate-400 hover:text-rose-500 transition-colors">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
+              {uploading
+                ? <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                : <Upload className="w-4 h-4 text-slate-400" />}
+              <span className="text-sm text-slate-500">{uploading ? "上传中..." : "点击上传验收材料"}</span>
+              <input type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx"
+                disabled={uploading} onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileUpload(file);
+                  e.target.value = "";
+                }} />
+            </label>
           </div>
         </div>
-      )}
+
+        {/* Actions */}
+        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={submitting} onClick={handleSubmit}>
+            {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-1" />提交中...</> : "提交验工"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ==================== 工具组件 ====================
+
+function InfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="py-2 px-3 bg-slate-50 rounded-lg">
+      <p className="text-xs text-slate-400 mb-0.5">{label}</p>
+      <p className="text-sm font-medium text-slate-800">{value}</p>
     </div>
   );
 }

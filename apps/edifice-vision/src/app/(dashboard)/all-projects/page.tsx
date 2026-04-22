@@ -21,6 +21,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { isAbortError } from "@/lib/request";
+import { TablePageSkeleton } from "@/components/ui/skeleton";
 import { getAllProjects, getProjectStatistics, getProjectTypes, getExportUrl } from "@/services/project";
 import { ProjectDetailDialog } from "@/components/project/project-detail-dialog";
 import { ImportProjectDialog } from "@/components/project/import-project-dialog";
@@ -126,8 +128,8 @@ export default function AllProjectsPage() {
     setCurrentPage(1);
   }, [selectedStatus, selectedType, debouncedSearch]);
 
-  // 加载项目列表
-  const fetchProjects = useCallback(async () => {
+  // 加载项目列表（带请求取消，防止切换筛选时旧数据闪现）
+  const fetchProjects = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
       const response = await getAllProjects({
@@ -138,13 +140,14 @@ export default function AllProjectsPage() {
           selectedType !== "all" ? Number(selectedType) : undefined,
         current: currentPage,
         pageSize: PAGE_SIZE,
-      });
+      }, signal);
 
       if (response.code === ResponseCode.SUCCESS && response.data) {
         setProjects(response.data.records ?? []);
         setTotal(response.data.total ?? 0);
       }
-    } catch {
+    } catch (err) {
+      if (isAbortError(err)) return;
       setProjects([]);
       setTotal(0);
     } finally {
@@ -177,7 +180,9 @@ export default function AllProjectsPage() {
   }, []);
 
   useEffect(() => {
-    fetchProjects();
+    const controller = new AbortController();
+    fetchProjects(controller.signal);
+    return () => controller.abort();
   }, [fetchProjects]);
 
   useEffect(() => {
@@ -393,11 +398,7 @@ export default function AllProjectsPage() {
       </div>
 
       {/* Loading */}
-      {loading && (
-        <div className="flex justify-center py-16">
-          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        </div>
-      )}
+      {loading && <TablePageSkeleton columns={5} rows={5} />}
 
       {/* Projects Table */}
       {!loading && projects.length > 0 && (
@@ -519,13 +520,19 @@ export default function AllProjectsPage() {
                         <>
                           <div className="flex items-center gap-2 mb-1">
                             <div className="flex-1 flex gap-0.5 max-w-24">
-                              {stages.map((_, i) => (
+                              {stages.map((s, i) => (
                                 <div
                                   key={i}
                                   className={cn(
                                     "h-1.5 flex-1 rounded-full",
-                                    i < completedStages
+                                    s.stageStatus === 6 || s.stageStatus === 3
+                                      ? "bg-emerald-500"
+                                      : s.stageStatus === 1
                                       ? "bg-blue-500"
+                                      : s.stageStatus === 2
+                                      ? "bg-amber-500"
+                                      : s.stageStatus === 4
+                                      ? "bg-rose-500"
                                       : "bg-slate-200"
                                   )}
                                 />
@@ -671,6 +678,10 @@ export default function AllProjectsPage() {
         projectId={selectedProjectId}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        onStageChange={() => {
+          fetchProjects();
+          fetchStatistics();
+        }}
       />
     </div>
   );

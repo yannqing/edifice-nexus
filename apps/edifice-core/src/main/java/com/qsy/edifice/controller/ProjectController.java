@@ -15,6 +15,7 @@ import com.qsy.edifice.domain.vo.ProjectDetailVo;
 import com.qsy.edifice.domain.vo.ProjectListVo;
 import com.qsy.edifice.domain.vo.ProjectStatisticsVo;
 import com.qsy.edifice.service.ProjectExcelService;
+import com.qsy.edifice.service.ProjectStageService;
 import com.qsy.edifice.service.ProjectService;
 import com.qsy.edifice.service.ProjectStageTemplateService;
 import com.qsy.edifice.service.ProjectTypeService;
@@ -30,7 +31,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Tag(name = "项目管理")
 @RestController
@@ -45,6 +48,8 @@ public class ProjectController {
     private ProjectStageTemplateService projectStageTemplateService;
     @Resource
     private ProjectExcelService projectExcelService;
+    @Resource
+    private ProjectStageService projectStageService;
     @Autowired
     private JwtUtils jwtUtils;
 
@@ -62,6 +67,20 @@ public class ProjectController {
     public BaseResponse<Boolean> updateProjectFull(@RequestBody UpdateProjectDto dto) {
         projectService.updateProjectFull(dto);
         return ResultUtils.success(Code.SUCCESS, true, "更新成功");
+    }
+
+    @PutMapping("/stage/start")
+    @Operation(summary = "启动阶段", description = "批量启动项目阶段（未开始→进行中），支持多个阶段同时启动")
+    public BaseResponse<Boolean> startStages(@RequestBody List<Long> stageIds) {
+        projectStageService.startStages(new HashSet<>(stageIds));
+        return ResultUtils.success(Code.SUCCESS, true, "阶段启动成功");
+    }
+
+    @PutMapping("/stage/restart/{id}")
+    @Operation(summary = "重启阶段", description = "重新启动已驳回的阶段（已驳回→进行中）")
+    public BaseResponse<Boolean> restartStage(@PathVariable("id") Long stageId) {
+        projectStageService.restartStage(stageId);
+        return ResultUtils.success(Code.SUCCESS, true, "阶段已重新启动");
     }
 
     @DeleteMapping("/delete/{id}")

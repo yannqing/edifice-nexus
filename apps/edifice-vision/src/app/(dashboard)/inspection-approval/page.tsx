@@ -27,8 +27,10 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { isAbortError } from "@/lib/request";
+import { TablePageSkeleton, DialogSkeleton } from "@/components/ui/skeleton";
 import {
-  getInspectionList,
+  getMyInspectionList,
   getInspectionDetail,
   getInspectionOverview,
   approvalInspection,
@@ -101,21 +103,22 @@ export default function InspectionApprovalPage() {
     setCurrentPage(1);
   }, [activeTab, debouncedSearch]);
 
-  // 加载列表
-  const fetchList = useCallback(async () => {
+  // 加载列表（带请求取消，防止切换 tab 时旧数据闪现）
+  const fetchList = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
-      const res = await getInspectionList({
+      const res = await getMyInspectionList({
         inspectionFormCode: debouncedSearch || undefined,
         inspectionFormStatus: statusFilterMap[activeTab],
         current: currentPage,
         pageSize: PAGE_SIZE,
-      });
+      }, signal);
       if (res.code === ResponseCode.SUCCESS && res.data) {
         setInspections(res.data.records ?? []);
         setTotal(res.data.total ?? 0);
       }
-    } catch {
+    } catch (err) {
+      if (isAbortError(err)) return;
       setInspections([]);
       setTotal(0);
     } finally {
@@ -135,7 +138,11 @@ export default function InspectionApprovalPage() {
     }
   }, []);
 
-  useEffect(() => { fetchList(); }, [fetchList]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchList(controller.signal);
+    return () => controller.abort();
+  }, [fetchList]);
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -280,11 +287,7 @@ export default function InspectionApprovalPage() {
       </div>
 
       {/* Loading */}
-      {loading && (
-        <div className="flex justify-center py-16">
-          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        </div>
-      )}
+      {loading && <TablePageSkeleton columns={4} rows={5} />}
 
       {/* Table */}
       {!loading && inspections.length > 0 && (
@@ -423,9 +426,7 @@ export default function InspectionApprovalPage() {
           {detailLoading && (
             <>
               <DialogHeader><DialogTitle>验工单详情</DialogTitle></DialogHeader>
-              <div className="flex justify-center py-12">
-                <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
-              </div>
+              <DialogSkeleton />
             </>
           )}
 

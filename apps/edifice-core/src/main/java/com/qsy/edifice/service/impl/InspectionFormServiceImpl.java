@@ -56,7 +56,20 @@ public class InspectionFormServiceImpl implements InspectionFormService {
     // ==================== 查询列表 ====================
 
     @Override
-    public Page<InspectionFormListVo> getMyInspections(GetInspectionFormListDto dto) {
+    public Page<InspectionFormListVo> getMyInspections(GetInspectionFormListDto dto, Long userId) {
+        dto.setApplyUserId(userId);
+        return queryInspections(dto);
+    }
+
+    @Override
+    public Page<InspectionFormListVo> getAllInspections(GetInspectionFormListDto dto) {
+        return queryInspections(dto);
+    }
+
+    /**
+     * 通用验工单查询（my-list 和 all 共用）
+     */
+    private Page<InspectionFormListVo> queryInspections(GetInspectionFormListDto dto) {
         Integer current = dto.getCurrent() != null ? dto.getCurrent() : 1;
         Integer pageSize = dto.getPageSize() != null ? dto.getPageSize() : 10;
 
@@ -162,10 +175,30 @@ public class InspectionFormServiceImpl implements InspectionFormService {
     @Transactional(rollbackFor = Exception.class)
     public Long applyInspection(ApplyInspectionDto dto, Long userId) {
         if (dto == null || userId == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请求参数不能为空");
         }
         if (dto.getProjectId() == null || dto.getProjectStageId() == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目和阶段不能为空");
+        }
+
+        // 校验阶段状态：必须是 1(进行中) 才能提交验工
+        ProjectStage stage = projectStageService.getProjectStageById(dto.getProjectStageId());
+        if (stage == null) {
+            throw new BusinessException(ErrorType.STAGE_NOT_FOUND);
+        }
+        if (stage.getStageStatus() != 1) {
+            throw new BusinessException(ErrorType.STAGE_STATUS_INVALID,
+                    "阶段[" + stage.getStageName() + "]当前状态不是[进行中]，无法提交验工");
+        }
+
+        // 校验该阶段是否有未完成的验工单
+        List<InspectionForm> pendingForms = inspectionFormMapper.selectByProjectStageId(dto.getProjectStageId());
+        if (pendingForms != null) {
+            boolean hasPending = pendingForms.stream()
+                    .anyMatch(f -> f.getInspectionFormStatus() == 0 || f.getInspectionFormStatus() == 1);
+            if (hasPending) {
+                throw new BusinessException(ErrorType.STAGE_HAS_PENDING_INSPECTION);
+            }
         }
 
         // 生成验工单编号
@@ -182,6 +215,11 @@ public class InspectionFormServiceImpl implements InspectionFormService {
 
         inspectionFormMapper.insert(form);
 
+        // 阶段状态：1(进行中) → 2(待验收)
+        stage.setStageStatus(2);
+        projectStageService.updateProjectStage(stage);
+        log.info("提交验工单，阶段状态变更为待验收: stageId={}, stageName={}", stage.getProjectStageId(), stage.getStageName());
+
         return form.getInspectionFormId();
     }
 
@@ -191,18 +229,18 @@ public class InspectionFormServiceImpl implements InspectionFormService {
     @Transactional(rollbackFor = Exception.class)
     public void approvalInspection(ApprovalInspectionDto dto, Long userId) {
         if (dto == null || dto.getInspectionFormId() == null || dto.getResult() == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "审批参数不能为空");
         }
 
         // 查询验工单
         InspectionForm form = inspectionFormMapper.selectById(dto.getInspectionFormId());
         if (form == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "验工单不存在");
         }
 
         // 只有待审核(0)和审核中(1)的验工单可以审批
         if (form.getInspectionFormStatus() != 0 && form.getInspectionFormStatus() != 1) {
-            throw new BusinessException(ErrorType.OPERATION_FAILED);
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "该验工单已审批完成，无法重复审批");
         }
 
         // 创建审批记录
@@ -221,6 +259,25 @@ public class InspectionFormServiceImpl implements InspectionFormService {
             form.setInspectionFormStatus(2); // 已驳回
         }
         inspectionFormMapper.updateById(form);
+
+        // 联动更新阶段状态
+        ProjectStage stage = projectStageService.getProjectStageById(form.getProjectStageId());
+        if (stage != null) {
+            if (dto.getResult() == 1) {
+                // 审批通过：阶段 → 6(已完成)
+                stage.setStageStatus(6);
+                projectStageService.updateProjectStage(stage);
+                log.info("验工审批通过，阶段已完成: stageId={}, stageName={}", stage.getProjectStageId(), stage.getStageName());
+            } else if (dto.getResult() == 2) {
+                // 审批驳回：阶段 → 4(已驳回)
+                stage.setStageStatus(4);
+                projectStageService.updateProjectStage(stage);
+                log.info("验工审批驳回: stageId={}, stageName={}", stage.getProjectStageId(), stage.getStageName());
+            }
+
+            // 同步项目状态
+            projectStageService.syncProjectStatus(stage.getProjectId());
+        }
     }
 
     // ==================== 私有方法 ====================

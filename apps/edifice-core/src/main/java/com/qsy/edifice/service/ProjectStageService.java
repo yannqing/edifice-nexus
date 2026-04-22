@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.entity.ProjectStage;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * 项目阶段服务接口
@@ -60,4 +61,22 @@ public interface ProjectStageService {
      * @return 是否成功
      */
     boolean deleteProjectStage(Long projectStageId);
+
+    /**
+     * 批量启动阶段（0-未开始 → 1-进行中）
+     * @param stageIds 阶段id列表
+     */
+    void startStages(Set<Long> stageIds);
+
+    /**
+     * 重启已驳回阶段（4-已驳回 → 1-进行中）
+     * @param stageId 阶段id
+     */
+    void restartStage(Long stageId);
+
+    /**
+     * 根据阶段状态变更同步项目状态
+     * @param projectId 项目id
+     */
+    void syncProjectStatus(Long projectId);
 }

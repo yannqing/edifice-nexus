@@ -84,4 +84,12 @@ export function del<T>(url: string, options?: RequestOptions) {
   return request<T>(url, { ...options, method: "DELETE" });
 }
 
+/**
+ * 判断错误是否为请求取消（AbortError）
+ * 用于列表页请求竞态处理，被取消的请求不应更新状态
+ */
+export function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
 export default request;

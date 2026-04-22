@@ -11,11 +11,9 @@ import type {
 } from "@/types/inspection";
 
 /**
- * 查询验工单列表
+ * 构建验工单查询参数
  */
-export async function getInspectionList(
-  params?: GetInspectionListParams
-): Promise<BaseResponse<PageResult<InspectionFormListVo>>> {
+function buildInspectionQuery(params?: GetInspectionListParams): Record<string, string> {
   const query: Record<string, string> = {};
   if (params?.inspectionFormCode) query.inspectionFormCode = params.inspectionFormCode;
   if (params?.projectId) query.projectId = params.projectId;
@@ -23,9 +21,37 @@ export async function getInspectionList(
     query.inspectionFormStatus = String(params.inspectionFormStatus);
   if (params?.current !== undefined) query.current = String(params.current);
   if (params?.pageSize !== undefined) query.pageSize = String(params.pageSize);
-
-  return get<PageResult<InspectionFormListVo>>("/inspections/my-list", { params: query });
+  return query;
 }
+
+/**
+ * 查询我的验工单列表（当前用户提交的）
+ */
+export async function getMyInspectionList(
+  params?: GetInspectionListParams,
+  signal?: AbortSignal
+): Promise<BaseResponse<PageResult<InspectionFormListVo>>> {
+  return get<PageResult<InspectionFormListVo>>("/inspections/my-list", {
+    params: buildInspectionQuery(params), signal,
+  });
+}
+
+/**
+ * 查询全部验工单列表
+ */
+export async function getAllInspectionList(
+  params?: GetInspectionListParams,
+  signal?: AbortSignal
+): Promise<BaseResponse<PageResult<InspectionFormListVo>>> {
+  return get<PageResult<InspectionFormListVo>>("/inspections/all", {
+    params: buildInspectionQuery(params), signal,
+  });
+}
+
+/**
+ * @deprecated 使用 getMyInspectionList 或 getAllInspectionList
+ */
+export const getInspectionList = getMyInspectionList;
 
 /**
  * 查询验工单详情

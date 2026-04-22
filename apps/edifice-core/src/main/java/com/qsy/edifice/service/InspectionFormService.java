@@ -14,11 +14,19 @@ import com.qsy.edifice.domain.vo.InspectionOverviewVo;
 public interface InspectionFormService {
 
     /**
-     * 查询验工单列表
+     * 查询我的验工单列表（按申请人过滤）
+     * @param dto 查询条件
+     * @param userId 当前用户id
+     * @return 分页结果
+     */
+    Page<InspectionFormListVo> getMyInspections(GetInspectionFormListDto dto, Long userId);
+
+    /**
+     * 查询全部验工单列表
      * @param dto 查询条件
      * @return 分页结果
      */
-    Page<InspectionFormListVo> getMyInspections(GetInspectionFormListDto dto);
+    Page<InspectionFormListVo> getAllInspections(GetInspectionFormListDto dto);
 
     /**
      * 根据id查询验工单详情

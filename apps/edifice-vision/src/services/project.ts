@@ -42,6 +42,24 @@ export async function deleteProject(
 }
 
 /**
+ * 批量启动阶段（未开始→进行中）
+ */
+export async function startStages(
+  stageIds: string[]
+): Promise<BaseResponse<boolean>> {
+  return put<boolean>("/project/stage/start", { body: stageIds });
+}
+
+/**
+ * 重启已驳回阶段（已驳回→进行中）
+ */
+export async function restartStage(
+  stageId: string
+): Promise<BaseResponse<boolean>> {
+  return put<boolean>(`/project/stage/restart/${stageId}`);
+}
+
+/**
  * 我的项目统计
  */
 export async function getMyProjectStatistics(): Promise<
@@ -54,7 +72,8 @@ export async function getMyProjectStatistics(): Promise<
  * 查询全部项目（分页 + 条件）
  */
 export async function getAllProjects(
-  params?: GetAllProjectListParams
+  params?: GetAllProjectListParams,
+  signal?: AbortSignal
 ): Promise<BaseResponse<PageResult<ProjectListVo>>> {
   const query: Record<string, string> = {};
   if (params?.keywords) query.keywords = params.keywords;
@@ -65,14 +84,15 @@ export async function getAllProjects(
   if (params?.current !== undefined) query.current = String(params.current);
   if (params?.pageSize !== undefined) query.pageSize = String(params.pageSize);
 
-  return get<PageResult<ProjectListVo>>("/project/all", { params: query });
+  return get<PageResult<ProjectListVo>>("/project/all", { params: query, signal });
 }
 
 /**
  * 查询本人参与的项目（分页 + 条件）
  */
 export async function getMyProjects(
-  params?: GetMyProjectListParams
+  params?: GetMyProjectListParams,
+  signal?: AbortSignal
 ): Promise<BaseResponse<PageResult<ProjectListVo>>> {
   const query: Record<string, string> = {};
   if (params?.keywords) query.keywords = params.keywords;
@@ -81,7 +101,7 @@ export async function getMyProjects(
   if (params?.current !== undefined) query.current = String(params.current);
   if (params?.pageSize !== undefined) query.pageSize = String(params.pageSize);
 
-  return get<PageResult<ProjectListVo>>("/project/mine", { params: query });
+  return get<PageResult<ProjectListVo>>("/project/mine", { params: query, signal });
 }
 
 /**

@@ -19,6 +19,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { isAbortError } from "@/lib/request";
+import { CardPageSkeleton } from "@/components/ui/skeleton";
 import { getMyProjects, getMyProjectStatistics, getExportUrl } from "@/services/project";
 import { ProjectDetailDialog } from "@/components/project/project-detail-dialog";
 import { CreateProjectDialog } from "@/components/project/create-project-dialog";
@@ -149,8 +151,8 @@ export default function MyProjectsPage() {
     setCurrentPage(1);
   }, [activeFilter, debouncedSearch]);
 
-  // 加载项目数据
-  const fetchProjects = useCallback(async () => {
+  // 加载项目数据（带请求取消，防止切换 tab 时旧数据闪现）
+  const fetchProjects = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
       const statusValue = statusFilterMap[activeFilter];
@@ -159,13 +161,14 @@ export default function MyProjectsPage() {
         projectStatus: statusValue ?? undefined,
         current: currentPage,
         pageSize: PAGE_SIZE,
-      });
+      }, signal);
 
       if (response.code === ResponseCode.SUCCESS && response.data) {
         setProjects(response.data.records ?? []);
         setTotal(response.data.total ?? 0);
       }
-    } catch {
+    } catch (err) {
+      if (isAbortError(err)) return; // 被取消的请求，不更新状态
       setProjects([]);
       setTotal(0);
     } finally {
@@ -173,7 +176,7 @@ export default function MyProjectsPage() {
     }
   }, [activeFilter, debouncedSearch, currentPage]);
 
-  // 加载各状态的数量（单次统计接口）
+  // 加载各状态的数量
   const fetchFilterCounts = useCallback(async () => {
     try {
       const res = await getMyProjectStatistics();
@@ -192,7 +195,9 @@ export default function MyProjectsPage() {
   }, []);
 
   useEffect(() => {
-    fetchProjects();
+    const controller = new AbortController();
+    fetchProjects(controller.signal);
+    return () => controller.abort();
   }, [fetchProjects]);
 
   useEffect(() => {
@@ -292,11 +297,7 @@ export default function MyProjectsPage() {
       </div>
 
       {/* Loading */}
-      {loading && (
-        <div className="flex justify-center py-16">
-          <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        </div>
-      )}
+      {loading && <CardPageSkeleton cards={6} />}
 
       {/* Project Cards */}
       {!loading && projects.length > 0 && (
@@ -356,13 +357,19 @@ export default function MyProjectsPage() {
                       </span>
                     </div>
                     <div className="flex gap-1">
-                      {stages.map((_, i) => (
+                      {stages.map((s, i) => (
                         <div
                           key={i}
                           className={cn(
                             "h-1.5 flex-1 rounded-full transition-all",
-                            i < completedStages
+                            s.stageStatus === 6 || s.stageStatus === 3
+                              ? "bg-emerald-500"
+                              : s.stageStatus === 1
                               ? "bg-blue-500"
+                              : s.stageStatus === 2
+                              ? "bg-amber-500"
+                              : s.stageStatus === 4
+                              ? "bg-rose-500"
                               : "bg-slate-200"
                           )}
                         />
@@ -547,6 +554,10 @@ export default function MyProjectsPage() {
         projectId={selectedProjectId}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+        onStageChange={() => {
+          fetchProjects();
+          fetchFilterCounts();
+        }}
       />
     </div>
   );
