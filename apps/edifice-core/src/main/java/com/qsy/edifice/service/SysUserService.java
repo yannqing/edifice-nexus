@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.GetUserListDto;
 import com.qsy.edifice.domain.dto.SysUserCreateDto;
 import com.qsy.edifice.domain.dto.SysUserUpdateDto;
+import com.qsy.edifice.domain.dto.UpdateProfileDto;
 import com.qsy.edifice.domain.vo.SysUserDetailVo;
 import com.qsy.edifice.domain.vo.SysUserListVo;
 
@@ -56,4 +57,19 @@ public interface SysUserService {
      * @return 返回删除结果
      */
     boolean deleteUserBath(List<Long> ids);
+
+    /**
+     * 获取当前登录用户的个人资料
+     * @param userId 当前登录用户 id
+     * @return 用户详情 vo
+     */
+    SysUserDetailVo getProfile(Long userId);
+
+    /**
+     * 更新当前登录用户的个人资料（仅允许自助修改的字段）
+     * @param userId 当前登录用户 id
+     * @param dto 资料更新 dto
+     * @return 更新后的用户详情 vo
+     */
+    SysUserDetailVo updateProfile(Long userId, UpdateProfileDto dto);
 }

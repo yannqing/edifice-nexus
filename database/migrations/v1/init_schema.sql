@@ -168,20 +168,42 @@ create table approval_records
 -- auto-generated definition
 create table sys_user
 (
-    user_id          bigint                             not null comment '用户id'
+    user_id                bigint                             not null comment '用户id'
         primary key,
-    username         varchar(64)                        not null comment '登录用户名',
-    password         varchar(255)                       not null comment '加密密码（BCrypt）',
-    real_name        varchar(64)                        null     comment '真实姓名',
-    email            varchar(128)                       null     comment '邮箱',
-    phone            varchar(32)                        null     comment '手机号',
-    status           tinyint  default 1                 not null comment '状态：0-禁用/1-启用',
-    last_login_ip    varchar(64)                        null     comment '最后登录ip',
-    last_login_time  datetime                           null     comment '最后登录时间',
-    created_time     datetime default CURRENT_TIMESTAMP not null comment '创建时间',
-    updated_time     datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
-    is_delete        tinyint  default 0                 not null comment '逻辑删除',
-    constraint uk_sys_user_username unique (username)
+    username               varchar(64)                        not null comment '登录用户名',
+    password               varchar(255)                       not null comment '加密密码（BCrypt）',
+    employee_no            varchar(32)                        null     comment '员工编号（对应花名册"编号"）',
+    real_name              varchar(64)                        null     comment '真实姓名',
+    gender                 tinyint                            null     comment '性别：0-男/1-女/2-其他',
+    ethnicity              varchar(32)                        null     comment '民族',
+    birth_date             date                               null     comment '出生日期',
+    id_card                varchar(32)                        null     comment '身份证号',
+    email                  varchar(128)                       null     comment '邮箱',
+    phone                  varchar(32)                        null     comment '手机号',
+    avatar                 varchar(512)                       null     comment '头像URL',
+    education              varchar(32)                        null     comment '学历',
+    school                 varchar(128)                       null     comment '毕业院校',
+    major                  varchar(128)                       null     comment '专业',
+    position               varchar(128)                       null     comment '职务',
+    professional_title     varchar(128)                       null     comment '职称',
+    certificates           varchar(512)                       null     comment '证书',
+    entry_date             date                               null     comment '入职时间',
+    contract_end_date      date                               null     comment '合同期限（到期日期）',
+    social_insurance_date  date                               null     comment '入社保时间',
+    employment_status      tinyint  default 1                 not null comment '在职状态：0-离职/1-在职',
+    resign_date            date                               null     comment '离职时间',
+    domicile               varchar(255)                       null     comment '户籍所在地',
+    address                varchar(255)                       null     comment '居住地',
+    remark                 varchar(512)                       null     comment '备注',
+    status                 tinyint  default 1                 not null comment '账号状态：0-禁用/1-启用（能否登录）',
+    last_login_ip          varchar(64)                        null     comment '最后登录ip',
+    last_login_time        datetime                           null     comment '最后登录时间',
+    created_time           datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updated_time           datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_delete              tinyint  default 0                 not null comment '逻辑删除',
+    constraint uk_sys_user_username unique (username),
+    key idx_sys_user_employee_no (employee_no),
+    key idx_sys_user_employment_status (employment_status)
 )
     comment '系统用户表';
 

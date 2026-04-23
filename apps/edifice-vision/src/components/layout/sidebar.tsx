@@ -14,6 +14,7 @@ import {
   BarChart3,
   UserCircle,
   Megaphone,
+  Users,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   BarChart3,
   UserCircle,
   Megaphone,
+  Users,
 };
 
 export function Sidebar() {
@@ -128,22 +130,29 @@ export function Sidebar() {
       {/* User Profile */}
       <div className="flex-shrink-0 p-4 border-t border-slate-100">
         <div className="flex items-center gap-3 p-2">
-          <Avatar className="w-10 h-10">
-            <AvatarFallback>
-              {(user?.realName ?? user?.username ?? "U").charAt(0)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 overflow-hidden">
-            <p className="text-sm font-semibold text-slate-800 truncate">
-              {user?.realName || user?.username || "用户"}
-            </p>
-            <p className="text-xs text-slate-400 truncate">
-              {user?.email || user?.phone || ""}
-            </p>
-          </div>
+          <button
+            onClick={() => router.push("/profile")}
+            className="flex items-center gap-3 flex-1 min-w-0 rounded-lg hover:bg-slate-50 transition-colors p-1 -m-1 cursor-pointer"
+            title="个人中心"
+          >
+            <Avatar className="w-10 h-10">
+              {user?.avatar ? <AvatarImage src={user.avatar} alt={user.realName ?? user.username} /> : null}
+              <AvatarFallback>
+                {(user?.realName ?? user?.username ?? "U").charAt(0)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 overflow-hidden text-left">
+              <p className="text-sm font-semibold text-slate-800 truncate">
+                {user?.realName || user?.username || "用户"}
+              </p>
+              <p className="text-xs text-slate-400 truncate">
+                {user?.email || user?.phone || ""}
+              </p>
+            </div>
+          </button>
           <button
             onClick={handleLogout}
-            className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+            className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors shrink-0"
             title="退出登录"
           >
             <LogOut className="w-4 h-4" />

@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
@@ -45,10 +46,40 @@ public class SysUser implements Serializable {
     private String password;
 
     /**
+     * 员工编号（对应花名册"编号"）
+     */
+    @TableField("employee_no")
+    private String employeeNo;
+
+    /**
      * 真实姓名
      */
     @TableField("real_name")
     private String realName;
+
+    /**
+     * 性别：0-男/1-女/2-其他
+     */
+    @TableField("gender")
+    private Integer gender;
+
+    /**
+     * 民族
+     */
+    @TableField("ethnicity")
+    private String ethnicity;
+
+    /**
+     * 出生日期
+     */
+    @TableField("birth_date")
+    private LocalDate birthDate;
+
+    /**
+     * 身份证号
+     */
+    @TableField("id_card")
+    private String idCard;
 
     /**
      * 邮箱
@@ -63,7 +94,97 @@ public class SysUser implements Serializable {
     private String phone;
 
     /**
-     * 状态：0禁用 1启用
+     * 头像URL
+     */
+    @TableField("avatar")
+    private String avatar;
+
+    /**
+     * 学历
+     */
+    @TableField("education")
+    private String education;
+
+    /**
+     * 毕业院校
+     */
+    @TableField("school")
+    private String school;
+
+    /**
+     * 专业
+     */
+    @TableField("major")
+    private String major;
+
+    /**
+     * 职务
+     */
+    @TableField("position")
+    private String position;
+
+    /**
+     * 职称
+     */
+    @TableField("professional_title")
+    private String professionalTitle;
+
+    /**
+     * 证书
+     */
+    @TableField("certificates")
+    private String certificates;
+
+    /**
+     * 入职时间
+     */
+    @TableField("entry_date")
+    private LocalDate entryDate;
+
+    /**
+     * 合同期限（到期日期）
+     */
+    @TableField("contract_end_date")
+    private LocalDate contractEndDate;
+
+    /**
+     * 入社保时间
+     */
+    @TableField("social_insurance_date")
+    private LocalDate socialInsuranceDate;
+
+    /**
+     * 在职状态：0-离职/1-在职
+     */
+    @TableField("employment_status")
+    private Integer employmentStatus;
+
+    /**
+     * 离职时间
+     */
+    @TableField("resign_date")
+    private LocalDate resignDate;
+
+    /**
+     * 户籍所在地
+     */
+    @TableField("domicile")
+    private String domicile;
+
+    /**
+     * 居住地
+     */
+    @TableField("address")
+    private String address;
+
+    /**
+     * 备注
+     */
+    @TableField("remark")
+    private String remark;
+
+    /**
+     * 账号状态：0禁用 1启用（能否登录）
      */
     @TableField("status")
     private Integer status;

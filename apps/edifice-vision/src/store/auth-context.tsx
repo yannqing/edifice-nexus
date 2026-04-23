@@ -28,6 +28,8 @@ interface AuthContextValue extends AuthState {
     user: SysUser,
     roles: SysRole[]
   ) => void;
+  /** 个人中心保存资料后调用，同步更新本地缓存与 Context */
+  updateUser: (user: SysUser) => void;
   /** 退出登录，清除认证数据 */
   logout: () => void;
 }
@@ -82,6 +84,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const updateUser = useCallback((user: SysUser) => {
+    setUserInfo(user);
+    setState((prev) => ({ ...prev, user }));
+  }, []);
+
   const logout = useCallback(() => {
     clearAuth();
     setState({
@@ -94,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, setAuth, logout }}>
+    <AuthContext.Provider value={{ ...state, setAuth, updateUser, logout }}>
       {children}
     </AuthContext.Provider>
   );

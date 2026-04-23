@@ -1,8 +1,5 @@
 package com.qsy.edifice.domain.vo;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.qsy.edifice.domain.entity.SysUser;
@@ -15,8 +12,8 @@ import org.springframework.beans.BeanUtils;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -26,40 +23,36 @@ public class SysUserListVo implements Serializable {
     @Serial
     private static final long serialVersionUID = 1L;
 
-    /**
-     * 用户id
-     */
     @JsonSerialize(using = ToStringSerializer.class)
     private Long userId;
 
-    /**
-     * 登录用户名
-     */
     private String username;
 
-    /**
-     * 真实姓名
-     */
+    private String employeeNo;
+
     private String realName;
 
-    /**
-     * 邮箱
-     */
+    /** 0-男/1-女/2-其他 */
+    private Integer gender;
+
     private String email;
 
-    /**
-     * 手机号
-     */
     private String phone;
 
-    /**
-     * 状态：0禁用 1启用
-     */
+    private String avatar;
+
+    private String position;
+
+    private String professionalTitle;
+
+    private LocalDate entryDate;
+
+    /** 0-离职/1-在职 */
+    private Integer employmentStatus;
+
+    /** 账号状态：0禁用 1启用 */
     private Integer status;
 
-    /**
-     * 最后登录时间
-     */
     private LocalDateTime lastLoginTime;
 
 

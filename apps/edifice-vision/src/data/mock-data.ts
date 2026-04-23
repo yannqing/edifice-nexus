@@ -285,6 +285,12 @@ export const navigationConfig: NavSection[] = [
     title: "系统管理",
     items: [
       {
+        id: "user-management",
+        label: "用户管理",
+        icon: "Users",
+        href: "/user-management",
+      },
+      {
         id: "announcement-management",
         label: "公告管理",
         icon: "Megaphone",
