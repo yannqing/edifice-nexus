@@ -93,11 +93,11 @@ public class ReportController {
                 .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // 已发放产值
-        LambdaQueryWrapper<OutputValue> paidWrapper = new LambdaQueryWrapper<>();
-        paidWrapper.eq(OutputValue::getStatus, 3);
-        List<OutputValue> paidList = outputValueMapper.selectList(paidWrapper);
-        BigDecimal paidAmount = paidList.stream()
+        // 已确认产值（status >= 2，即已审批 + 已发放）
+        LambdaQueryWrapper<OutputValue> confirmedWrapper = new LambdaQueryWrapper<>();
+        confirmedWrapper.ge(OutputValue::getStatus, 2);
+        List<OutputValue> confirmedList = outputValueMapper.selectList(confirmedWrapper);
+        BigDecimal confirmedAmount = confirmedList.stream()
                 .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -110,7 +110,7 @@ public class ReportController {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("totalProjects", totalProjects);
         result.put("totalContractAmount", totalContract);
-        result.put("completedOutputValue", paidAmount);
+        result.put("completedOutputValue", confirmedAmount);
         result.put("totalOutputValue", totalOutputValue);
         return ResultUtils.success(Code.SUCCESS, result);
     }
@@ -143,13 +143,14 @@ public class ReportController {
                     ? c.getContractAmount() : BigDecimal.ZERO;
             item.put("contractAmount", contractAmount);
 
+            // 已确认产值 = status >= 2（已审批或已发放）；待处理 = status < 2
             List<OutputValue> ovList = ovByProject.getOrDefault(p.getProjectId(), Collections.emptyList());
             BigDecimal completedAmount = ovList.stream()
-                    .filter(o -> o.getStatus() == 3)
+                    .filter(o -> o.getStatus() != null && o.getStatus() >= 2)
                     .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal pendingAmount = ovList.stream()
-                    .filter(o -> o.getStatus() < 3)
+                    .filter(o -> o.getStatus() != null && o.getStatus() < 2)
                     .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             item.put("completedAmount", completedAmount);
@@ -189,7 +190,7 @@ public class ReportController {
                 }
 
                 BigDecimal projectCompleted = ovByProject.getOrDefault(p.getProjectId(), Collections.emptyList()).stream()
-                        .filter(o -> o.getStatus() == 3)
+                        .filter(o -> o.getStatus() != null && o.getStatus() >= 2)
                         .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
                 completedTotal = completedTotal.add(projectCompleted);
@@ -217,16 +218,16 @@ public class ReportController {
         LambdaQueryWrapper<OutputValueDistribution> distWrapper = new LambdaQueryWrapper<>();
         List<OutputValueDistribution> allDists = distributionMapper.selectList(distWrapper);
 
-        // 获取已发放的分配单ID集合
-        LambdaQueryWrapper<OutputValue> paidWrapper = new LambdaQueryWrapper<>();
-        paidWrapper.eq(OutputValue::getStatus, 3);
-        Set<Long> paidIds = outputValueMapper.selectList(paidWrapper).stream()
+        // 获取已确认（已审批 + 已发放，status >= 2）的分配单ID集合
+        LambdaQueryWrapper<OutputValue> confirmedWrapper = new LambdaQueryWrapper<>();
+        confirmedWrapper.ge(OutputValue::getStatus, 2);
+        Set<Long> confirmedIds = outputValueMapper.selectList(confirmedWrapper).stream()
                 .map(OutputValue::getOutputValueId).collect(Collectors.toSet());
 
         // 按用户汇总
         Map<Long, BigDecimal> userAmountMap = new HashMap<>();
         for (OutputValueDistribution d : allDists) {
-            if (paidIds.contains(d.getOutputValueId())) {
+            if (confirmedIds.contains(d.getOutputValueId())) {
                 BigDecimal amt = d.getAmount() != null ? d.getAmount() : BigDecimal.ZERO;
                 userAmountMap.merge(d.getUserId(), amt, BigDecimal::add);
             }
@@ -295,13 +296,14 @@ public class ReportController {
         distWrapper.eq(OutputValueDistribution::getUserId, userId);
         List<OutputValueDistribution> myDists = distributionMapper.selectList(distWrapper);
 
-        LambdaQueryWrapper<OutputValue> paidWrapper = new LambdaQueryWrapper<>();
-        paidWrapper.eq(OutputValue::getStatus, 3);
-        Set<Long> paidIds = outputValueMapper.selectList(paidWrapper).stream()
+        // 已确认的分配单 ID（status >= 2：已审批 + 已发放）
+        LambdaQueryWrapper<OutputValue> confirmedWrapper = new LambdaQueryWrapper<>();
+        confirmedWrapper.ge(OutputValue::getStatus, 2);
+        Set<Long> confirmedIds = outputValueMapper.selectList(confirmedWrapper).stream()
                 .map(OutputValue::getOutputValueId).collect(Collectors.toSet());
 
         BigDecimal paidOutputValue = myDists.stream()
-                .filter(d -> paidIds.contains(d.getOutputValueId()))
+                .filter(d -> confirmedIds.contains(d.getOutputValueId()))
                 .map(OutputValueDistribution::getAmount).filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -444,8 +446,9 @@ public class ReportController {
         BigDecimal totalOutputValue = allOv.stream()
                 .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // 已确认产值 = status >= 2（已审批 + 已发放）
         BigDecimal paidOutputValue = allOv.stream()
-                .filter(o -> o.getStatus() == 3)
+                .filter(o -> o.getStatus() != null && o.getStatus() >= 2)
                 .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
@@ -493,8 +496,9 @@ public class ReportController {
             item.put("contractAmount", contractAmt);
             item.put("projectStatus", p.getProjectStatus());
 
+            // 已确认产值 = status >= 2
             BigDecimal completed = ovByProject.getOrDefault(p.getProjectId(), Collections.emptyList()).stream()
-                    .filter(o -> o.getStatus() == 3)
+                    .filter(o -> o.getStatus() != null && o.getStatus() >= 2)
                     .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             item.put("completedValue", completed);

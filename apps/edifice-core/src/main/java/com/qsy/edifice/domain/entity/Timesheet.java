@@ -1,6 +1,8 @@
 package com.qsy.edifice.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -47,12 +49,25 @@ public class Timesheet implements Serializable {
     @TableField("hours")
     private BigDecimal hours;
 
+    /** 额定工时（小时） */
+    @TableField("planned_hours")
+    private BigDecimal plannedHours;
+
     @TableField("description")
     private String description;
 
     /** 状态：0-草稿/1-已提交 */
     @TableField("status")
     private Integer status;
+
+    /** 审批状态：0-未提交/1-审批中/2-通过/3-驳回 */
+    @TableField("approval_status")
+    private Integer approvalStatus;
+
+    /** 当前审批人id */
+    @TableField("approver_id")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long approverId;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;

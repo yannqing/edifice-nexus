@@ -1,6 +1,8 @@
 package com.qsy.edifice.domain.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -58,6 +60,32 @@ public class ApprovalRecords implements Serializable {
      */
     @TableField("inspection_form_status")
     private Integer inspectionFormStatus;
+
+    /**
+     * 审批层级（1/2/3…）
+     */
+    @TableField("approval_level")
+    private Integer approvalLevel;
+
+    /**
+     * 下一级审批人id
+     */
+    @TableField("next_approver_id")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long nextApproverId;
+
+    /**
+     * 上一步审批记录id（形成审批链）
+     */
+    @TableField("parent_record_id")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long parentRecordId;
+
+    /**
+     * 业务子类型：file/inspection/bid/acceptance/output
+     */
+    @TableField("biz_type_ext")
+    private String bizTypeExt;
 
     /**
      * 创建时间

@@ -17,7 +17,6 @@ export interface CollectionSummaryVo {
   completedPhases: string;
   expectedAmount: number;
   collectedAmount: number;
-  collectionRate: number;
   /** 0-未回款 / 1-部分回款 / 2-已回款 */
   collectionStatus: number;
 }
@@ -62,7 +61,6 @@ export interface CollectionDetailVo {
 export interface CollectionStatisticsVo {
   totalExpected: number;
   totalCollected: number;
-  overallRate: number;
   totalPending: number;
 }
 

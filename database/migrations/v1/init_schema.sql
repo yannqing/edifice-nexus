@@ -142,16 +142,23 @@ create table inspection_form
 -- auto-generated definition
 create table approval_records
 (
-    approval_record_id          bigint 	not null											comment '审批记录id'
+    approval_record_id    bigint                             not null comment '审批记录id'
         primary key,
-    approval_record_type		tinyint 							not null	comment '审批类型：0-项目文件上传/1-验工审批/2-产值分配审批/3-工时填写',
-        inspection_form_id			bigint					not null comment '对应业务id',
-    approver					bigint			not null			comment '审批人id',
-    approval_description				varchar(1024)			null			comment '审批说明',
-    inspection_form_status			tinyint 										comment '审批状态：0-待审核/1-已通过/2-已拒绝',
-    created_time    datetime default CURRENT_TIMESTAMP not null comment '创建时间',
-    updated_time    datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
-    is_delete       tinyint  default 0                 not null comment '逻辑删除'
+    approval_record_type  tinyint                            not null comment '审批类型：0-项目文件上传/1-验工审批/2-产值分配审批/3-工时填写',
+    inspection_form_id    bigint                             not null comment '对应业务id',
+    approver              bigint                             not null comment '审批人id',
+    approval_description  varchar(1024)                      null     comment '审批说明',
+    inspection_form_status tinyint                           null     comment '审批状态：0-待审核/1-已通过/2-已拒绝',
+    approval_level        tinyint        default 1           not null comment '审批层级（1/2/3...）',
+    next_approver_id      bigint                             null     comment '下一级审批人id',
+    parent_record_id      bigint                             null     comment '上一步审批记录id（形成审批链）',
+    biz_type_ext          varchar(32)                        null     comment '业务子类型：file/inspection/bid/acceptance/output',
+    created_time          datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updated_time          datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_delete             tinyint  default 0                 not null comment '逻辑删除',
+    key idx_ar_biz (biz_type_ext),
+    key idx_ar_next (next_approver_id),
+    key idx_ar_parent (parent_record_id)
 )
     comment '审批记录表';
 
@@ -261,12 +268,18 @@ create table output_value
     submit_time        datetime                           null     comment '提交时间',
     approved_time      datetime                           null     comment '审批时间',
     paid_time          datetime                           null     comment '发放时间',
+    quarter            varchar(16)                        null     comment '所属季度，格式 YYYY-Qn',
+    company_reserve    decimal(20, 2) default 0.00        not null comment '公司留存金额（40%）',
+    leader_extra       decimal(20, 2) default 0.00        not null comment '领导额外金额（离职/降档差额）',
+    other_amount       decimal(20, 2) default 0.00        not null comment '其他金额（未发给离职成员等）',
+    subsidy_amount     decimal(20, 2) default 0.00        not null comment '公司补贴（只记录，不计入产值）',
     created_time       datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updated_time       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
     is_delete          tinyint  default 0                 not null comment '逻辑删除',
     key idx_output_value_project (project_id),
     key idx_output_value_stage (project_stage_id),
-    key idx_output_value_status (status)
+    key idx_output_value_status (status),
+    key idx_output_value_quarter (quarter)
 )
     comment '产值分配单表';
 
@@ -279,13 +292,18 @@ create table output_value_distribution
     output_value_id   bigint                             not null comment '产值分配单id',
     user_id           bigint                             not null comment '分配用户id',
     work_type         tinyint                            not null comment '工作类型：0-管理工作/1-基础工作/2-智励工作',
-    ratio             decimal(10, 2) default 0.00        not null comment '分配比例（%）',
+    ratio             decimal(10, 2) default 0.00        not null comment '分配比例（%，旧字段，保留以兼容历史数据）',
+    alloc_ratio       decimal(10, 4) default 0.0000      not null comment '分配比例（%），新口径',
+    completion_ratio  decimal(10, 4) default 0.0000      not null comment '完成比例（%）',
+    dist_type         tinyint        default 0           not null comment '类型：0-员工正常/1-员工降档/2-领导兜底/3-公司留存/4-其他金额',
+    is_active         tinyint        default 1           not null comment '下单时成员是否在职（0-离职/1-在职）',
     amount            decimal(20, 2) default 0.00        not null comment '分配金额（元）',
     created_time      datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updated_time      datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
     is_delete         tinyint  default 0                 not null comment '逻辑删除',
     key idx_dist_output_value (output_value_id),
-    key idx_dist_user (user_id)
+    key idx_dist_user (user_id),
+    key idx_dist_type (dist_type)
 )
     comment '产值分配明细表';
 
@@ -303,13 +321,17 @@ create table timesheet
     work_type         tinyint                            not null comment '工作类型：0-管理工作/1-基础工作/2-智励工作',
     work_date         date                               not null comment '工作日期',
     hours             decimal(5, 2)                      not null comment '工作时长（小时）',
+    planned_hours     decimal(5, 2) default 0.00         not null comment '额定工时（小时）',
     description       varchar(1024)                      null     comment '工作内容描述',
     status            tinyint  default 1                 not null comment '状态：0-草稿/1-已提交',
+    approval_status   tinyint  default 0                 not null comment '审批状态：0-未提交/1-审批中/2-通过/3-驳回',
+    approver_id       bigint                             null     comment '当前审批人id',
     created_time      datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updated_time      datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
     is_delete         tinyint  default 0                 not null comment '逻辑删除',
     key idx_timesheet_user_date (user_id, work_date),
-    key idx_timesheet_project (project_id)
+    key idx_timesheet_project (project_id),
+    key idx_timesheet_approval (approval_status)
 )
     comment '工时记录表';
 

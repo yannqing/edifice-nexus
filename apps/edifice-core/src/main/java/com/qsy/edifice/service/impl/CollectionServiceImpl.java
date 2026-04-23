@@ -158,18 +158,12 @@ public class CollectionServiceImpl implements CollectionService {
             totalCollected = collected.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
         }
 
-        BigDecimal rate = totalExpected.signum() > 0
-                ? totalCollected.multiply(BigDecimal.valueOf(100))
-                    .divide(totalExpected, 1, RoundingMode.HALF_UP)
-                : BigDecimal.ZERO;
-
         BigDecimal pending = totalExpected.subtract(totalCollected);
         if (pending.signum() < 0) pending = BigDecimal.ZERO;
 
         return CollectionStatisticsVo.builder()
                 .totalExpected(totalExpected)
                 .totalCollected(totalCollected)
-                .overallRate(rate)
                 .totalPending(pending)
                 .build();
     }
@@ -328,11 +322,6 @@ public class CollectionServiceImpl implements CollectionService {
                 ? contract.getContractAmount() : BigDecimal.ZERO;
         BigDecimal expected = calcExpectedAmount(project.getProjectId(), contract);
 
-        BigDecimal rate = expected.signum() > 0
-                ? collected.multiply(BigDecimal.valueOf(100))
-                    .divide(expected, 1, RoundingMode.HALF_UP)
-                : BigDecimal.ZERO;
-
         String managerName = findManagerName(project.getProjectId());
         String completedPhases = describeCompletedPhases(project.getProjectId());
 
@@ -347,7 +336,6 @@ public class CollectionServiceImpl implements CollectionService {
                 .completedPhases(completedPhases)
                 .expectedAmount(expected)
                 .collectedAmount(collected)
-                .collectionRate(rate)
                 .collectionStatus(deriveStatus(expected, collected))
                 .build();
     }

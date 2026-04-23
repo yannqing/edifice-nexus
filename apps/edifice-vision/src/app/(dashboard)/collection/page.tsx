@@ -6,7 +6,6 @@ import {
   Search,
   Banknote,
   CheckCircle,
-  PieChart,
   Clock,
   X,
   AlertCircle,
@@ -66,18 +65,6 @@ function formatAmount(v: number | null | undefined): string {
 function formatDate(d: string | null | undefined): string {
   if (!d) return "-";
   return d.slice(0, 10);
-}
-
-function getRateColor(rate: number) {
-  if (rate >= 100) return "text-emerald-600";
-  if (rate >= 50) return "text-amber-600";
-  return "text-rose-600";
-}
-
-function getRateBarColor(rate: number) {
-  if (rate >= 100) return "bg-emerald-500";
-  if (rate >= 50) return "bg-amber-500";
-  return "bg-rose-500";
 }
 
 const PAGE_SIZE = 10;
@@ -223,13 +210,6 @@ export default function CollectionPage() {
       bgColor: "bg-emerald-50",
     },
     {
-      label: "整体回款率",
-      value: `${stats?.overallRate ?? 0}%`,
-      icon: PieChart,
-      color: "text-amber-600",
-      bgColor: "bg-amber-50",
-    },
-    {
       label: "待回款金额",
       value: formatAmount(stats?.totalPending ?? 0),
       icon: Clock,
@@ -259,7 +239,7 @@ export default function CollectionPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-6">
+      <div className="grid grid-cols-3 gap-6">
         {statCards.map((stat) => (
           <div key={stat.label} className="glass-card rounded-2xl p-5 shadow-sm">
             <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-3", stat.bgColor)}>
@@ -315,7 +295,6 @@ export default function CollectionPage() {
                 <th className="text-left py-4 px-4 text-sm font-semibold text-slate-600">已完成阶段</th>
                 <th className="text-left py-4 px-4 text-sm font-semibold text-slate-600">应收金额</th>
                 <th className="text-left py-4 px-4 text-sm font-semibold text-slate-600">已回款金额</th>
-                <th className="text-left py-4 px-4 text-sm font-semibold text-slate-600">回款率</th>
                 <th className="text-left py-4 px-4 text-sm font-semibold text-slate-600">状态</th>
                 <th className="text-center py-4 px-4 text-sm font-semibold text-slate-600">操作</th>
               </tr>
@@ -347,19 +326,6 @@ export default function CollectionPage() {
                     </td>
                     <td className="py-4 px-4">
                       <span className="font-medium text-emerald-600">{formatAmount(item.collectedAmount)}</span>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 h-2 bg-slate-200 rounded-full overflow-hidden">
-                          <div
-                            className={cn("h-full rounded-full", getRateBarColor(item.collectionRate))}
-                            style={{ width: `${Math.min(item.collectionRate, 100)}%` }}
-                          />
-                        </div>
-                        <span className={cn("text-sm font-medium", getRateColor(item.collectionRate))}>
-                          {item.collectionRate}%
-                        </span>
-                      </div>
                     </td>
                     <td className="py-4 px-4">
                       <Badge variant="secondary" className={cn("text-xs", statusStyles[statusLabel])}>
@@ -477,33 +443,13 @@ export default function CollectionPage() {
                         {formatAmount(detail.summary.collectedAmount)}
                       </p>
                     </div>
-                    <div className="bg-amber-50 rounded-xl p-4">
-                      <p className="text-amber-600 text-sm">回款率</p>
-                      <p className="text-xl font-bold text-amber-700 mt-1">
-                        {detail.summary.collectionRate}%
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mb-6">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-3">回款进度</h3>
-                    <div className="h-4 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className={cn(
-                          "h-full rounded-full transition-all",
-                          getRateBarColor(detail.summary.collectionRate)
-                        )}
-                        style={{ width: `${Math.min(detail.summary.collectionRate, 100)}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between mt-2 text-sm text-slate-500">
-                      <span>已回款 {formatAmount(detail.summary.collectedAmount)}</span>
-                      <span>
-                        待回款{" "}
+                    <div className="bg-rose-50 rounded-xl p-4">
+                      <p className="text-rose-600 text-sm">待回款金额</p>
+                      <p className="text-xl font-bold text-rose-700 mt-1">
                         {formatAmount(
                           Math.max(0, detail.summary.expectedAmount - detail.summary.collectedAmount)
                         )}
-                      </span>
+                      </p>
                     </div>
                   </div>
 

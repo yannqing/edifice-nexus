@@ -50,9 +50,6 @@ public class CollectionSummaryVo implements Serializable {
     /** 已回款金额（元） */
     private BigDecimal collectedAmount;
 
-    /** 回款率 (%), 保留 1 位小数 */
-    private BigDecimal collectionRate;
-
     /** 状态：0-未回款/1-部分回款/2-已回款 */
     private Integer collectionStatus;
 }

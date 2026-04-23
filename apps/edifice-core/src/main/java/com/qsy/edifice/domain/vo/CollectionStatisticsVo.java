@@ -29,9 +29,6 @@ public class CollectionStatisticsVo implements Serializable {
     /** 已回款金额（元） */
     private BigDecimal totalCollected;
 
-    /** 整体回款率 (%) */
-    private BigDecimal overallRate;
-
     /** 待回款金额 = 应收 - 已收（元） */
     private BigDecimal totalPending;
 }

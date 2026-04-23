@@ -244,8 +244,9 @@ export const navigationConfig: NavSection[] = [
     ],
   },
   {
-    id: "finance",
-    title: "财务管理",
+    // 原"财务管理"，按 v0.2 文档重命名为"绩效"（id 用 perf 避免与下方 "个人绩效" 的 item id 冲突）
+    id: "perf",
+    title: "绩效",
     items: [
       {
         id: "output-value",
@@ -255,7 +256,7 @@ export const navigationConfig: NavSection[] = [
       },
       {
         id: "collection",
-        label: "回款管理",
+        label: "回款记录",
         icon: "Wallet",
         href: "/collection",
       },

@@ -49,6 +49,26 @@ public class OutputValue implements Serializable {
     @TableField("paid_time")
     private LocalDateTime paidTime;
 
+    /** 所属季度，格式 YYYY-Qn，如 2026-Q1 */
+    @TableField("quarter")
+    private String quarter;
+
+    /** 公司留存金额（40%） */
+    @TableField("company_reserve")
+    private BigDecimal companyReserve;
+
+    /** 领导额外金额（离职/降档差额） */
+    @TableField("leader_extra")
+    private BigDecimal leaderExtra;
+
+    /** 其他金额（未发给离职成员等） */
+    @TableField("other_amount")
+    private BigDecimal otherAmount;
+
+    /** 公司补贴（只记录，不计入产值） */
+    @TableField("subsidy_amount")
+    private BigDecimal subsidyAmount;
+
     @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
 
