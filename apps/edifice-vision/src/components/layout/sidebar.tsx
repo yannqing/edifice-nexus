@@ -15,6 +15,11 @@ import {
   UserCircle,
   Megaphone,
   Users,
+  Users2,
+  RefreshCcw,
+  FolderCheck,
+  BadgeCheck,
+  Target,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -40,6 +45,11 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   UserCircle,
   Megaphone,
   Users,
+  Users2,
+  RefreshCcw,
+  FolderCheck,
+  BadgeCheck,
+  Target,
 };
 
 export function Sidebar() {

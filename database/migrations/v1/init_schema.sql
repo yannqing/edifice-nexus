@@ -108,14 +108,22 @@ create table project_stage_template
 -- auto-generated definition
 create table project_files
 (
-    project_file_id          bigint 	not null											comment '项目文件id'
+    project_file_id     bigint                             not null comment '项目文件id'
         primary key,
-    project_id   varchar(64)                        null comment '项目id',
-    project_stage_id	bigint			not null					comment '项目阶段id',
-    file_id			bigint						not null				comment '文件id',
-    created_time    datetime default CURRENT_TIMESTAMP not null comment '创建时间',
-    updated_time    datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
-    is_delete       tinyint  default 0                 not null comment '逻辑删除'
+    project_id          varchar(64)                        null     comment '项目id（历史遗留 varchar）',
+    project_stage_id    bigint                             not null comment '项目阶段id',
+    file_id             bigint                             not null comment '文件id',
+    upload_user_id      bigint                             null     comment '上传人id',
+    file_category       varchar(64)                        null     comment '文件分类：图纸/合同/报告/其他',
+    description         varchar(512)                       null     comment '文件说明',
+    approval_status     tinyint  default 0                 not null comment '审批状态：0-待提交/1-审批中/2-通过/3-驳回',
+    current_record_id   bigint                             null     comment '当前待审记录id（快照）',
+    created_time        datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updated_time        datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_delete           tinyint  default 0                 not null comment '逻辑删除',
+    key idx_pf_project (project_id),
+    key idx_pf_upload_user (upload_user_id),
+    key idx_pf_status (approval_status)
 )
     comment '项目文件表';
 
@@ -441,3 +449,99 @@ create table announcement
     key idx_announcement_priority (priority)
 )
     comment '公告表';
+
+
+-- ==================== 投标管理 ====================
+
+-- auto-generated definition
+create table bid
+(
+    bid_id             bigint                             not null comment '投标id'
+        primary key,
+    bid_name           varchar(200)                       not null comment '投标项目名称',
+    bid_code           varchar(100)                       null     comment '投标编号',
+    owner_user_id      bigint                             not null comment '负责人id',
+    tender_amount      decimal(20, 2)                     null     comment '标的金额',
+    bid_status         tinyint  default 0                 not null comment '业务状态：0-筹备/1-已投递/2-中标/3-未中标/4-终止',
+    bid_date           date                               null     comment '投标日期',
+    result_date        date                               null     comment '结果日期',
+    client_name        varchar(200)                       null     comment '业主 / 甲方',
+    description        text                               null     comment '说明',
+    approval_status    tinyint  default 0                 not null comment '审批状态：0-草稿/1-审核中/2-通过/3-驳回',
+    current_record_id  bigint                             null     comment '当前待审记录id（快照）',
+    created_time       datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updated_time       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_delete          tinyint  default 0                 not null comment '逻辑删除',
+    key idx_bid_status (bid_status),
+    key idx_bid_owner (owner_user_id),
+    key idx_bid_approval (approval_status)
+)
+    comment '投标表';
+
+
+-- auto-generated definition
+create table bid_file
+(
+    bid_file_id    bigint                             not null comment '投标附件id'
+        primary key,
+    bid_id         bigint                             not null comment '投标id',
+    file_id        bigint                             not null comment '文件id',
+    file_category  varchar(64)                        null     comment '分类：招标文件/投标文件/中标通知/其他',
+    created_time   datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updated_time   datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_delete      tinyint  default 0                 not null comment '逻辑删除',
+    key idx_bf_bid (bid_id)
+)
+    comment '投标附件表';
+
+
+-- ==================== 验收模块（成果 / 过程 / 阶段性） ====================
+
+-- auto-generated definition
+create table project_acceptance
+(
+    acceptance_id      bigint                             not null comment '验收单id'
+        primary key,
+    project_id         bigint                             not null comment '项目id',
+    project_stage_id   bigint                             null     comment '项目阶段id（成果/过程验收可空）',
+    acceptance_type    tinyint                            not null comment '类型：0-过程/1-成果/2-阶段性验收',
+    title              varchar(200)                       not null comment '验收标题',
+    content            text                               null     comment '验收内容说明',
+    file_ids           varchar(1024)                      null     comment '附件id列表（json）',
+    apply_user_id      bigint                             not null comment '申请人id',
+    status             tinyint  default 0                 not null comment '0-待审批/1-审批中/2-通过/3-驳回',
+    current_record_id  bigint                             null     comment '当前待审记录id（快照）',
+    created_time       datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updated_time       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_delete          tinyint  default 0                 not null comment '逻辑删除',
+    key idx_acc_project (project_id),
+    key idx_acc_type (acceptance_type),
+    key idx_acc_status (status),
+    key idx_acc_apply (apply_user_id)
+)
+    comment '成果/过程/阶段性验收表';
+
+
+-- ==================== 绩效还原模块 ====================
+
+-- auto-generated definition
+create table performance_restore
+(
+    restore_id     bigint                             not null comment '还原id'
+        primary key,
+    quarter        varchar(16)                        not null comment '季度，如 2026-Q1',
+    user_id        bigint                             not null comment '用户id',
+    project_id     bigint                             null     comment '项目id（可空，整体还原时为空）',
+    restore_amount decimal(20, 2)                     not null comment '还原金额',
+    status         tinyint  default 0                 not null comment '0-待还原/1-已还原',
+    restored_time  datetime                           null     comment '实际还原时间',
+    operator_id    bigint                             null     comment '操作人（财务）',
+    remark         varchar(512)                       null     comment '备注',
+    created_time   datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updated_time   datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_delete      tinyint  default 0                 not null comment '逻辑删除',
+    key idx_pr_quarter (quarter),
+    key idx_pr_user (user_id),
+    key idx_pr_status (status)
+)
+    comment '绩效还原表';

@@ -2,6 +2,8 @@ package com.qsy.edifice.security.handler;
 
 import com.alibaba.fastjson2.JSON;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.qsy.edifice.common.Code;
 import com.qsy.edifice.domain.entity.SysRole;
 import com.qsy.edifice.domain.entity.SysUser;
@@ -50,8 +52,10 @@ public class MyLoginSuccessHandler implements AuthenticationSuccessHandler {
 
         SecurityUser securityUser = (SecurityUser) authentication.getPrincipal();
         SysUser user = securityUser.getSysUser();
+        // 写 ISO 字符串（避免 LocalDateTime 被序列化为数组 [2026,4,23,...]，否则 JwtUtils 解析会抛 START_ARRAY）
         ObjectMapper objectMapper = new ObjectMapper();
-        objectMapper.registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+        objectMapper.registerModule(new JavaTimeModule());
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         String userInfo = objectMapper.writeValueAsString(user);
 
         List<SysRole> roles = securityUser.getSysRole();

@@ -33,4 +33,12 @@ public interface ApprovalRecordsMapper extends BaseMapper<ApprovalRecords> {
      * @return 审批记录列表
      */
     List<ApprovalRecords> selectByApprovalRecordType(@Param("approvalRecordType") Integer approvalRecordType);
+
+    /**
+     * 根据 biz_type_ext + biz_id（即 inspection_form_id 复用字段）查整条审批链
+     * 按创建时间升序返回
+     */
+    List<ApprovalRecords> selectByBizTypeExtAndBizId(
+            @Param("bizTypeExt") String bizTypeExt,
+            @Param("bizId") Long bizId);
 }

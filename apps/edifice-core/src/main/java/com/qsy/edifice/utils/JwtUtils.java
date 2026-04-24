@@ -86,6 +86,19 @@ public class JwtUtils {
                                     throw new java.io.IOException("JWT时间解析失败: " + dateString, e2);
                                 }
                             }
+                        } else if (p.hasToken(com.fasterxml.jackson.core.JsonToken.START_ARRAY)) {
+                            // 兼容历史 token：Jackson 默认把 LocalDateTime 写成 [y,M,d,h,m,s,(ns)]
+                            int[] parts = new int[7];
+                            int i = 0;
+                            while (p.nextToken() != com.fasterxml.jackson.core.JsonToken.END_ARRAY) {
+                                if (i < parts.length) parts[i++] = p.getIntValue();
+                            }
+                            if (i < 5) return null;
+                            int year = parts[0], month = parts[1], day = parts[2];
+                            int hour = parts[3], minute = parts[4];
+                            int second = i > 5 ? parts[5] : 0;
+                            int nano = i > 6 ? parts[6] : 0;
+                            return java.time.LocalDateTime.of(year, month, day, hour, minute, second, nano);
                         } else {
                             throw new java.io.IOException("JWT不支持的时间数据类型: " + p.getCurrentToken());
                         }
@@ -123,6 +136,15 @@ public class JwtUtils {
                                     throw new java.io.IOException("JWT日期解析失败: " + dateString, e2);
                                 }
                             }
+                        } else if (p.hasToken(com.fasterxml.jackson.core.JsonToken.START_ARRAY)) {
+                            // 兼容历史 token：LocalDate 默认写成 [y,M,d]
+                            int[] parts = new int[3];
+                            int i = 0;
+                            while (p.nextToken() != com.fasterxml.jackson.core.JsonToken.END_ARRAY) {
+                                if (i < parts.length) parts[i++] = p.getIntValue();
+                            }
+                            if (i < 3) return null;
+                            return java.time.LocalDate.of(parts[0], parts[1], parts[2]);
                         } else {
                             throw new java.io.IOException("JWT不支持的日期数据类型: " + p.getCurrentToken());
                         }

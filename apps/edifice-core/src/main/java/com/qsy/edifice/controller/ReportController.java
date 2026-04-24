@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.qsy.edifice.common.Code;
 import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.entity.*;
+import com.qsy.edifice.domain.vo.PersonnelQuarterSummaryVo;
 import com.qsy.edifice.mapper.*;
 import com.qsy.edifice.service.*;
 import com.qsy.edifice.utils.JwtUtils;
@@ -425,6 +426,89 @@ public class ReportController {
 
     @Resource
     private ProjectStageService projectStageService;
+
+    // ==================== 人员季度分配汇总表（v0.2） ====================
+
+    @GetMapping("/personnel-quarter-summary")
+    @Operation(summary = "人员季度分配汇总表",
+            description = "按季度聚合所有已确认（status>=2）产值分配单，按用户维度汇总应得/实得金额")
+    public BaseResponse<List<PersonnelQuarterSummaryVo>> getPersonnelQuarterSummary(
+            @RequestParam(value = "quarter", required = false) String quarter) {
+
+        // 1. 筛选目标产值分配单：已确认（status>=2）；若带 quarter 则再加季度过滤
+        LambdaQueryWrapper<OutputValue> ovW = new LambdaQueryWrapper<>();
+        ovW.ge(OutputValue::getStatus, 2);
+        if (quarter != null && !quarter.trim().isEmpty()) {
+            ovW.eq(OutputValue::getQuarter, quarter.trim());
+        }
+        List<OutputValue> ovs = outputValueMapper.selectList(ovW);
+        if (ovs.isEmpty()) return ResultUtils.success(Code.SUCCESS, Collections.emptyList());
+
+        Set<Long> ovIds = ovs.stream().map(OutputValue::getOutputValueId).collect(Collectors.toSet());
+        Map<Long, Long> ovToProject = ovs.stream()
+                .collect(Collectors.toMap(OutputValue::getOutputValueId, OutputValue::getProjectId, (a, b) -> a));
+        Map<Long, BigDecimal> ovToTotal = ovs.stream()
+                .collect(Collectors.toMap(OutputValue::getOutputValueId, OutputValue::getTotalAmount, (a, b) -> a));
+
+        // 2. 拉取这些分配单下所有明细
+        LambdaQueryWrapper<OutputValueDistribution> dW = new LambdaQueryWrapper<>();
+        dW.in(OutputValueDistribution::getOutputValueId, ovIds);
+        List<OutputValueDistribution> dists = distributionMapper.selectList(dW);
+        if (dists.isEmpty()) return ResultUtils.success(Code.SUCCESS, Collections.emptyList());
+
+        // 3. 按 userId 聚合
+        Map<Long, BigDecimal> userAlloc = new HashMap<>();        // 应得（planned）
+        Map<Long, BigDecimal> userCompletion = new HashMap<>();   // 实得
+        Map<Long, Set<Long>> userProjects = new HashMap<>();      // 参与项目
+
+        BigDecimal pool60 = new BigDecimal("0.60");
+        BigDecimal bd100 = new BigDecimal("100");
+
+        for (OutputValueDistribution d : dists) {
+            Long uid = d.getUserId();
+            BigDecimal total = ovToTotal.get(d.getOutputValueId());
+            if (total == null) continue;
+
+            // planned = total × 60% × allocRatio%
+            BigDecimal alloc = d.getAllocRatio() != null ? d.getAllocRatio() : BigDecimal.ZERO;
+            BigDecimal planned = total.multiply(pool60)
+                    .multiply(alloc).divide(bd100, 2, RoundingMode.HALF_UP);
+
+            BigDecimal actual = d.getAmount() != null ? d.getAmount() : BigDecimal.ZERO;
+
+            userAlloc.merge(uid, planned, BigDecimal::add);
+            userCompletion.merge(uid, actual, BigDecimal::add);
+            userProjects.computeIfAbsent(uid, k -> new HashSet<>()).add(ovToProject.get(d.getOutputValueId()));
+        }
+
+        // 4. 批量查姓名
+        Set<Long> userIds = userAlloc.keySet();
+        Map<Long, SysUser> userMap = userIds.isEmpty() ? Collections.emptyMap()
+                : sysUserMapper.selectBatchIds(userIds).stream()
+                    .collect(Collectors.toMap(SysUser::getUserId, u -> u, (a, b) -> a));
+
+        // 5. 组装 VO，按应得金额倒序
+        List<PersonnelQuarterSummaryVo> result = userIds.stream()
+                .map(uid -> {
+                    SysUser u = userMap.get(uid);
+                    String name = u == null ? "-" :
+                            (u.getRealName() != null ? u.getRealName() : u.getUsername());
+                    return PersonnelQuarterSummaryVo.builder()
+                            .userId(uid)
+                            .realName(name)
+                            .projectCount(userProjects.getOrDefault(uid, Collections.emptySet()).size())
+                            .allocAmount(userAlloc.getOrDefault(uid, BigDecimal.ZERO))
+                            .completionAmount(userCompletion.getOrDefault(uid, BigDecimal.ZERO))
+                            // TODO: 等 LEADER 角色上线后按角色归集
+                            .leaderShare(BigDecimal.ZERO)
+                            .companyShare(BigDecimal.ZERO)
+                            .build();
+                })
+                .sorted((a, b) -> b.getAllocAmount().compareTo(a.getAllocAmount()))
+                .collect(Collectors.toList());
+
+        return ResultUtils.success(Code.SUCCESS, result);
+    }
 
     // ==================== 仪表盘 ====================
 

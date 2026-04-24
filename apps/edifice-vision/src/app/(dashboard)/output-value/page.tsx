@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,12 @@ import {
 } from "@/services/output-value";
 import { ResponseCode } from "@/types/api";
 import type { OutputValueVo, OutputValueStats } from "@/types/output-value";
-import { OUTPUT_VALUE_STATUS_MAP, WORK_TYPE_LABELS } from "@/types/output-value";
+import {
+  OUTPUT_VALUE_STATUS_MAP,
+  WORK_TYPE_LABELS,
+  DIST_TYPE_LABELS,
+} from "@/types/output-value";
+import { CreateOutputValueDialog } from "@/components/output-value/create-output-value-dialog";
 
 type TabKey = "all" | "pending" | "review" | "approved" | "paid";
 
@@ -67,6 +73,7 @@ export default function OutputValuePage() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -123,9 +130,23 @@ export default function OutputValuePage() {
       <div className="flex justify-between items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">产值分配</h1>
-          <p className="text-slate-500 text-sm mt-1">管理项目阶段产值的分配、审批与发放。</p>
+          <p className="text-slate-500 text-sm mt-1">
+            按季度维度分配阶段产值：公司留存 40% + 个人池 60%（分配比例 × 完成比例）。
+          </p>
         </div>
+        <Button
+          className="bg-blue-600 hover:bg-blue-700 text-white"
+          onClick={() => setCreateOpen(true)}
+        >
+          <Plus className="w-4 h-4 mr-1" /> 新建分配单
+        </Button>
       </div>
+
+      <CreateOutputValueDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSuccess={fetchData}
+      />
 
       {loading && <TablePageSkeleton columns={4} rows={4} />}
 
@@ -175,6 +196,11 @@ export default function OutputValuePage() {
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-sm font-semibold text-slate-800">{item.projectName}</span>
                           <span className="text-xs text-slate-400">{item.projectCode}</span>
+                          {item.quarter && (
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-medium">
+                              {item.quarter}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 text-xs text-slate-500">
                           {item.projectTypeName && <span>{item.projectTypeName}</span>}
@@ -196,14 +222,24 @@ export default function OutputValuePage() {
 
                     {isExpanded && (
                       <div className="px-5 pb-5 border-t border-slate-100">
+                        {/* 派生金额卡片 */}
+                        <div className="grid grid-cols-4 gap-3 mt-4 text-xs">
+                          <BreakdownBox label="公司留存 (40%)" value={item.companyReserve ?? 0} tone="slate" />
+                          <BreakdownBox label="领导兜底" value={item.leaderExtra ?? 0} tone="amber" />
+                          <BreakdownBox label="其他金额（离职）" value={item.otherAmount ?? 0} tone="rose" />
+                          <BreakdownBox label="公司补贴" value={item.subsidyAmount ?? 0} tone="blue" />
+                        </div>
+
                         <table className="w-full mt-4">
                           <thead>
                             <tr className="text-xs text-slate-400 uppercase tracking-wider">
                               <th className="text-left py-2 font-semibold">分配人员</th>
                               <th className="text-left py-2 font-semibold">角色</th>
                               <th className="text-left py-2 font-semibold">工作类型</th>
-                              <th className="text-center py-2 font-semibold">比例</th>
-                              <th className="text-right py-2 font-semibold">金额</th>
+                              <th className="text-center py-2 font-semibold">分配%</th>
+                              <th className="text-center py-2 font-semibold">完成%</th>
+                              <th className="text-center py-2 font-semibold">类型</th>
+                              <th className="text-right py-2 font-semibold">实得金额</th>
                             </tr>
                           </thead>
                           <tbody className="text-sm">
@@ -215,6 +251,9 @@ export default function OutputValuePage() {
                                       {(d.userName ?? "?")[0]}
                                     </div>
                                     <span className="text-slate-700">{d.userName || "-"}</span>
+                                    {d.isActive === 0 && (
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-50 text-rose-500">离职</span>
+                                    )}
                                   </div>
                                 </td>
                                 <td className="py-3 text-slate-500">{d.userRole}</td>
@@ -223,7 +262,15 @@ export default function OutputValuePage() {
                                     {WORK_TYPE_LABELS[d.workType] ?? "-"}
                                   </span>
                                 </td>
-                                <td className="py-3 text-center text-slate-600">{d.ratio}%</td>
+                                <td className="py-3 text-center text-slate-600">
+                                  {d.allocRatio ?? d.ratio ?? 0}%
+                                </td>
+                                <td className="py-3 text-center text-slate-600">
+                                  {d.completionRatio ?? 100}%
+                                </td>
+                                <td className="py-3 text-center text-slate-500 text-xs">
+                                  {DIST_TYPE_LABELS[d.distType ?? 0] ?? "-"}
+                                </td>
                                 <td className="py-3 text-right font-semibold text-slate-800">{formatAmount(d.amount)}</td>
                               </tr>
                             ))}
@@ -296,6 +343,29 @@ function StatCard({ icon, label, value, color }: {
           <p className="text-xl font-bold text-slate-800">{value}</p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function BreakdownBox({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "slate" | "amber" | "rose" | "blue";
+}) {
+  const toneMap: Record<string, string> = {
+    slate: "bg-slate-50 text-slate-700",
+    amber: "bg-amber-50 text-amber-700",
+    rose: "bg-rose-50 text-rose-700",
+    blue: "bg-blue-50 text-blue-700",
+  };
+  return (
+    <div className={cn("rounded-lg px-3 py-2", toneMap[tone])}>
+      <p className="text-[11px] opacity-75">{label}</p>
+      <p className="text-sm font-semibold">{formatAmount(value ?? 0)}</p>
     </div>
   );
 }

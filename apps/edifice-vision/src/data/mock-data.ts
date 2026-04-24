@@ -241,6 +241,24 @@ export const navigationConfig: NavSection[] = [
         icon: "FileText",
         href: "/inspection-management",
       },
+      {
+        id: "project-files-approval",
+        label: "项目文件审批",
+        icon: "FolderCheck",
+        href: "/project-files/approval",
+      },
+      {
+        id: "acceptance",
+        label: "阶段性验收",
+        icon: "BadgeCheck",
+        href: "/acceptance",
+      },
+      {
+        id: "bids",
+        label: "投标管理",
+        icon: "Target",
+        href: "/bids",
+      },
     ],
   },
   {
@@ -253,6 +271,12 @@ export const navigationConfig: NavSection[] = [
         label: "产值分配",
         icon: "Coins",
         href: "/output-value",
+      },
+      {
+        id: "performance-restore",
+        label: "绩效还原",
+        icon: "RefreshCcw",
+        href: "/performance-restore",
       },
       {
         id: "collection",
@@ -277,6 +301,12 @@ export const navigationConfig: NavSection[] = [
         label: "个人绩效",
         icon: "UserCircle",
         href: "/performance",
+      },
+      {
+        id: "personnel-quarter",
+        label: "人员分配汇总",
+        icon: "Users2",
+        href: "/reports/personnel-quarter",
       },
     ],
   },

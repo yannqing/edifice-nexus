@@ -52,6 +52,18 @@ public enum ErrorType implements BaseTypeInterface<Integer> {
     // ==================== 公告 ====================
     ANNOUNCEMENT_NOT_FOUND(50801, "公告不存在！"),
     ANNOUNCEMENT_STATUS_INVALID(50802, "公告当前状态不允许此操作！"),
+
+    // ==================== 绩效还原 ====================
+    PERFORMANCE_RESTORE_NOT_FOUND(50901, "绩效还原记录不存在！"),
+    PERFORMANCE_RESTORE_STATUS_INVALID(50902, "绩效还原当前状态不允许此操作！"),
+
+    // ==================== 验收 ====================
+    ACCEPTANCE_NOT_FOUND(51001, "验收单不存在！"),
+    ACCEPTANCE_STATUS_INVALID(51002, "验收单当前状态不允许此操作！"),
+
+    // ==================== 投标 ====================
+    BID_NOT_FOUND(51101, "投标不存在！"),
+    BID_STATUS_INVALID(51102, "投标当前状态不允许此操作！"),
     ;
     // 异常码
     private final Integer code;

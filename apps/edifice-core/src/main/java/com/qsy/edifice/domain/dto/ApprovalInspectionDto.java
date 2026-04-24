@@ -22,4 +22,13 @@ public class ApprovalInspectionDto {
 
     @Schema(description = "审批意见")
     private String approvalDescription;
+
+    /**
+     * 可选：通过时指定下一级审批人。
+     * - 若不传：视为终审，通过后验工单状态 → 已通过（3）
+     * - 若传入：流转到下一级继续审批，验工单状态保持 审核中（1）
+     * - 驳回时忽略此字段
+     */
+    @Schema(description = "通过时指定下一级审批人id（省略则终审）")
+    private Long nextApproverId;
 }

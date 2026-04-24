@@ -125,3 +125,27 @@ export async function getMyPayments(): Promise<BaseResponse<{
 }[]>> {
   return get("/report/my-payments");
 }
+
+// ==================== 人员季度分配汇总表 ====================
+
+export interface PersonnelQuarterSummaryVo {
+  userId: string;
+  realName: string;
+  projectCount: number;
+  /** 应得（planned）= total × 60% × alloc% */
+  allocAmount: number;
+  /** 实得（actual）= planned × completion% */
+  completionAmount: number;
+  /** 领导兜底：暂为 0 占位 */
+  leaderShare: number;
+  /** 公司分成：暂为 0 占位 */
+  companyShare: number;
+}
+
+export async function getPersonnelQuarterSummary(
+  quarter?: string,
+): Promise<BaseResponse<PersonnelQuarterSummaryVo[]>> {
+  const params: Record<string, string> = {};
+  if (quarter) params.quarter = quarter;
+  return get<PersonnelQuarterSummaryVo[]>("/report/personnel-quarter-summary", { params });
+}

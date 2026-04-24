@@ -1,0 +1,316 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import { FileText, Loader2, Upload, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { ResponseCode } from "@/types/api";
+import { getAllProjects, getProjectDetail, uploadDocument } from "@/services/project";
+import { createProjectFile } from "@/services/project-file";
+import type {
+  ProjectListVo,
+  ProjectDetailVo,
+  ProjectStageVo,
+  ProjectMemberVo,
+  FilesVo,
+} from "@/types/project";
+import { FILE_CATEGORY_OPTIONS } from "@/types/project-file";
+
+interface Props {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}
+
+export function UploadProjectFileDialog({ open, onOpenChange, onSuccess }: Props) {
+  const [projects, setProjects] = useState<ProjectListVo[]>([]);
+  const [projectId, setProjectId] = useState<string>("");
+  const [detail, setDetail] = useState<ProjectDetailVo | null>(null);
+  const [stages, setStages] = useState<ProjectStageVo[]>([]);
+  const [members, setMembers] = useState<ProjectMemberVo[]>([]);
+  const [stageId, setStageId] = useState<string>("");
+  const [category, setCategory] = useState<string>("图纸");
+  const [description, setDescription] = useState<string>("");
+  const [firstApproverId, setFirstApproverId] = useState<string>("");
+  const [file, setFile] = useState<File | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<FilesVo | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const reset = useCallback(() => {
+    setProjectId("");
+    setDetail(null);
+    setStages([]);
+    setMembers([]);
+    setStageId("");
+    setCategory("图纸");
+    setDescription("");
+    setFirstApproverId("");
+    setFile(null);
+    setUploadedFile(null);
+    setError("");
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    reset();
+    (async () => {
+      const res = await getAllProjects({ pageSize: 200 });
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setProjects(res.data.records ?? []);
+      }
+    })();
+  }, [open, reset]);
+
+  useEffect(() => {
+    if (!projectId) {
+      setDetail(null);
+      setStages([]);
+      setMembers([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const res = await getProjectDetail(projectId);
+      if (cancelled) return;
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setDetail(res.data);
+        setStages(res.data.projectStages ?? []);
+        setMembers(res.data.projectMemberList ?? []);
+        setStageId("");
+        setFirstApproverId("");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  const memberOptions = useMemo(() => {
+    return members.map((m) => ({
+      userId: m.userId,
+      realName: m.realName,
+    }));
+  }, [members]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    if (selected) {
+      setFile(selected);
+      setUploadedFile(null);
+    }
+    e.target.value = "";
+  };
+
+  const handleSubmit = async () => {
+    setError("");
+    if (!projectId) return setError("请选择项目");
+    if (!stageId) return setError("请选择阶段");
+    if (!file) return setError("请选择要上传的文件");
+
+    setSubmitting(true);
+    try {
+      // 1. 上传文件拿 fileId
+      let fid = uploadedFile?.fileId;
+      if (!fid) {
+        setUploading(true);
+        const upRes = await uploadDocument(file);
+        setUploading(false);
+        if (upRes.code !== ResponseCode.SUCCESS || !upRes.data) {
+          return setError(upRes.msg || "文件上传失败");
+        }
+        setUploadedFile(upRes.data);
+        fid = upRes.data.fileId;
+      }
+
+      // 2. 创建项目文件并提交审批
+      const res = await createProjectFile({
+        projectId,
+        projectStageId: stageId,
+        fileId: fid,
+        fileCategory: category || undefined,
+        description: description || undefined,
+        firstApproverId: firstApproverId || undefined,
+      });
+      if (res.code === ResponseCode.SUCCESS) {
+        toast.success("已提交审批");
+        onOpenChange(false);
+        onSuccess();
+      } else {
+        setError(res.msg || "提交失败");
+      }
+    } catch {
+      setError("网络异常，请稍后重试");
+    } finally {
+      setSubmitting(false);
+      setUploading(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (!v) reset();
+        onOpenChange(v);
+      }}
+    >
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>上传项目文件</DialogTitle>
+          <DialogDescription>
+            归档文件到项目并进入三级审批：项目负责人 → 专业主管 → 总工。
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 mt-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">项目</label>
+              <select
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+              >
+                <option value="">请选择项目</option>
+                {projects.map((p) => (
+                  <option key={p.projectId} value={p.projectId}>
+                    {p.projectName} ({p.projectCode})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">阶段</label>
+              <select
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
+                value={stageId}
+                onChange={(e) => setStageId(e.target.value)}
+                disabled={!projectId || stages.length === 0}
+              >
+                <option value="">请选择阶段</option>
+                {stages.map((s) => (
+                  <option key={s.projectStageId} value={s.projectStageId}>
+                    {s.stageName}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">文件分类</label>
+              <select
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                {FILE_CATEGORY_OPTIONS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">
+                一级审批人（项目负责人）
+              </label>
+              <select
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
+                value={firstApproverId}
+                onChange={(e) => setFirstApproverId(e.target.value)}
+                disabled={!detail}
+              >
+                <option value="">自动选取（项目经理）</option>
+                {memberOptions.map((m) => (
+                  <option key={m.userId} value={m.userId}>
+                    {m.realName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">文件说明</label>
+            <textarea
+              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
+              rows={2}
+              placeholder="一两句描述这份文件的内容"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">上传文件</label>
+            {!file ? (
+              <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
+                <Upload className="w-6 h-6 text-slate-300" />
+                <p className="text-sm text-slate-600 font-medium">
+                  点击选择文件（pdf/doc/xls/ppt 等）
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.rtf"
+                  onChange={handleFileSelect}
+                />
+              </label>
+            ) : (
+              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+                <FileText className="w-6 h-6 text-emerald-500 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-700 truncate">{file.name}</p>
+                  <p className="text-xs text-slate-400">
+                    {(file.size / 1024).toFixed(1)} KB
+                    {uploadedFile ? " · 已上传" : ""}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFile(null);
+                    setUploadedFile(null);
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-rose-500"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {error && (
+            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-600 text-sm">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-slate-100">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+            取消
+          </Button>
+          <Button
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+            onClick={handleSubmit}
+            disabled={submitting || uploading}
+          >
+            {(submitting || uploading) && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+            {uploading ? "上传中..." : "提交审批"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

@@ -6,10 +6,13 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.ApplyInspectionDto;
 import com.qsy.edifice.domain.dto.ApprovalInspectionDto;
+import com.qsy.edifice.domain.dto.ApproveDto;
 import com.qsy.edifice.domain.dto.GetInspectionFormListDto;
+import com.qsy.edifice.domain.dto.SubmitApprovalDto;
 import com.qsy.edifice.domain.entity.*;
 import com.qsy.edifice.domain.excel.InspectionFormExcelData;
 import com.qsy.edifice.domain.vo.*;
+import com.qsy.edifice.enums.ApprovalBizType;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.ContractMapper;
@@ -82,6 +85,9 @@ public class InspectionFormServiceImpl implements InspectionFormService {
 
     @Resource
     private ApprovalRecordsService approvalRecordsService;
+
+    @Resource
+    private ApprovalFlowService approvalFlowService;
 
     // ==================== 查询列表 ====================
 
@@ -229,27 +235,11 @@ public class InspectionFormServiceImpl implements InspectionFormService {
             }
         }
 
-        // 填充审批记录
-        List<ApprovalRecords> records = approvalRecordsService.getApprovalRecordsByInspectionFormId(form.getInspectionFormId());
-        if (records != null && !records.isEmpty()) {
-            List<ApprovalRecordVo> recordVos = records.stream().map(r -> {
-                ApprovalRecordVo rv = ApprovalRecordVo.builder()
-                        .approvalRecordId(r.getApprovalRecordId())
-                        .approver(r.getApprover())
-                        .approvalDescription(r.getApprovalDescription())
-                        .inspectionFormStatus(r.getInspectionFormStatus())
-                        .createdTime(r.getCreatedTime())
-                        .build();
-                // 查审批人姓名
-                if (r.getApprover() != null) {
-                    SysUser approverUser = sysUserMapper.selectById(r.getApprover());
-                    if (approverUser != null) {
-                        rv.setApproverName(approverUser.getRealName());
-                    }
-                }
-                return rv;
-            }).collect(Collectors.toList());
-            vo.setApprovalRecords(recordVos);
+        // 审批链（含层级 / 下一级审批人等通用字段）
+        List<ApprovalRecordVo> chain = approvalFlowService.queryChain(
+                ApprovalBizType.INSPECTION, form.getInspectionFormId());
+        if (!chain.isEmpty()) {
+            vo.setApprovalRecords(chain);
         }
 
         return vo;
@@ -327,11 +317,23 @@ public class InspectionFormServiceImpl implements InspectionFormService {
 
     // ==================== 审批验工单 ====================
 
+    /**
+     * 审批验工单（Phase 3 #3：走通用审批链）。
+     *
+     * 兼容旧调用方式：如果当前无待审节点（老数据直接 status=0），
+     * 会先以当前操作人为首审做一次 submit，再立刻 approve——对外接口未变。
+     *
+     * 新能力：{@code dto.nextApproverId} 非空且 result=1 时，流转下一级，
+     * 验工单 status 保持 审核中（1）；缺省则视为终审。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void approvalInspection(ApprovalInspectionDto dto, Long userId) {
         if (dto == null || dto.getInspectionFormId() == null || dto.getResult() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "审批参数不能为空");
+        }
+        if (dto.getResult() != 1 && dto.getResult() != 2) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "审批结果必须为 1-通过 或 2-驳回");
         }
 
         // 查询验工单
@@ -339,46 +341,63 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         if (form == null) {
             throw new BusinessException(ErrorType.INSPECTION_FORM_NOT_FOUND);
         }
-
-        // 只有待审核(0)和审核中(1)的验工单可以审批
         if (form.getInspectionFormStatus() != 0 && form.getInspectionFormStatus() != 1) {
-            throw new BusinessException(ErrorType.INSPECTION_FORM_STATUS_INVALID, "该验工单已审批完成，无法重复审批");
+            throw new BusinessException(ErrorType.INSPECTION_FORM_STATUS_INVALID,
+                    "该验工单已审批完成，无法重复审批");
         }
 
-        // 创建审批记录
-        ApprovalRecords record = new ApprovalRecords();
-        record.setApprovalRecordType(1); // 验工审批
-        record.setInspectionFormId(dto.getInspectionFormId());
-        record.setApprover(userId);
-        record.setApprovalDescription(dto.getApprovalDescription());
-        record.setInspectionFormStatus(dto.getResult()); // 1-通过 2-拒绝
-        approvalRecordsService.saveApprovalRecords(record);
+        boolean pass = dto.getResult() == 1;
+        boolean forwardToNext = pass && dto.getNextApproverId() != null;
 
-        // 更新验工单状态
-        if (dto.getResult() == 1) {
-            form.setInspectionFormStatus(3); // 已通过
-        } else if (dto.getResult() == 2) {
+        // 1. 找当前待审节点；没有则以当前操作人为首审补一条（兼容老流程）
+        ApprovalRecords current = approvalFlowService.getCurrentPending(
+                ApprovalBizType.INSPECTION, form.getInspectionFormId());
+        if (current == null) {
+            SubmitApprovalDto submit = new SubmitApprovalDto(
+                    ApprovalBizType.INSPECTION.getExt(),
+                    form.getInspectionFormId(),
+                    userId,
+                    form.getInspectionFormDescription()
+            );
+            current = approvalFlowService.submit(submit, userId);
+        }
+
+        // 2. 执行审批
+        ApproveDto approveDto = new ApproveDto(
+                current.getApprovalRecordId(),
+                pass,
+                forwardToNext ? dto.getNextApproverId() : null,
+                dto.getApprovalDescription()
+        );
+        ApprovalFlowService.ApprovalResult result = approvalFlowService.approve(approveDto, userId);
+
+        // 3. 根据 ApprovalResult 更新验工单主表状态
+        if (result.rejected) {
             form.setInspectionFormStatus(2); // 已驳回
+        } else if (result.isFinal) {
+            form.setInspectionFormStatus(3); // 已通过（终审）
+        } else {
+            // 流转下一级：审核中
+            form.setInspectionFormStatus(1);
         }
         inspectionFormMapper.updateById(form);
 
-        // 联动更新阶段状态
-        ProjectStage stage = projectStageService.getProjectStageById(form.getProjectStageId());
-        if (stage != null) {
-            if (dto.getResult() == 1) {
-                // 审批通过：阶段 → 6(已完成)
-                stage.setStageStatus(6);
+        // 4. 联动阶段 / 项目状态（仅在"终审驳回"或"终审通过"时）
+        if (result.rejected || result.isFinal) {
+            ProjectStage stage = projectStageService.getProjectStageById(form.getProjectStageId());
+            if (stage != null) {
+                if (result.rejected) {
+                    stage.setStageStatus(4); // 已驳回
+                    log.info("验工审批驳回: stageId={}, stageName={}",
+                            stage.getProjectStageId(), stage.getStageName());
+                } else {
+                    stage.setStageStatus(6); // 已完成
+                    log.info("验工审批通过，阶段已完成: stageId={}, stageName={}",
+                            stage.getProjectStageId(), stage.getStageName());
+                }
                 projectStageService.updateProjectStage(stage);
-                log.info("验工审批通过，阶段已完成: stageId={}, stageName={}", stage.getProjectStageId(), stage.getStageName());
-            } else if (dto.getResult() == 2) {
-                // 审批驳回：阶段 → 4(已驳回)
-                stage.setStageStatus(4);
-                projectStageService.updateProjectStage(stage);
-                log.info("验工审批驳回: stageId={}, stageName={}", stage.getProjectStageId(), stage.getStageName());
+                projectStageService.syncProjectStatus(stage.getProjectId());
             }
-
-            // 同步项目状态
-            projectStageService.syncProjectStatus(stage.getProjectId());
         }
     }
 

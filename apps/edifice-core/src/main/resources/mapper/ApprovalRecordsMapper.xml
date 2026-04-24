@@ -10,6 +10,10 @@
         <result column="approver" property="approver" jdbcType="BIGINT"/>
         <result column="approval_description" property="approvalDescription" jdbcType="VARCHAR"/>
         <result column="inspection_form_status" property="inspectionFormStatus" jdbcType="TINYINT"/>
+        <result column="approval_level" property="approvalLevel" jdbcType="TINYINT"/>
+        <result column="next_approver_id" property="nextApproverId" jdbcType="BIGINT"/>
+        <result column="parent_record_id" property="parentRecordId" jdbcType="BIGINT"/>
+        <result column="biz_type_ext" property="bizTypeExt" jdbcType="VARCHAR"/>
         <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
         <result column="updated_time" property="updatedTime" jdbcType="TIMESTAMP"/>
         <result column="is_delete" property="isDelete" jdbcType="TINYINT"/>
@@ -18,7 +22,9 @@
     <!-- 基础字段列表 -->
     <sql id="Base_Column_List">
         approval_record_id, approval_record_type, inspection_form_id, approver,
-        approval_description, inspection_form_status, created_time, updated_time, is_delete
+        approval_description, inspection_form_status, approval_level,
+        next_approver_id, parent_record_id, biz_type_ext,
+        created_time, updated_time, is_delete
     </sql>
 
     <!-- 根据业务id查询审批记录列表 -->
@@ -28,6 +34,7 @@
         FROM approval_records
         WHERE inspection_form_id = #{inspectionFormId}
         AND is_delete = 0
+        ORDER BY created_time ASC
     </select>
 
     <!-- 根据审批人id查询审批记录列表 -->
@@ -37,6 +44,7 @@
         FROM approval_records
         WHERE approver = #{approver}
         AND is_delete = 0
+        ORDER BY created_time DESC
     </select>
 
     <!-- 根据审批类型查询审批记录列表 -->
@@ -46,5 +54,17 @@
         FROM approval_records
         WHERE approval_record_type = #{approvalRecordType}
         AND is_delete = 0
+        ORDER BY created_time DESC
+    </select>
+
+    <!-- 按 biz_type_ext + biz_id 查整条审批链（ASC 便于前端按顺序渲染） -->
+    <select id="selectByBizTypeExtAndBizId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM approval_records
+        WHERE biz_type_ext = #{bizTypeExt}
+          AND inspection_form_id = #{bizId}
+          AND is_delete = 0
+        ORDER BY created_time ASC, approval_record_id ASC
     </select>
 </mapper>
