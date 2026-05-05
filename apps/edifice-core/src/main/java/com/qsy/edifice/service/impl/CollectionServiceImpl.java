@@ -340,19 +340,49 @@ public class CollectionServiceImpl implements CollectionService {
                 .build();
     }
 
-    /** 应收额：合同金额 × 已完成阶段产值比例之和 */
+    /**
+     * 应收额（v0.4）：基本部分 + 效益部分（基本+效益项目走分阶段累计）
+     *
+     * 基本部分 = base_amount × max(已完成阶段的 stage_output 累计%)
+     * 效益部分 = benefit_amount × max(已完成阶段的 benefit_inclusion_ratio 累计%)
+     *
+     * 注意：stage_output / benefit_inclusion_ratio 是"累计比例"（如阶段 3=30%），
+     * 取已完成阶段中**最大**的累计值，而不是求和（求和会重复计入）。
+     *
+     * 老数据兜底：
+     * - base_amount 缺失时，回退到 contract_amount
+     * - benefit_amount 缺失时，记 0（基本收费项目效益部分天然 0）
+     */
     private BigDecimal calcExpectedAmount(Contract contract, List<ProjectStage> stages) {
-        if (contract == null || contract.getContractAmount() == null) return BigDecimal.ZERO;
+        if (contract == null) return BigDecimal.ZERO;
         if (stages == null || stages.isEmpty()) return BigDecimal.ZERO;
 
-        BigDecimal completedRatioSum = stages.stream()
+        BigDecimal baseAmt = contract.getBaseAmount() != null
+                ? contract.getBaseAmount()
+                : (contract.getContractAmount() != null
+                    ? contract.getContractAmount() : BigDecimal.ZERO);
+        BigDecimal benefitAmt = contract.getBenefitAmount() != null
+                ? contract.getBenefitAmount() : BigDecimal.ZERO;
+
+        BigDecimal maxCompletedBaseRatio = stages.stream()
                 .filter(s -> STAGE_COMPLETED_STATUSES.contains(s.getStageStatus()))
                 .map(s -> s.getStageOutput() != null ? s.getStageOutput() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                .max(BigDecimal::compareTo)
+                .orElse(BigDecimal.ZERO);
 
-        return contract.getContractAmount()
-                .multiply(completedRatioSum)
+        BigDecimal maxCompletedBenefitRatio = stages.stream()
+                .filter(s -> STAGE_COMPLETED_STATUSES.contains(s.getStageStatus()))
+                .map(s -> s.getBenefitInclusionRatio() != null
+                        ? s.getBenefitInclusionRatio() : BigDecimal.ZERO)
+                .max(BigDecimal::compareTo)
+                .orElse(BigDecimal.ZERO);
+
+        BigDecimal baseExpected = baseAmt.multiply(maxCompletedBaseRatio)
                 .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        BigDecimal benefitExpected = benefitAmt.multiply(maxCompletedBenefitRatio)
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+
+        return baseExpected.add(benefitExpected);
     }
 
     private BigDecimal calcExpectedAmount(Long projectId, Contract contract) {

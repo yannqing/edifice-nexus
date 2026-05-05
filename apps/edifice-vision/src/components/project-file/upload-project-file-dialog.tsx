@@ -27,16 +27,29 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  /** 传入时锁定项目（项目详情内部上传场景） */
+  lockedProjectId?: string;
+  /** 锁定项目时用于展示的名称 */
+  lockedProjectName?: string;
 }
 
-export function UploadProjectFileDialog({ open, onOpenChange, onSuccess }: Props) {
+export function UploadProjectFileDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+  lockedProjectId,
+  lockedProjectName,
+}: Props) {
+  const locked = !!lockedProjectId;
+
   const [projects, setProjects] = useState<ProjectListVo[]>([]);
-  const [projectId, setProjectId] = useState<string>("");
+  const [projectId, setProjectId] = useState<string>(lockedProjectId ?? "");
   const [detail, setDetail] = useState<ProjectDetailVo | null>(null);
   const [stages, setStages] = useState<ProjectStageVo[]>([]);
   const [members, setMembers] = useState<ProjectMemberVo[]>([]);
   const [stageId, setStageId] = useState<string>("");
-  const [category, setCategory] = useState<string>("图纸");
+  const [displayName, setDisplayName] = useState<string>("");
+  const [category, setCategory] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [firstApproverId, setFirstApproverId] = useState<string>("");
   const [file, setFile] = useState<File | null>(null);
@@ -46,36 +59,41 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess }: Props
   const [error, setError] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 仅重置表单录入项；不清 detail/stages/members（它们的刷新交给下面的 effect 按 open 触发）
   const reset = useCallback(() => {
-    setProjectId("");
-    setDetail(null);
-    setStages([]);
-    setMembers([]);
+    setProjectId(lockedProjectId ?? "");
     setStageId("");
-    setCategory("图纸");
+    setDisplayName("");
+    setCategory("");
     setDescription("");
     setFirstApproverId("");
     setFile(null);
     setUploadedFile(null);
     setError("");
-  }, []);
+  }, [lockedProjectId]);
 
+  // 打开时：重置表单 + 非锁定模式下加载项目列表
   useEffect(() => {
     if (!open) return;
     reset();
-    (async () => {
-      const res = await getAllProjects({ pageSize: 200 });
-      if (res.code === ResponseCode.SUCCESS && res.data) {
-        setProjects(res.data.records ?? []);
-      }
-    })();
-  }, [open, reset]);
+    if (!locked) {
+      (async () => {
+        const res = await getAllProjects({ pageSize: 200 });
+        if (res.code === ResponseCode.SUCCESS && res.data) {
+          setProjects(res.data.records ?? []);
+        }
+      })();
+    }
+  }, [open, reset, locked]);
 
+  // 打开且 projectId 就绪时加载项目详情（锁定模式下，同一 projectId 每次开弹窗也会重新拉一次）
   useEffect(() => {
-    if (!projectId) {
-      setDetail(null);
-      setStages([]);
-      setMembers([]);
+    if (!open || !projectId) {
+      if (!open) {
+        setDetail(null);
+        setStages([]);
+        setMembers([]);
+      }
       return;
     }
     let cancelled = false;
@@ -86,14 +104,12 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess }: Props
         setDetail(res.data);
         setStages(res.data.projectStages ?? []);
         setMembers(res.data.projectMemberList ?? []);
-        setStageId("");
-        setFirstApproverId("");
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [open, projectId]);
 
   const memberOptions = useMemo(() => {
     return members.map((m) => ({
@@ -107,6 +123,11 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess }: Props
     if (selected) {
       setFile(selected);
       setUploadedFile(null);
+      // 默认用原文件名填到展示名，用户可自行改
+      if (!displayName) {
+        const name = selected.name.replace(/\.[^./\\]+$/, "");
+        setDisplayName(name);
+      }
     }
     e.target.value = "";
   };
@@ -114,8 +135,8 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess }: Props
   const handleSubmit = async () => {
     setError("");
     if (!projectId) return setError("请选择项目");
-    if (!stageId) return setError("请选择阶段");
     if (!file) return setError("请选择要上传的文件");
+    if (!displayName.trim()) return setError("请填写文件名称");
 
     setSubmitting(true);
     try {
@@ -135,8 +156,9 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess }: Props
       // 2. 创建项目文件并提交审批
       const res = await createProjectFile({
         projectId,
-        projectStageId: stageId,
+        projectStageId: stageId || undefined,
         fileId: fid,
+        fileName: displayName.trim(),
         fileCategory: category || undefined,
         description: description || undefined,
         firstApproverId: firstApproverId || undefined,
@@ -168,36 +190,44 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess }: Props
         <DialogHeader>
           <DialogTitle>上传项目文件</DialogTitle>
           <DialogDescription>
-            归档文件到项目并进入三级审批：项目负责人 → 专业主管 → 总工。
+            归档到项目并提交三级审批：项目负责人 → 专业主管 → 总工。
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 mt-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">项目</label>
-              <select
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-              >
-                <option value="">请选择项目</option>
-                {projects.map((p) => (
-                  <option key={p.projectId} value={p.projectId}>
-                    {p.projectName} ({p.projectCode})
-                  </option>
-                ))}
-              </select>
+              {locked ? (
+                <div className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-600">
+                  {lockedProjectName ?? projectId}
+                </div>
+              ) : (
+                <select
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
+                  value={projectId}
+                  onChange={(e) => setProjectId(e.target.value)}
+                >
+                  <option value="">请选择项目</option>
+                  {projects.map((p) => (
+                    <option key={p.projectId} value={p.projectId}>
+                      {p.projectName} ({p.projectCode})
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-600 mb-1 block">阶段</label>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">
+                所属阶段（选填）
+              </label>
               <select
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
                 value={stageId}
                 onChange={(e) => setStageId(e.target.value)}
                 disabled={!projectId || stages.length === 0}
               >
-                <option value="">请选择阶段</option>
+                <option value="">不关联阶段</option>
                 {stages.map((s) => (
                   <option key={s.projectStageId} value={s.projectStageId}>
                     {s.stageName}
@@ -206,12 +236,27 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess }: Props
               </select>
             </div>
             <div>
-              <label className="text-xs font-medium text-slate-600 mb-1 block">文件分类</label>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">
+                文件名称 *
+              </label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="如：施工图-A区-V2"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">
+                文件分类（选填）
+              </label>
               <select
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
               >
+                <option value="">未分类</option>
                 {FILE_CATEGORY_OPTIONS.map((c) => (
                   <option key={c} value={c}>
                     {c}
@@ -219,9 +264,9 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess }: Props
                 ))}
               </select>
             </div>
-            <div>
+            <div className="col-span-2">
               <label className="text-xs font-medium text-slate-600 mb-1 block">
-                一级审批人（项目负责人）
+                一级审批人（项目负责人，缺省自动取）
               </label>
               <select
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
@@ -244,7 +289,7 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess }: Props
             <textarea
               className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
               rows={2}
-              placeholder="一两句描述这份文件的内容"
+              placeholder="可选：描述这份文件的内容"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />

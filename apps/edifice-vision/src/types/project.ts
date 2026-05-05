@@ -15,7 +15,10 @@ export interface ProjectStageVo {
   stageName: string;
   /** 0-未开始/1-进行中/2-待验收/3-已验收/4-已驳回/5-待分配/6-已完成 */
   stageStatus: number;
+  /** 基本部分累计计入比例（%，0-100） */
   stageOutput: number;
+  /** 效益部分累计计入比例（%，0-100），v0.4 新增 */
+  benefitInclusionRatio?: number;
 }
 
 // ==================== 合同 VO ====================
@@ -31,6 +34,10 @@ export interface ContractVo {
   contractOtherFiles: string;
   baseAmount: number;
   benefitRules: string;
+  /** 当前预计效益金额（v0.4 新增，contract_type=1 才有意义） */
+  benefitAmount?: number;
+  /** 效益状态：0-预计中/1-已最终确认（v0.4 新增） */
+  benefitStatus?: number;
   signingDate: string;
   preStartDate: string;
   preEndDate: string;
@@ -61,6 +68,8 @@ export interface ProjectListVo {
   projectMemberList: ProjectMemberVo[] | null;
   preStartTime: string | null;
   preEndTime: string | null;
+  /** 项目文件数量（project_files） */
+  fileCount: number;
 }
 
 // ==================== 项目详情 VO ====================
@@ -130,6 +139,8 @@ export interface UpdateProjectParams {
   contractAmount?: number;
   baseAmount?: number;
   benefitRule?: string;
+  /** 预计效益金额（v0.4，仅 contractType=1） */
+  benefitAmount?: number;
   preStartTime?: string;
   preEndTime?: string;
   projectCharges?: string[];
@@ -146,6 +157,8 @@ export interface CreateProjectParams {
   contractAmount: number;
   baseAmount?: number;
   benefitRule?: string;
+  /** 预计效益金额（v0.4，仅 contractType=1） */
+  benefitAmount?: number;
   contractFile?: number;
   contractOtherFiles?: number[];
   projectCharges: string[];

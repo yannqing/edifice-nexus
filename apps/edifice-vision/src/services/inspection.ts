@@ -13,12 +13,15 @@ import type {
 /**
  * 构建验工单查询参数
  */
-function buildInspectionQuery(params?: GetInspectionListParams): Record<string, string> {
-  const query: Record<string, string> = {};
+function buildInspectionQuery(params?: GetInspectionListParams): Record<string, string | string[]> {
+  const query: Record<string, string | string[]> = {};
   if (params?.inspectionFormCode) query.inspectionFormCode = params.inspectionFormCode;
   if (params?.projectId) query.projectId = params.projectId;
-  if (params?.inspectionFormStatus !== undefined)
+  if (params?.inspectionFormStatuses && params.inspectionFormStatuses.length > 0) {
+    query.inspectionFormStatuses = params.inspectionFormStatuses.map(String);
+  } else if (params?.inspectionFormStatus !== undefined) {
     query.inspectionFormStatus = String(params.inspectionFormStatus);
+  }
   if (params?.current !== undefined) query.current = String(params.current);
   if (params?.pageSize !== undefined) query.pageSize = String(params.pageSize);
   return query;

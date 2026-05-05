@@ -164,9 +164,9 @@ export default function AnnouncementManagementPage() {
   ];
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             公告管理
@@ -184,7 +184,7 @@ export default function AnnouncementManagementPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex bg-white rounded-xl p-1 shadow-sm border border-slate-100">
           {tabs.map((item) => (
             <button
@@ -209,7 +209,7 @@ export default function AnnouncementManagementPage() {
             placeholder="搜索公告标题..."
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm w-full sm:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
       </div>
@@ -217,7 +217,7 @@ export default function AnnouncementManagementPage() {
       {loading && <TablePageSkeleton columns={4} rows={5} />}
 
       {!loading && items.length > 0 && (
-        <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+        <div className="glass-card rounded-2xl shadow-sm overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-50/50">
               <tr className="text-slate-500 text-xs uppercase tracking-wider">
@@ -310,7 +310,7 @@ export default function AnnouncementManagementPage() {
       )}
 
       {!loading && total > 0 && (
-        <div className="flex justify-between items-center pt-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center pt-2">
           <p className="text-sm text-slate-500">
             共 <span className="font-semibold text-slate-800">{total}</span> 条
           </p>
@@ -464,7 +464,7 @@ function AnnouncementFormDialog({
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">优先级</label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {[
                 { value: 0, label: "普通", color: "bg-slate-500" },
                 { value: 1, label: "重要", color: "bg-amber-500" },

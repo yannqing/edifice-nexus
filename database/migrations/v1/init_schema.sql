@@ -63,7 +63,9 @@ create table contract
     contract_file	bigint								not null				comment '合同主文件id',
     contract_other_files	json												null	comment '合同其他附件(id json 数组)',
     base_amount    decimal(20, 2)                                   null    comment '基本收益金额（元）',
-    benefit_rules		varchar(255)										null			comment '效益收益规则',
+    benefit_rules		varchar(255)										null			comment '效益收益规则（自由文本，仅说明）',
+    benefit_amount	decimal(20, 2)									null			comment '当前预计效益金额（最新值，分阶段计入产值）',
+    benefit_status	tinyint		default 0							not null	comment '效益状态：0-预计中/1-已最终确认',
     signing_date		datetime	default CURRENT_TIMESTAMP not null comment '项目签订日期',
     pre_start_date datetime	default CURRENT_TIMESTAMP	not null comment '项目预计开始日期',
     pre_end_date datetime	default CURRENT_TIMESTAMP	not null comment '项目预计结束日期',
@@ -72,6 +74,27 @@ create table contract
     is_delete       tinyint  default 0                 not null comment '逻辑删除'
 )
     comment '合同表';
+
+
+-- v0.4 新增：合同效益预测修正历史
+create table contract_benefit_revision
+(
+    revision_id     bigint                             not null comment '修正id'
+        primary key,
+    contract_id     bigint                             not null comment '合同id',
+    old_amount      decimal(20, 2)                     null     comment '修正前金额（首次为空）',
+    new_amount      decimal(20, 2)                     not null comment '修正后金额',
+    delta_amount    decimal(20, 2)                     null     comment '差额 = new - old，首次为空',
+    revision_reason varchar(512)                       null     comment '修正原因',
+    is_final        tinyint  default 0                 not null comment '是否最终确认（1=结算，与 contract.benefit_status 联动）',
+    operator_id     bigint                             null     comment '操作人id',
+    created_time    datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updated_time    datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_delete       tinyint  default 0                 not null comment '逻辑删除',
+    key idx_cbr_contract (contract_id),
+    key idx_cbr_created (created_time)
+)
+    comment '合同效益预测修正历史表（v0.4）';
 
 
 
@@ -84,7 +107,8 @@ create table project_stage
     project_id bigint                      not null comment '项目id',
     stage_name	  varchar(255)						not null		comment '阶段名称',
     stage_status	tinyint			default 0		not null	comment '阶段状态：0-未开始/1-进行中/2-待验收/3-已验收/4-已驳回/5-待分配/6-已完成',
-    stage_output	decimal(10, 2) default 0.00 not null	comment '阶段产值比例',
+    stage_output	decimal(10, 2) default 0.00 not null	comment '基本部分累计计入比例（%，0-100）',
+    benefit_inclusion_ratio decimal(10, 4) default 0.0000 not null comment '效益部分累计计入比例（%，0-100）',
     created_time    datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updated_time    datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
     is_delete       tinyint  default 0                 not null comment '逻辑删除'
@@ -111,8 +135,9 @@ create table project_files
     project_file_id     bigint                             not null comment '项目文件id'
         primary key,
     project_id          varchar(64)                        null     comment '项目id（历史遗留 varchar）',
-    project_stage_id    bigint                             not null comment '项目阶段id',
+    project_stage_id    bigint                             null     comment '项目阶段id（可空）',
     file_id             bigint                             not null comment '文件id',
+    file_name           varchar(255)                       null     comment '用户填写的文件名称',
     upload_user_id      bigint                             null     comment '上传人id',
     file_category       varchar(64)                        null     comment '文件分类：图纸/合同/报告/其他',
     description         varchar(512)                       null     comment '文件说明',
@@ -299,10 +324,15 @@ create table output_value
     approved_time      datetime                           null     comment '审批时间',
     paid_time          datetime                           null     comment '发放时间',
     quarter            varchar(16)                        null     comment '所属季度，格式 YYYY-Qn',
-    company_reserve    decimal(20, 2) default 0.00        not null comment '公司留存金额（40%）',
-    leader_extra       decimal(20, 2) default 0.00        not null comment '领导额外金额（离职/降档差额）',
-    other_amount       decimal(20, 2) default 0.00        not null comment '其他金额（未发给离职成员等）',
+    company_reserve    decimal(20, 2) default 0.00        not null comment '公司账（v0.4：60% 主体 + 降档差额 + 离职兜底）',
+    leader_extra       decimal(20, 2) default 0.00        not null comment '（v0.4 起始终为 0；保留字段防迁移破坏）',
+    other_amount       decimal(20, 2) default 0.00        not null comment '离职兜底独立记账（实际钱进 company_reserve）',
     subsidy_amount     decimal(20, 2) default 0.00        not null comment '公司补贴（只记录，不计入产值）',
+    stage_cumulative_amount    decimal(20, 2) null comment '当前阶段累计应得（含基本+效益）',
+    previous_cumulative_amount decimal(20, 2) null comment '上一次产值分配单的累计（用于计算本期产值）',
+    base_amount_part           decimal(20, 2) null comment '本期基本部分',
+    benefit_amount_part        decimal(20, 2) null comment '本期效益部分',
+    benefit_snapshot           decimal(20, 2) null comment '快照：本单创建时合同的预计效益值',
     created_time       datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updated_time       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
     is_delete          tinyint  default 0                 not null comment '逻辑删除',
@@ -325,7 +355,7 @@ create table output_value_distribution
     ratio             decimal(10, 2) default 0.00        not null comment '分配比例（%，旧字段，保留以兼容历史数据）',
     alloc_ratio       decimal(10, 4) default 0.0000      not null comment '分配比例（%），新口径',
     completion_ratio  decimal(10, 4) default 0.0000      not null comment '完成比例（%）',
-    dist_type         tinyint        default 0           not null comment '类型：0-员工正常/1-员工降档/2-领导兜底/3-公司留存/4-其他金额',
+    dist_type         tinyint        default 0           not null comment '类型：0-员工正常/1-员工降档/2-（v0.4 废弃）/3-公司留存（不生成行）/4-离职兜底',
     is_active         tinyint        default 1           not null comment '下单时成员是否在职（0-离职/1-在职）',
     amount            decimal(20, 2) default 0.00        not null comment '分配金额（元）',
     created_time      datetime default CURRENT_TIMESTAMP not null comment '创建时间',

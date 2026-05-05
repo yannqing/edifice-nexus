@@ -55,11 +55,12 @@ const statusStyles: Record<string, string> = {
   草稿: "bg-slate-100 text-slate-500",
 };
 
-const statusFilterMap: Record<TabKey, number | undefined> = {
-  pending: 0,
-  passed: 3,
-  rejected: 2,
-  all: undefined,
+/** pending tab 同时包含 0-待审核 / 1-审核中；其余单选 */
+const statusFilterMap: Record<TabKey, { single?: number; multi?: number[] }> = {
+  pending: { multi: [0, 1] },
+  passed: { single: 3 },
+  rejected: { single: 2 },
+  all: {},
 };
 
 function getStatusLabel(status: number): string {
@@ -111,9 +112,11 @@ export default function InspectionApprovalPage() {
   const fetchList = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
+      const filter = statusFilterMap[activeTab];
       const res = await getMyInspectionList({
         inspectionFormCode: debouncedSearch || undefined,
-        inspectionFormStatus: statusFilterMap[activeTab],
+        inspectionFormStatus: filter.single,
+        inspectionFormStatuses: filter.multi,
         current: currentPage,
         pageSize: PAGE_SIZE,
       }, signal);
@@ -192,17 +195,22 @@ export default function InspectionApprovalPage() {
     }
   };
 
+  const pendingTotal =
+    (statistics?.pendingApproval ?? 0) + (statistics?.pendingFirstReview ?? 0);
+  const grandTotal =
+    pendingTotal + (statistics?.approved ?? 0) + (statistics?.rejected ?? 0);
+
   const tabs: { key: TabKey; label: string; count: number }[] = [
-    { key: "pending", label: "待审批", count: statistics?.pendingApproval ?? 0 },
+    { key: "pending", label: "待审批", count: pendingTotal },
     { key: "passed", label: "已通过", count: statistics?.approved ?? 0 },
     { key: "rejected", label: "已驳回", count: statistics?.rejected ?? 0 },
-    { key: "all", label: "全部", count: (statistics?.pendingApproval ?? 0) + (statistics?.pendingFirstReview ?? 0) + (statistics?.approved ?? 0) + (statistics?.rejected ?? 0) },
+    { key: "all", label: "全部", count: grandTotal },
   ];
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             验工审批
@@ -215,9 +223,10 @@ export default function InspectionApprovalPage() {
           variant="outline"
           className="flex items-center gap-2"
           onClick={() => {
+            const filter = statusFilterMap[activeTab];
             const url = getMyInspectionExportUrl({
               inspectionFormCode: debouncedSearch || undefined,
-              inspectionFormStatus: statusFilterMap[activeTab],
+              inspectionFormStatus: filter.single,
             });
             const token = getAccessToken();
             const separator = url.includes("?") ? "&" : "?";
@@ -229,7 +238,7 @@ export default function InspectionApprovalPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="glass-card p-4 rounded-xl">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-amber-100 text-amber-600 rounded-lg"><Clock className="w-5 h-5" /></div>
@@ -269,7 +278,7 @@ export default function InspectionApprovalPage() {
       </div>
 
       {/* Tabs + Search */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex bg-white rounded-xl p-1 shadow-sm border border-slate-100">
           {tabs.map((item) => (
             <button
@@ -295,7 +304,7 @@ export default function InspectionApprovalPage() {
             placeholder="搜索验工单号..."
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm w-full sm:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
       </div>
@@ -303,9 +312,59 @@ export default function InspectionApprovalPage() {
       {/* Loading */}
       {loading && <TablePageSkeleton columns={4} rows={5} />}
 
-      {/* Table */}
+      {/* Mobile card list（md 以下） */}
       {!loading && inspections.length > 0 && (
-        <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+        <div className="md:hidden space-y-3">
+          {inspections.map((item) => {
+            const statusLabel = getStatusLabel(item.inspectionFormStatus);
+            const phaseAmount = item.contractAmount && item.stageOutput
+              ? (item.contractAmount * item.stageOutput) / 100
+              : 0;
+            return (
+              <button
+                key={item.inspectionFormId}
+                onClick={() => openDetail(item.inspectionFormId)}
+                className="w-full glass-card rounded-2xl shadow-sm p-4 text-left space-y-2 active:scale-[0.99] transition-transform"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-800 truncate">
+                      {item.projectName || "-"}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">{item.inspectionFormCode}</p>
+                  </div>
+                  <Badge
+                    variant="secondary"
+                    className={cn("text-xs font-medium shrink-0", statusStyles[statusLabel] ?? "")}
+                  >
+                    {statusLabel}
+                  </Badge>
+                </div>
+                <div className="text-xs text-slate-500 space-y-0.5">
+                  <p>阶段：{item.stageName || "-"}</p>
+                  {phaseAmount > 0 && (
+                    <p>阶段产值：<span className="font-semibold text-slate-700">{formatAmount(phaseAmount)}</span></p>
+                  )}
+                  <p>
+                    {item.applyUserName || "-"} · {formatDate(item.createdTime)}
+                  </p>
+                </div>
+                {(item.inspectionFormStatus === 0 || item.inspectionFormStatus === 1) && (
+                  <div className="flex justify-end pt-2 border-t border-slate-100">
+                    <span className="px-3 py-1.5 text-xs text-white font-medium bg-blue-600 rounded-lg">
+                      审批
+                    </span>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Desktop Table（md 以上） */}
+      {!loading && inspections.length > 0 && (
+        <div className="hidden md:block glass-card rounded-2xl shadow-sm overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-50/50">
               <tr className="text-slate-500 text-xs uppercase tracking-wider">
@@ -399,7 +458,7 @@ export default function InspectionApprovalPage() {
 
       {/* Pagination */}
       {!loading && total > 0 && (
-        <div className="flex justify-between items-center pt-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center pt-2">
           <p className="text-sm text-slate-500">
             共 <span className="font-semibold text-slate-800">{total}</span> 条记录
           </p>

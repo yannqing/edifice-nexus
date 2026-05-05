@@ -219,9 +219,9 @@ export default function CollectionPage() {
   ];
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             回款管理
@@ -239,7 +239,7 @@ export default function CollectionPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {statCards.map((stat) => (
           <div key={stat.label} className="glass-card rounded-2xl p-5 shadow-sm">
             <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-3", stat.bgColor)}>
@@ -277,7 +277,7 @@ export default function CollectionPage() {
               placeholder="搜索项目名称或编号..."
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
@@ -286,7 +286,7 @@ export default function CollectionPage() {
       {loading && <TablePageSkeleton columns={4} rows={5} />}
 
       {!loading && items.length > 0 && (
-        <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+        <div className="glass-card rounded-2xl shadow-sm overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
@@ -359,7 +359,7 @@ export default function CollectionPage() {
       )}
 
       {!loading && total > 0 && (
-        <div className="flex justify-between items-center pt-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center pt-2">
           <p className="text-sm text-slate-500">
             共 <span className="font-semibold text-slate-800">{total}</span> 个项目
           </p>
@@ -424,7 +424,7 @@ export default function CollectionPage() {
 
               {!detailLoading && detail && (
                 <>
-                  <div className="grid grid-cols-4 gap-4 mb-6">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <div className="bg-slate-50 rounded-xl p-4">
                       <p className="text-slate-500 text-sm">合同金额</p>
                       <p className="text-xl font-bold text-slate-800 mt-1">

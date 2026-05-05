@@ -175,7 +175,7 @@ export default function DashboardPage() {
               </div>
               <div className="space-y-4">
                 {data.topProjects.map((p) => (
-                  <div key={p.projectId} className="flex items-center gap-4">
+                  <div key={p.projectId} className="flex flex-wrap items-center gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm font-medium text-slate-800 truncate">{p.projectName}</span>
@@ -502,7 +502,7 @@ function CreateAnnouncementDialog({
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">优先级</label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {[
                 { value: 0, label: "普通", color: "bg-slate-500" },
                 { value: 1, label: "重要", color: "bg-amber-500" },

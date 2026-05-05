@@ -53,6 +53,8 @@ export interface GetInspectionListParams {
   inspectionFormCode?: string;
   projectId?: string;
   inspectionFormStatus?: number;
+  /** 状态白名单（组合筛选，如 [0,1] 表示"未处理"） */
+  inspectionFormStatuses?: number[];
   current?: number;
   pageSize?: number;
 }

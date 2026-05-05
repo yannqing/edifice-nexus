@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Users,
   FileText,
@@ -10,6 +10,11 @@ import {
   Loader2,
   Play,
   RotateCcw,
+  ExternalLink,
+  FolderPlus,
+  Paperclip,
+  TrendingUp,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DialogSkeleton } from "@/components/ui/skeleton";
@@ -24,13 +29,20 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getProjectDetail, startStages, restartStage } from "@/services/project";
+import { getProjectFileList } from "@/services/project-file";
+import { getBenefitHistory } from "@/services/contract-benefit";
+import type { ContractBenefitRevisionVo } from "@/types/contract-benefit";
+import { ReviseBenefitDialog } from "@/components/contract-benefit/revise-benefit-dialog";
 import { ResponseCode } from "@/types/api";
 import type { ProjectDetailVo } from "@/types/project";
 import {
   PROJECT_STATUS_MAP,
   STAGE_COMPLETED_STATUSES,
 } from "@/types/project";
+import type { ProjectFileVo } from "@/types/project-file";
+import { PROJECT_FILE_STATUS_MAP } from "@/types/project-file";
 import type { ProjectStatus, ProjectCategory } from "@/types";
+import { UploadProjectFileDialog } from "@/components/project-file/upload-project-file-dialog";
 
 const statusStyles: Record<ProjectStatus, string> = {
   进行中: "bg-blue-100 text-blue-600",
@@ -227,6 +239,124 @@ export function ProjectDetailDialog({
   );
 }
 
+/** 项目文件 section：列出归档文件 + 顶部上传按钮 */
+function ProjectFilesSection({
+  projectId,
+  projectName,
+}: {
+  projectId: string;
+  projectName: string;
+}) {
+  const [items, setItems] = useState<ProjectFileVo[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await getProjectFileList({ projectId });
+      if (res.code === ResponseCode.SUCCESS) {
+        setItems(res.data ?? []);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+          <Paperclip className="w-4 h-4 text-slate-400" /> 项目文件
+          <span className="text-xs font-normal text-slate-400 ml-1">
+            {items.length}
+          </span>
+        </h4>
+        <Button
+          className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+          onClick={() => setUploadOpen(true)}
+        >
+          <FolderPlus className="w-3 h-3 mr-1" /> 上传文件
+        </Button>
+      </div>
+
+      {loading ? (
+        <p className="text-xs text-slate-400 text-center py-4">加载中...</p>
+      ) : items.length === 0 ? (
+        <p className="text-xs text-slate-400 text-center py-4 bg-slate-50 rounded-lg">
+          暂无文件，点击右上角"上传文件"开始
+        </p>
+      ) : (
+        <div className="space-y-1.5 max-h-64 overflow-y-auto">
+          {items.map((f) => (
+            <ProjectFileRow key={f.projectFileId} file={f} />
+          ))}
+        </div>
+      )}
+
+      <UploadProjectFileDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        lockedProjectId={projectId}
+        lockedProjectName={projectName}
+        onSuccess={fetchData}
+      />
+    </section>
+  );
+}
+
+function ProjectFileRow({ file }: { file: ProjectFileVo }) {
+  const statusStyle =
+    file.approvalStatus === 2
+      ? "bg-emerald-100 text-emerald-600"
+      : file.approvalStatus === 3
+        ? "bg-rose-100 text-rose-600"
+        : file.approvalStatus === 1
+          ? "bg-amber-100 text-amber-600"
+          : "bg-slate-100 text-slate-500";
+
+  return (
+    <div className="flex items-center gap-3 py-2 px-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
+      <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="text-sm text-slate-700 font-medium truncate">
+            {file.fileName ?? "(未命名)"}
+          </p>
+          {file.fileCategory && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-white text-slate-500 border border-slate-200">
+              {file.fileCategory}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-slate-400 truncate">
+          {file.uploadUserName ?? "-"}
+          {file.stageName && <> · {file.stageName}</>}
+          {file.createdTime && <> · {file.createdTime.replace("T", " ").slice(0, 16)}</>}
+        </p>
+      </div>
+      <span className={cn("text-xs px-2 py-0.5 rounded-full", statusStyle)}>
+        {PROJECT_FILE_STATUS_MAP[file.approvalStatus] ?? "-"}
+      </span>
+      {file.fileUrl && (
+        <a
+          href={file.fileUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="text-slate-400 hover:text-blue-500"
+          title="打开文件"
+        >
+          <ExternalLink className="w-4 h-4" />
+        </a>
+      )}
+    </div>
+  );
+}
+
 /** 详情内容 */
 function ProjectDetailContent({
   detail,
@@ -281,7 +411,7 @@ function ProjectDetailContent({
           <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 mb-3">
             <Info className="w-4 h-4 text-slate-400" /> 基本信息
           </h4>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <InfoItem label="项目编码" value={detail.projectCode} />
             <InfoItem label="项目状态" value={statusLabel} />
             <InfoItem label="开始日期" value={formatDate(startDate)} />
@@ -295,7 +425,7 @@ function ProjectDetailContent({
             <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 mb-3">
               <Banknote className="w-4 h-4 text-slate-400" /> 合同信息
             </h4>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <InfoItem
                 label="合同金额"
                 value={formatAmount(contract.contractAmount)}
@@ -321,6 +451,11 @@ function ProjectDetailContent({
               )}
             </div>
           </section>
+        )}
+
+        {/* v0.4 效益管理（仅基本+效益类型显示） */}
+        {contract && contract.contractType === 1 && (
+          <ContractBenefitSection contract={contract} />
         )}
 
         {/* 阶段进度 */}
@@ -467,8 +602,134 @@ function ProjectDetailContent({
             </p>
           </section>
         )}
+
+        {/* 项目文件（审批归档） */}
+        <ProjectFilesSection
+          projectId={detail.projectId}
+          projectName={detail.projectName}
+        />
       </div>
     </>
+  );
+}
+
+/** v0.4：合同效益管理 Section（含修正历史 + 修正按钮） */
+function ContractBenefitSection({
+  contract,
+}: {
+  contract: NonNullable<ProjectDetailVo["contract"]>;
+}) {
+  const [history, setHistory] = useState<ContractBenefitRevisionVo[]>([]);
+  const [reviseOpen, setReviseOpen] = useState(false);
+
+  const fetchHistory = useCallback(async () => {
+    if (!contract.contractId) return;
+    const res = await getBenefitHistory(contract.contractId);
+    if (res.code === ResponseCode.SUCCESS) {
+      setHistory(res.data ?? []);
+    }
+  }, [contract.contractId]);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  const isFinal = contract.benefitStatus === 1;
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+          <TrendingUp className="w-4 h-4 text-slate-400" /> 效益管理
+          {isFinal && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-600 font-medium">
+              已结算锁定
+            </span>
+          )}
+        </h4>
+        {!isFinal && (
+          <Button
+            className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+            onClick={() => setReviseOpen(true)}
+          >
+            <Pencil className="w-3 h-3 mr-1" /> 效益修正
+          </Button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <div className="py-2 px-3 bg-blue-50 rounded-lg">
+          <p className="text-xs text-blue-500 mb-0.5">当前预计效益金额</p>
+          <p className="text-base font-bold text-blue-700">
+            ¥{(contract.benefitAmount ?? 0).toLocaleString()}
+          </p>
+        </div>
+        <div className="py-2 px-3 bg-slate-50 rounded-lg">
+          <p className="text-xs text-slate-400 mb-0.5">修正次数</p>
+          <p className="text-sm font-medium text-slate-700">{history.length} 次</p>
+        </div>
+      </div>
+
+      {/* 修正历史时间线 */}
+      {history.length > 0 ? (
+        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+          {history.map((h) => (
+            <div
+              key={h.revisionId}
+              className="text-xs flex items-start gap-2 py-1.5 px-3 bg-slate-50 rounded-lg"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-slate-700">
+                  {h.oldAmount != null ? (
+                    <>
+                      <span className="text-slate-500">
+                        ¥{h.oldAmount.toLocaleString()}
+                      </span>
+                      {" → "}
+                    </>
+                  ) : null}
+                  <span className="font-semibold">¥{h.newAmount.toLocaleString()}</span>
+                  {h.deltaAmount != null && (
+                    <span
+                      className={cn(
+                        "ml-1.5",
+                        h.deltaAmount >= 0 ? "text-emerald-600" : "text-rose-500",
+                      )}
+                    >
+                      ({h.deltaAmount >= 0 ? "+" : ""}
+                      {h.deltaAmount.toLocaleString()})
+                    </span>
+                  )}
+                  {h.isFinal === 1 && (
+                    <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-600">
+                      最终
+                    </span>
+                  )}
+                </p>
+                {h.revisionReason && (
+                  <p className="text-slate-400 mt-0.5">{h.revisionReason}</p>
+                )}
+                <p className="text-slate-400 mt-0.5">
+                  {h.operatorName ?? "-"} · {formatDate(h.createdTime)}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-400 text-center py-3 bg-slate-50 rounded-lg">
+          暂无修正记录
+        </p>
+      )}
+
+      <ReviseBenefitDialog
+        open={reviseOpen}
+        onOpenChange={setReviseOpen}
+        contractId={contract.contractId}
+        currentAmount={contract.benefitAmount}
+        onSuccess={fetchHistory}
+      />
+    </section>
   );
 }
 

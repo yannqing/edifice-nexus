@@ -125,8 +125,8 @@ export default function BidsPage() {
   }));
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex justify-between items-end">
+    <div className="p-4 md:p-8 space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">投标管理</h1>
           <p className="text-slate-500 text-sm mt-1">
@@ -145,7 +145,7 @@ export default function BidsPage() {
       </div>
 
       {/* 状态统计卡 */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {stats.map((s) => (
           <div key={s.value} className="glass-card p-4 rounded-xl">
             <div className="flex items-center gap-3">
@@ -213,7 +213,7 @@ export default function BidsPage() {
           placeholder="按名称 / 编号 / 甲方搜索..."
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
-          className="ml-auto px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white w-72"
+          className="ml-auto px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white w-full sm:w-72"
         />
       </div>
 
@@ -280,7 +280,7 @@ function ListView({
   }
 
   return (
-    <div className="glass-card rounded-2xl overflow-hidden">
+    <div className="glass-card rounded-2xl overflow-x-auto">
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
           <tr>
@@ -423,7 +423,7 @@ function BoardView({
   onStatus: (b: BidVo, target: number) => void;
 }) {
   return (
-    <div className="grid grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
       {BID_STATUS_OPTIONS.map((col) => {
         const colItems = items.filter((b) => b.bidStatus === col.value);
         return (

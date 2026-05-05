@@ -8,6 +8,7 @@
         <result column="project_id" property="projectId" jdbcType="VARCHAR"/>
         <result column="project_stage_id" property="projectStageId" jdbcType="BIGINT"/>
         <result column="file_id" property="fileId" jdbcType="BIGINT"/>
+        <result column="file_name" property="fileName" jdbcType="VARCHAR"/>
         <result column="upload_user_id" property="uploadUserId" jdbcType="BIGINT"/>
         <result column="file_category" property="fileCategory" jdbcType="VARCHAR"/>
         <result column="description" property="description" jdbcType="VARCHAR"/>
@@ -20,7 +21,7 @@
 
     <!-- 基础字段列表 -->
     <sql id="Base_Column_List">
-        project_file_id, project_id, project_stage_id, file_id,
+        project_file_id, project_id, project_stage_id, file_id, file_name,
         upload_user_id, file_category, description, approval_status, current_record_id,
         created_time, updated_time, is_delete
     </sql>

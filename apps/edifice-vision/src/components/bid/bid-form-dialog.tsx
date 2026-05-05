@@ -209,7 +209,7 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
         </DialogHeader>
 
         <div className="space-y-4 mt-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">
                 投标项目名称 *
@@ -271,7 +271,7 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
                 onChange={(e) => setClientName(e.target.value)}
               />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <label className="text-xs font-medium text-slate-600 mb-1 block">
                   投标日期

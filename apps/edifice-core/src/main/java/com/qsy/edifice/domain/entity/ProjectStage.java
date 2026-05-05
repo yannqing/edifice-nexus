@@ -49,10 +49,16 @@ public class ProjectStage implements Serializable {
     private Integer stageStatus;
 
     /**
-     * 阶段产值比例
+     * 基本部分累计计入比例（%，0-100；原"阶段产值比例"语义保留）
      */
     @TableField("stage_output")
     private BigDecimal stageOutput;
+
+    /**
+     * 效益部分累计计入比例（%，0-100；v0.4 新增，仅 contract_type=1 时使用）
+     */
+    @TableField("benefit_inclusion_ratio")
+    private BigDecimal benefitInclusionRatio;
 
     /**
      * 创建时间

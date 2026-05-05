@@ -15,6 +15,7 @@ import {
   ChevronRight,
   FolderOpen,
   Loader2,
+  Paperclip,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -217,9 +218,9 @@ export default function MyProjectsPage() {
   ];
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             我的项目
@@ -228,7 +229,7 @@ export default function MyProjectsPage() {
             管理您参与的所有项目，跟踪项目进度与验工状态。
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <Button
             variant="outline"
             className="flex items-center gap-2"
@@ -258,7 +259,7 @@ export default function MyProjectsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex bg-white rounded-xl p-1 shadow-sm border border-slate-100">
           {filters.map((item) => (
             <button
@@ -293,7 +294,7 @@ export default function MyProjectsPage() {
             placeholder="搜索项目名称或编号..."
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
       </div>
@@ -390,6 +391,13 @@ export default function MyProjectsPage() {
                         : "-"}
                     </p>
                   </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400">项目文件</p>
+                    <p className="text-sm font-semibold text-slate-700 flex items-center justify-end gap-1">
+                      <Paperclip className="w-3 h-3 text-slate-400" />
+                      {project.fileCount ?? 0}
+                    </p>
+                  </div>
                 </div>
 
                 {/* Date & Members */}
@@ -481,7 +489,7 @@ export default function MyProjectsPage() {
 
       {/* Pagination */}
       {!loading && total > 0 && (
-        <div className="flex justify-between items-center pt-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center pt-4">
           <p className="text-sm text-slate-500">
             共{" "}
             <span className="font-semibold text-slate-800">{total}</span>{" "}

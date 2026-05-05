@@ -41,11 +41,11 @@ function TablePageSkeleton({ columns = 5, rows = 5 }: { columns?: number; rows?:
       <div className="flex items-center gap-4">
         <Skeleton className="h-10 w-80 rounded-xl" />
         <div className="flex-1" />
-        <Skeleton className="h-10 w-72 rounded-xl" />
+        <Skeleton className="h-10 w-full sm:w-72 rounded-xl" />
       </div>
 
       {/* 表格骨架 */}
-      <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+      <div className="glass-card rounded-2xl shadow-sm overflow-x-auto">
         {/* 表头 */}
         <div className="bg-slate-50/50 px-6 py-4 flex gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -85,7 +85,7 @@ function CardPageSkeleton({ cards = 6 }: { cards?: number }) {
       <div className="flex items-center gap-4">
         <Skeleton className="h-10 w-96 rounded-xl" />
         <div className="flex-1" />
-        <Skeleton className="h-10 w-64 rounded-xl" />
+        <Skeleton className="h-10 w-full sm:w-64 rounded-xl" />
       </div>
 
       {/* 卡片网格骨架 */}
@@ -134,7 +134,7 @@ function DialogSkeleton() {
         <Skeleton className="h-5 w-48" />
         <Skeleton className="h-4 w-32" />
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="py-2 px-3 bg-slate-50 rounded-lg space-y-1.5">
             <Skeleton className="h-3 w-16" />

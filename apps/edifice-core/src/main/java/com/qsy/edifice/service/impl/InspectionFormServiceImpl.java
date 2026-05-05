@@ -117,7 +117,9 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         if (StringUtils.hasText(dto.getProjectId())) {
             wrapper.eq(InspectionForm::getProjectId, dto.getProjectId());
         }
-        if (dto.getInspectionFormStatus() != null) {
+        if (dto.getInspectionFormStatuses() != null && !dto.getInspectionFormStatuses().isEmpty()) {
+            wrapper.in(InspectionForm::getInspectionFormStatus, dto.getInspectionFormStatuses());
+        } else if (dto.getInspectionFormStatus() != null) {
             wrapper.eq(InspectionForm::getInspectionFormStatus, dto.getInspectionFormStatus());
         }
         if (dto.getApplyUserId() != null) {
@@ -248,17 +250,22 @@ public class InspectionFormServiceImpl implements InspectionFormService {
     // ==================== 统计总览 ====================
 
     @Override
-    public InspectionOverviewVo getInspectionOverview() {
+    public InspectionOverviewVo getInspectionOverview(Long applyUserId) {
         InspectionOverviewVo vo = new InspectionOverviewVo();
-        vo.setPendingApproval(inspectionFormMapper.selectCount(
-                new QueryWrapper<InspectionForm>().eq("inspection_form_status", 0)));
-        vo.setPendingFirstReview(inspectionFormMapper.selectCount(
-                new QueryWrapper<InspectionForm>().eq("inspection_form_status", 1)));
-        vo.setApproved(inspectionFormMapper.selectCount(
-                new QueryWrapper<InspectionForm>().eq("inspection_form_status", 3)));
-        vo.setRejected(inspectionFormMapper.selectCount(
-                new QueryWrapper<InspectionForm>().eq("inspection_form_status", 2)));
+        vo.setPendingApproval(countByStatus(0, applyUserId));
+        vo.setPendingFirstReview(countByStatus(1, applyUserId));
+        vo.setApproved(countByStatus(3, applyUserId));
+        vo.setRejected(countByStatus(2, applyUserId));
         return vo;
+    }
+
+    private long countByStatus(int status, Long applyUserId) {
+        QueryWrapper<InspectionForm> w = new QueryWrapper<>();
+        w.eq("inspection_form_status", status);
+        if (applyUserId != null) {
+            w.eq("apply_user_id", applyUserId);
+        }
+        return inspectionFormMapper.selectCount(w);
     }
 
     // ==================== 提交验工单 ====================

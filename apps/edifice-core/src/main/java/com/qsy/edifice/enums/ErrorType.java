@@ -64,6 +64,10 @@ public enum ErrorType implements BaseTypeInterface<Integer> {
     // ==================== 投标 ====================
     BID_NOT_FOUND(51101, "投标不存在！"),
     BID_STATUS_INVALID(51102, "投标当前状态不允许此操作！"),
+
+    // ==================== 合同效益修正（v0.4） ====================
+    BENEFIT_FINALIZED(51201, "合同效益已最终确认，不可再修改！"),
+    BENEFIT_AMOUNT_INVALID(51202, "效益金额非法（不能为负）！"),
     ;
     // 异常码
     private final Integer code;

@@ -69,6 +69,26 @@ public class OutputValue implements Serializable {
     @TableField("subsidy_amount")
     private BigDecimal subsidyAmount;
 
+    /** 当前阶段累计应得（含基本+效益），v0.4 新增 */
+    @TableField("stage_cumulative_amount")
+    private BigDecimal stageCumulativeAmount;
+
+    /** 上一次产值分配单的累计（用于计算本期产值），v0.4 新增 */
+    @TableField("previous_cumulative_amount")
+    private BigDecimal previousCumulativeAmount;
+
+    /** 本期基本部分，v0.4 新增 */
+    @TableField("base_amount_part")
+    private BigDecimal baseAmountPart;
+
+    /** 本期效益部分，v0.4 新增 */
+    @TableField("benefit_amount_part")
+    private BigDecimal benefitAmountPart;
+
+    /** 快照：本单创建时合同的预计效益值，v0.4 新增 */
+    @TableField("benefit_snapshot")
+    private BigDecimal benefitSnapshot;
+
     @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
 

@@ -95,8 +95,8 @@ export default function AcceptancePage() {
   };
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex justify-between items-end">
+    <div className="p-4 md:p-8 space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">验收管理</h1>
           <p className="text-slate-500 text-sm mt-1">
@@ -111,7 +111,7 @@ export default function AcceptancePage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatBox icon={<ClipboardCheck className="w-5 h-5" />} label="当前共" value={stats.total} tone="slate" />
         <StatBox icon={<Clock className="w-5 h-5" />} label="审批中" value={stats.inProgress} tone="amber" />
         <StatBox icon={<CheckCircle2 className="w-5 h-5" />} label="已通过" value={stats.approved} tone="emerald" />
@@ -172,7 +172,7 @@ export default function AcceptancePage() {
               placeholder="按标题 / 内容搜索..."
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              className="ml-auto px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white w-72"
+              className="ml-auto px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white w-full sm:w-72"
             />
           </>
         )}
@@ -191,7 +191,7 @@ export default function AcceptancePage() {
           </p>
         </div>
       ) : (
-        <div className="glass-card rounded-2xl overflow-hidden">
+        <div className="glass-card rounded-2xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
               <tr>

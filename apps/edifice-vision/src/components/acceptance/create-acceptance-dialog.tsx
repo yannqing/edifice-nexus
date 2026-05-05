@@ -154,7 +154,7 @@ export function CreateAcceptanceDialog({
         </DialogHeader>
 
         <div className="space-y-4 mt-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">类型</label>
               <select

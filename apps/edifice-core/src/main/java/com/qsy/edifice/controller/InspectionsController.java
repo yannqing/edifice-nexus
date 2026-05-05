@@ -59,9 +59,20 @@ public class InspectionsController {
     }
 
     @GetMapping("/my-list/statistic")
-    @Operation(summary = "验工单数据总览")
+    @Operation(summary = "我的验工单数据总览",
+            description = "仅统计当前登录用户提交的验工单，与 my-list 列表口径一致")
+    public BaseResponse<InspectionOverviewVo> getMyInspectionOverview(HttpServletRequest request)
+            throws JsonProcessingException {
+        String token = request.getHeader("token");
+        SysUser loginUser = jwtUtils.getUserFromToken(token);
+        InspectionOverviewVo result = inspectionFormService.getInspectionOverview(loginUser.getUserId());
+        return ResultUtils.success(Code.SUCCESS, result);
+    }
+
+    @GetMapping("/statistic")
+    @Operation(summary = "全局验工单数据总览", description = "全量统计，不按用户过滤")
     public BaseResponse<InspectionOverviewVo> getInspectionOverview() {
-        InspectionOverviewVo result = inspectionFormService.getInspectionOverview();
+        InspectionOverviewVo result = inspectionFormService.getInspectionOverview(null);
         return ResultUtils.success(Code.SUCCESS, result);
     }
 

@@ -104,6 +104,7 @@ export function EditProjectDialog({
             contractAmount: d.contract?.contractAmount,
             baseAmount: d.contract?.baseAmount,
             benefitRule: d.contract?.benefitRules,
+            // benefitAmount 故意不读：编辑项目不允许改预计效益，必须走"效益修正"流程
             preStartTime: d.contract?.preStartDate?.slice(0, 10) ?? d.preStartTime?.slice(0, 10),
             preEndTime: d.contract?.preEndDate?.slice(0, 10) ?? d.preEndTime?.slice(0, 10),
             projectCharges: chargeIds,
@@ -282,7 +283,7 @@ export function EditProjectDialog({
                   </select>
                 </FormField>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <FormField label="预计开始日期">
                     <input
                       type="date"
@@ -343,9 +344,16 @@ export function EditProjectDialog({
                         type="text"
                         value={form.benefitRule ?? ""}
                         onChange={(e) => updateField("benefitRule", e.target.value)}
+                        placeholder="自由文本说明，如：按审减额 5%"
                         className="form-input"
                       />
                     </FormField>
+                    {/* 预计效益金额必须走"效益修正"流程，保证审计留痕 */}
+                    <div className="md:col-span-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-700 leading-relaxed">
+                      <span className="font-medium">预计效益金额</span>不能在此修改。
+                      请到 <span className="font-medium">项目详情 → 效益管理 → 效益修正</span>
+                      ，每次调整都会留下修正历史（旧值 / 新值 / 原因 / 操作人 / 时间）。
+                    </div>
                   </>
                 )}
               </div>

@@ -178,14 +178,14 @@ export default function InspectionManagementPage() {
   ];
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">验工单管理</h1>
           <p className="text-slate-500 text-sm mt-1">管理所有验工单，发起新的阶段验收申请。</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <Button
             variant="outline"
             className="flex items-center gap-2"
@@ -211,7 +211,7 @@ export default function InspectionManagementPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <StatCard icon={<FileText className="w-5 h-5" />} label="验工单总数" value={allCount} color="slate" />
         <StatCard icon={<Clock className="w-5 h-5" />} label="审批中" value={statistics?.pendingApproval ?? 0} color="amber" />
         <StatCard icon={<CheckCircle className="w-5 h-5" />} label="已通过" value={statistics?.approved ?? 0} color="emerald" />
@@ -220,7 +220,7 @@ export default function InspectionManagementPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex bg-white rounded-xl p-1 shadow-sm border border-slate-100">
           {tabs.map((item) => (
             <button
@@ -247,7 +247,7 @@ export default function InspectionManagementPage() {
             placeholder="搜索验工单号..."
             value={searchText}
             onChange={(e) => setSearchText(e.target.value)}
-            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm w-full sm:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
       </div>
@@ -257,7 +257,7 @@ export default function InspectionManagementPage() {
 
       {/* Table */}
       {!loading && inspections.length > 0 && (
-        <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+        <div className="glass-card rounded-2xl shadow-sm overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-50/50">
               <tr className="text-slate-500 text-xs uppercase tracking-wider">
@@ -340,7 +340,7 @@ export default function InspectionManagementPage() {
 
       {/* Pagination */}
       {!loading && total > 0 && (
-        <div className="flex justify-between items-center pt-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center pt-2">
           <p className="text-sm text-slate-500">
             共 <span className="font-semibold text-slate-800">{total}</span> 条记录
           </p>

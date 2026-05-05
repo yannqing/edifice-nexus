@@ -79,10 +79,22 @@ public class Contract implements Serializable {
     private BigDecimal baseAmount;
 
     /**
-     * 效益收益规则
+     * 效益收益规则（自由文本说明，不参与计算）
      */
     @TableField("benefit_rules")
     private String benefitRules;
+
+    /**
+     * 当前预计效益金额（v0.4：分阶段计入产值，随效益修正而更新）
+     */
+    @TableField("benefit_amount")
+    private BigDecimal benefitAmount;
+
+    /**
+     * 效益状态：0-预计中 / 1-已最终确认（结算后不可改）
+     */
+    @TableField("benefit_status")
+    private Integer benefitStatus;
 
     /**
      * 项目签订日期

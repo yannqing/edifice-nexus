@@ -215,9 +215,9 @@ export default function AllProjectsPage() {
   };
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             全部项目
@@ -226,7 +226,7 @@ export default function AllProjectsPage() {
             管理系统内所有项目，查看项目状态与进度。
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <Button
             variant="outline"
             className="flex items-center gap-2"
@@ -253,7 +253,7 @@ export default function AllProjectsPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="glass-card p-4 rounded-xl">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-slate-100 text-slate-600 rounded-lg">
@@ -325,7 +325,7 @@ export default function AllProjectsPage() {
 
       {/* Filters */}
       <div className="glass-card rounded-2xl p-4 shadow-sm">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -404,7 +404,7 @@ export default function AllProjectsPage() {
 
       {/* Projects Table */}
       {!loading && projects.length > 0 && (
-        <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+        <div className="glass-card rounded-2xl shadow-sm overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-50/50">
               <tr className="text-slate-500 text-xs uppercase tracking-wider">
@@ -613,7 +613,7 @@ export default function AllProjectsPage() {
 
       {/* Pagination */}
       {!loading && total > 0 && (
-        <div className="flex justify-between items-center pt-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center pt-2">
           <p className="text-sm text-slate-500">
             共{" "}
             <span className="font-semibold text-slate-800">{total}</span>{" "}

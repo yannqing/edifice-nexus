@@ -47,6 +47,7 @@ const initialForm: CreateProjectParams = {
   contractAmount: 0,
   baseAmount: 0,
   benefitRule: "",
+  benefitAmount: undefined,
   projectCharges: [],
   projectMembers: [],
   signingTime: "",
@@ -307,7 +308,7 @@ export function CreateProjectDialog({
               </select>
             </FormField>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormField label="预计开始日期">
                 <input
                   type="date"
@@ -385,12 +386,27 @@ export function CreateProjectDialog({
                     min={0}
                   />
                 </FormField>
+                <FormField label="预计效益金额（元）">
+                  <input
+                    type="number"
+                    value={form.benefitAmount ?? ""}
+                    onChange={(e) =>
+                      updateField(
+                        "benefitAmount",
+                        e.target.value === "" ? undefined : Number(e.target.value),
+                      )
+                    }
+                    placeholder="如审减额 5%，预估 20 万则填 200000"
+                    className="form-input"
+                    min={0}
+                  />
+                </FormField>
                 <FormField label="效益规则">
                   <input
                     type="text"
                     value={form.benefitRule ?? ""}
                     onChange={(e) => updateField("benefitRule", e.target.value)}
-                    placeholder="请输入效益规则说明"
+                    placeholder="如：按审减额 5%（自由文本说明）"
                     className="form-input"
                   />
                 </FormField>

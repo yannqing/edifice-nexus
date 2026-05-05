@@ -51,8 +51,8 @@ export default function PersonnelQuarterSummaryPage() {
   const totalDownGrade = totalAlloc - totalActual;
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex justify-between items-end">
+    <div className="p-4 md:p-8 space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             人员分配汇总表（季度）
@@ -87,7 +87,7 @@ export default function PersonnelQuarterSummaryPage() {
         <TablePageSkeleton columns={6} rows={6} />
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Summary
               icon={<Users className="w-5 h-5" />}
               label="参与人数"
@@ -108,7 +108,7 @@ export default function PersonnelQuarterSummaryPage() {
             />
           </div>
 
-          <div className="glass-card rounded-2xl overflow-hidden">
+          <div className="glass-card rounded-2xl overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
                 <tr>
@@ -183,7 +183,8 @@ export default function PersonnelQuarterSummaryPage() {
             </table>
           </div>
           <p className="text-xs text-slate-400">
-            说明：领导兜底 / 公司分成 暂为 0 占位，等 LEADER / FINANCE 角色体系上线后按角色归集。
+            说明：v0.4 起领导分成不再单独区分，所有非员工实得（降档差额 / 离职兜底 / 公司主体 60%）统一归公司账；
+            "领导兜底" / "公司分成" 列保留 0 仅作历史兼容。
           </p>
         </>
       )}

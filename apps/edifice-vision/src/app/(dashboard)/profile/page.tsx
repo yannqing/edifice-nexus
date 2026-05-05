@@ -117,9 +117,9 @@ export default function ProfilePage() {
   const displayName = profile?.realName || profile?.username || "用户";
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">个人中心</h1>
           <p className="text-slate-500 text-sm mt-1">查看并维护您的个人资料</p>

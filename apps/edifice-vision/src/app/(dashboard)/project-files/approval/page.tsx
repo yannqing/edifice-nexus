@@ -7,7 +7,6 @@ import {
   ExternalLink,
   FileText,
   Inbox,
-  Plus,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,7 +21,6 @@ import {
 } from "@/services/project-file";
 import type { ProjectFileVo } from "@/types/project-file";
 import { PROJECT_FILE_STATUS_MAP } from "@/types/project-file";
-import { UploadProjectFileDialog } from "@/components/project-file/upload-project-file-dialog";
 import { ApproveProjectFileDialog } from "@/components/project-file/approve-project-file-dialog";
 
 type Tab = "pending" | "all" | "mine";
@@ -52,7 +50,6 @@ export default function ProjectFilesApprovalPage() {
   const [tab, setTab] = useState<Tab>("pending");
   const [items, setItems] = useState<ProjectFileVo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [approveOpen, setApproveOpen] = useState(false);
   const [current, setCurrent] = useState<ProjectFileVo | null>(null);
   const [keyword, setKeyword] = useState("");
@@ -96,25 +93,19 @@ export default function ProjectFilesApprovalPage() {
   };
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex justify-between items-end">
+    <div className="p-4 md:p-8 space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             项目文件审批
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            三级审批：项目负责人 → 专业主管 → 总工。
+            三级审批：项目负责人 → 专业主管 → 总工。新增上传请到"项目详情 → 项目文件"。
           </p>
         </div>
-        <Button
-          className="bg-blue-600 hover:bg-blue-700 text-white"
-          onClick={() => setUploadOpen(true)}
-        >
-          <Plus className="w-4 h-4 mr-1" /> 上传文件
-        </Button>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatBox
           icon={<Inbox className="w-5 h-5" />}
           label="当前共"
@@ -141,7 +132,7 @@ export default function ProjectFilesApprovalPage() {
         />
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex bg-white rounded-xl p-1 shadow-sm border border-slate-100">
           {(
             [
@@ -170,7 +161,7 @@ export default function ProjectFilesApprovalPage() {
             placeholder="按分类 / 说明搜索..."
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            className="ml-auto px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white w-72"
+            className="ml-auto px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white w-full sm:w-72"
           />
         )}
       </div>
@@ -186,7 +177,7 @@ export default function ProjectFilesApprovalPage() {
           <p className="text-sm text-slate-500">当前筛选条件下没有数据</p>
         </div>
       ) : (
-        <div className="glass-card rounded-2xl overflow-hidden">
+        <div className="glass-card rounded-2xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
               <tr>
@@ -271,11 +262,6 @@ export default function ProjectFilesApprovalPage() {
         </div>
       )}
 
-      <UploadProjectFileDialog
-        open={uploadOpen}
-        onOpenChange={setUploadOpen}
-        onSuccess={fetchData}
-      />
       <ApproveProjectFileDialog
         open={approveOpen}
         onOpenChange={setApproveOpen}

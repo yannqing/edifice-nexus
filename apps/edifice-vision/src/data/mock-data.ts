@@ -215,7 +215,6 @@ export const navigationConfig: NavSection[] = [
         label: "验工审批",
         icon: "ClipboardCheck",
         href: "/inspection-approval",
-        badge: 3,
       },
       {
         id: "timesheet",

@@ -137,8 +137,8 @@ export default function PerformanceRestorePage() {
   const restored = rows.filter((r) => r.status === 1);
 
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex justify-between items-end">
+    <div className="p-4 md:p-8 space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">绩效还原</h1>
           <p className="text-slate-500 text-sm mt-1">
@@ -180,7 +180,7 @@ export default function PerformanceRestorePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard
           icon={<RefreshCcw className="w-5 h-5" />}
           label={`${quarter} 记录数`}
@@ -233,7 +233,7 @@ export default function PerformanceRestorePage() {
       {loading ? (
         <TablePageSkeleton columns={6} rows={6} />
       ) : (
-        <div className="glass-card rounded-2xl overflow-hidden">
+        <div className="glass-card rounded-2xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
               <tr>

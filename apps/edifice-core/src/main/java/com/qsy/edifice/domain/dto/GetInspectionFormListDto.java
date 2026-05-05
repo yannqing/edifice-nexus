@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -50,6 +51,12 @@ public class GetInspectionFormListDto {
      */
     @Schema(description = "验工单状态：0-待审核/1-审核中/2-已驳回/3-已通过/4-草稿", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     private Integer inspectionFormStatus;
+
+    /**
+     * 状态白名单（用于"未处理" = 0 + 1 这种组合筛选）；与 inspectionFormStatus 同时传时优先生效
+     */
+    @Schema(description = "状态白名单，如 [0,1]")
+    private List<Integer> inspectionFormStatuses;
 
     /**
      * 当前页

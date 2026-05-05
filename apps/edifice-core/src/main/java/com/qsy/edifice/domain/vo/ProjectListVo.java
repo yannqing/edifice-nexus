@@ -84,6 +84,11 @@ public class ProjectListVo implements Serializable {
      */
     private LocalDateTime preEndTime;
 
+    /**
+     * 项目文件数量（project_files）
+     */
+    private Integer fileCount;
+
     public static ProjectListVo objToVo(Project project) {
         if(project == null){
             throw new BusinessException(ErrorType.ARGS_NOT_NULL);

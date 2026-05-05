@@ -186,6 +186,29 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
         return toVos(approvalRecordsMapper.selectList(w));
     }
 
+    @Override
+    public Map<String, Long> countPendingByApprover(Long approverId) {
+        Map<String, Long> result = new LinkedHashMap<>();
+        for (ApprovalBizType bt : ApprovalBizType.values()) {
+            result.put(bt.getExt(), 0L);
+        }
+        if (approverId == null) return result;
+
+        LambdaQueryWrapper<ApprovalRecords> w = new LambdaQueryWrapper<>();
+        w.eq(ApprovalRecords::getApprover, approverId)
+                .eq(ApprovalRecords::getInspectionFormStatus, STATUS_PENDING);
+        List<ApprovalRecords> rows = approvalRecordsMapper.selectList(w);
+        for (ApprovalRecords r : rows) {
+            String key = r.getBizTypeExt();
+            if (key == null) {
+                ApprovalBizType bt = ApprovalBizType.fromCode(r.getApprovalRecordType());
+                if (bt != null) key = bt.getExt();
+            }
+            if (key != null) result.merge(key, 1L, Long::sum);
+        }
+        return result;
+    }
+
     // ==================== VO 转换 ====================
 
     private List<ApprovalRecordVo> toVos(List<ApprovalRecords> list) {

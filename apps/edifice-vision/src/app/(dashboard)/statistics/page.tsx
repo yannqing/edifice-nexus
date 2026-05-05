@@ -62,7 +62,7 @@ export default function StatisticsPage() {
   };
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">统计报表</h1>
         <p className="text-slate-500 text-sm mt-1">全面分析项目产值、回款、人员绩效等核心数据。</p>
@@ -73,7 +73,7 @@ export default function StatisticsPage() {
       {!loading && (
         <>
           {/* Overview Stats */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[
               { label: "项目总数", value: String(overview?.totalProjects ?? 0), icon: Layers, color: "text-blue-600", bg: "bg-blue-50" },
               { label: "合同总额", value: formatAmount(overview?.totalContractAmount ?? 0), icon: FileText, color: "text-purple-600", bg: "bg-purple-50" },
@@ -107,7 +107,7 @@ export default function StatisticsPage() {
 
           {/* Project Stats */}
           {activeReport === "project" && (
-            <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+            <div className="glass-card rounded-2xl shadow-sm overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-slate-50/50">
                   <tr className="text-slate-500 text-xs uppercase tracking-wider">
@@ -148,7 +148,7 @@ export default function StatisticsPage() {
             <div className="glass-card rounded-2xl p-6 shadow-sm">
               <div className="space-y-4">
                 {categoryData.map((c) => (
-                  <div key={c.category} className="flex items-center gap-4">
+                  <div key={c.category} className="flex flex-wrap items-center gap-3">
                     <div className="w-16 text-sm font-medium text-slate-700">{c.category}</div>
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-1">
@@ -176,7 +176,7 @@ export default function StatisticsPage() {
 
           {/* Personnel Ranking */}
           {activeReport === "personnel" && (
-            <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+            <div className="glass-card rounded-2xl shadow-sm overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-slate-50/50">
                   <tr className="text-slate-500 text-xs uppercase tracking-wider">

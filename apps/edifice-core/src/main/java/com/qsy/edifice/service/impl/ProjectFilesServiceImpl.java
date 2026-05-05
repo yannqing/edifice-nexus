@@ -101,8 +101,8 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createAndSubmit(CreateProjectFileDto dto, Long uploadUserId) {
-        if (dto.getProjectId() == null || dto.getProjectStageId() == null || dto.getFileId() == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目 / 阶段 / 文件不能为空");
+        if (dto.getProjectId() == null || dto.getFileId() == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目 / 文件不能为空");
         }
         if (filesMapper.selectById(dto.getFileId()) == null) {
             throw new BusinessException(ErrorType.FILE_NOT_FOUND);
@@ -121,6 +121,7 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
                 .projectId(String.valueOf(dto.getProjectId()))
                 .projectStageId(dto.getProjectStageId())
                 .fileId(dto.getFileId())
+                .fileName(dto.getFileName())
                 .uploadUserId(uploadUserId)
                 .fileCategory(dto.getFileCategory())
                 .description(dto.getDescription())
@@ -262,7 +263,7 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
                     .projectStageId(e.getProjectStageId())
                     .stageName(s == null ? null : s.getStageName())
                     .fileId(e.getFileId())
-                    .fileName(f == null ? null : (f.getDisplayName() != null ? f.getDisplayName() : f.getFileName()))
+                    .fileName(resolveDisplayName(e, f))
                     .fileUrl(f == null ? null : f.getFileUrl())
                     .fileExtension(f == null ? null : f.getFileExtension())
                     .fileSize(f == null || f.getFileSize() == null ? null : String.valueOf(f.getFileSize()))
@@ -299,5 +300,18 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
     private Long parseProjectIdSafe(String s) {
         if (s == null || s.isBlank()) return null;
         try { return Long.parseLong(s); } catch (NumberFormatException e) { return null; }
+    }
+
+    /**
+     * 展示名优先级：用户填写的 project_files.file_name →
+     * 物理文件 files.display_name → 物理文件 files.file_name。
+     */
+    private String resolveDisplayName(ProjectFiles pf, Files f) {
+        if (pf != null && pf.getFileName() != null && !pf.getFileName().isBlank()) {
+            return pf.getFileName();
+        }
+        if (f == null) return null;
+        if (f.getDisplayName() != null) return f.getDisplayName();
+        return f.getFileName();
     }
 }

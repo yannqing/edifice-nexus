@@ -55,10 +55,16 @@ public class CreateProjectDto {
     private BigDecimal baseAmount;
 
     /**
-     * 效益规则
+     * 效益规则（自由文本说明）
      */
-    @Schema(description = "效益规则")
+    @Schema(description = "效益规则（自由文本说明）")
     private String benefitRule;
+
+    /**
+     * 预计效益金额（v0.4 新增；仅 contractType=1 有意义）
+     */
+    @Schema(description = "预计效益金额（元，仅基本+效益类型生效）")
+    private BigDecimal benefitAmount;
 
     /**
      * 合同主文件id（通过文件上传接口获取）

@@ -10,6 +10,8 @@ import com.qsy.edifice.domain.entity.*;
 import com.qsy.edifice.domain.vo.*;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
+import com.qsy.edifice.mapper.ContractBenefitRevisionMapper;
+import com.qsy.edifice.mapper.ProjectFilesMapper;
 import com.qsy.edifice.mapper.ProjectMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
 import com.qsy.edifice.service.*;
@@ -57,6 +59,12 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Resource
     private SysUserMapper sysUserMapper;
+
+    @Resource
+    private ProjectFilesMapper projectFilesMapper;
+
+    @Resource
+    private ContractBenefitRevisionMapper contractBenefitRevisionMapper;
 
     @Override
     public Project getProjectById(Long projectId) {
@@ -127,6 +135,8 @@ public class ProjectServiceImpl implements ProjectService {
         projectMapper.updateById(project);
 
         // 2. 更新合同信息
+        // v0.4：benefitAmount 不在此处更新——必须走"效益修正"流程（写 revision 历史）；
+        //        即使前端绕过 UI 传了 benefitAmount，也会在这里被忽略。
         if (dto.getContractType() != null || dto.getContractAmount() != null
                 || dto.getBaseAmount() != null || dto.getBenefitRule() != null) {
             Contract contract = contractService.getContractByProjectId(dto.getProjectId());
@@ -139,6 +149,10 @@ public class ProjectServiceImpl implements ProjectService {
                 if (dto.getPreEndTime() != null) contract.setPreEndDate(dto.getPreEndTime());
                 contractService.updateContract(contract);
             }
+        }
+        if (dto.getBenefitAmount() != null) {
+            log.warn("UpdateProjectFull 收到 benefitAmount={} 但已忽略；请走效益修正接口",
+                    dto.getBenefitAmount());
         }
 
         // 3. 更新成员（diff 式：仅删除变更的、只插入新增的、角色变化的则更新）
@@ -250,6 +264,7 @@ public class ProjectServiceImpl implements ProjectService {
         List<ProjectListVo> voList = page.getRecords().stream()
                 .map(this::convertToListVo)
                 .collect(Collectors.toList());
+        fillFileCounts(voList);
 
         voPage.setRecords(voList);
         return voPage;
@@ -316,12 +331,28 @@ public class ProjectServiceImpl implements ProjectService {
                 .contractOtherFiles(otherFilesJson)
                 .baseAmount(dto.getBaseAmount())
                 .benefitRules(dto.getBenefitRule())
+                .benefitAmount(dto.getBenefitAmount())
+                .benefitStatus(0)
                 .signingDate(dto.getSigningTime())
                 .preStartDate(dto.getPreStartTime())
                 .preEndDate(dto.getPreEndTime())
                 .build();
         contract.setProjectId(projectId);
         contractService.saveContract(contract);
+
+        // 4.1 v0.4：如填了预计效益金额，自动写一条"首次录入"的修正历史，保持审计纯净
+        if (dto.getBenefitAmount() != null && dto.getBenefitAmount().signum() >= 0) {
+            ContractBenefitRevision firstRev = ContractBenefitRevision.builder()
+                    .contractId(contract.getContractId())
+                    .oldAmount(null)
+                    .newAmount(dto.getBenefitAmount())
+                    .deltaAmount(null)
+                    .revisionReason("项目创建时首次录入")
+                    .isFinal(0)
+                    .operatorId(userId)
+                    .build();
+            contractBenefitRevisionMapper.insert(firstRev);
+        }
 
         // 5. 插入阶段（根据项目类型从模板生成）
         List<ProjectStageTemplate> templates = projectStageTemplateService.getEnabledByProjectTypeId(dto.getProjectType());
@@ -426,6 +457,7 @@ public class ProjectServiceImpl implements ProjectService {
         List<ProjectListVo> voList = page.getRecords().stream()
                 .map(this::convertToListVo)
                 .collect(Collectors.toList());
+        fillFileCounts(voList);
 
         voPage.setRecords(voList);
         return voPage;
@@ -499,6 +531,35 @@ public class ProjectServiceImpl implements ProjectService {
         }
         Project project = projectMapper.selectById(projectId);
         return project != null;
+    }
+
+    /**
+     * 批量填充 VO 的 fileCount：一次 SQL 取出所有相关项目的文件数。
+     */
+    private void fillFileCounts(List<ProjectListVo> list) {
+        if (list == null || list.isEmpty()) return;
+        Set<String> projectIdStrs = list.stream()
+                .map(vo -> vo.getProjectId() == null ? null : String.valueOf(vo.getProjectId()))
+                .filter(s -> s != null && !s.isBlank())
+                .collect(Collectors.toSet());
+        if (projectIdStrs.isEmpty()) {
+            list.forEach(vo -> vo.setFileCount(0));
+            return;
+        }
+        // project_files.project_id 是 varchar(64) 遗留列，这里按字符串查
+        LambdaQueryWrapper<ProjectFiles> w = new LambdaQueryWrapper<>();
+        w.in(ProjectFiles::getProjectId, projectIdStrs);
+        List<ProjectFiles> rows = projectFilesMapper.selectList(w);
+        Map<Long, Integer> countMap = new java.util.HashMap<>();
+        for (ProjectFiles pf : rows) {
+            if (pf.getProjectId() == null) continue;
+            try {
+                Long pid = Long.parseLong(pf.getProjectId());
+                countMap.merge(pid, 1, Integer::sum);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        list.forEach(vo -> vo.setFileCount(countMap.getOrDefault(vo.getProjectId(), 0)));
     }
 
     /**

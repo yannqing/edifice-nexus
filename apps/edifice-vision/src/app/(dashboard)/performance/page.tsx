@@ -110,10 +110,10 @@ export default function PerformancePage() {
   ] : [];
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Header with user info */}
       <div className="glass-card rounded-2xl p-6 shadow-sm">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-2xl font-bold text-blue-600">
             {(user?.realName ?? user?.username ?? "U").charAt(0)}
           </div>
@@ -133,7 +133,7 @@ export default function PerformancePage() {
       {!loading && (
         <>
           {/* Stats Cards */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard icon={<Banknote className="w-5 h-5" />} label="已发放产值" value={formatAmount(perf?.paidOutputValue ?? 0)} color="emerald" />
             <StatCard icon={<Briefcase className="w-5 h-5" />} label="参与项目" value={`${perf?.projectCount ?? 0} 个`} color="blue" />
             <StatCard icon={<Clock className="w-5 h-5" />} label="累计工时" value={`${perf?.totalHours ?? 0}h`} color="amber" />
@@ -205,7 +205,7 @@ export default function PerformancePage() {
 
           {/* Projects Tab */}
           {activeTab === "projects" && (
-            <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+            <div className="glass-card rounded-2xl shadow-sm overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-slate-50/50">
                   <tr className="text-slate-500 text-xs uppercase tracking-wider">
@@ -246,7 +246,7 @@ export default function PerformancePage() {
 
           {/* Payments Tab */}
           {activeTab === "payments" && (
-            <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+            <div className="glass-card rounded-2xl shadow-sm overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-slate-50/50">
                   <tr className="text-slate-500 text-xs uppercase tracking-wider">

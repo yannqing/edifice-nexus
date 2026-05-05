@@ -40,9 +40,10 @@ public interface InspectionFormService {
 
     /**
      * 验工单数据总览
+     * @param applyUserId 可空；非空时仅统计该用户提交的验工单
      * @return 统计数据
      */
-    InspectionOverviewVo getInspectionOverview();
+    InspectionOverviewVo getInspectionOverview(Long applyUserId);
 
     /**
      * 提交验工单

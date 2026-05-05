@@ -45,7 +45,8 @@ function forceLogout(msg: string): never {
 }
 
 type RequestOptions = Omit<RequestInit, "body"> & {
-  params?: Record<string, string>;
+  /** 查询参数；数组值会被拼成重复 key（Spring 可绑定到 List<T>） */
+  params?: Record<string, string | string[]>;
   body?: unknown;
   /** 业务 code != SUCCESS 时是否自动 toast.error(res.msg)。默认 true；调用方需要自行提示时可传 false。 */
   toastOnBizError?: boolean;
@@ -68,7 +69,14 @@ async function request<T>(
   // 构建完整 URL
   let fullUrl = `${BASE_URL}${url}`;
   if (params) {
-    const searchParams = new URLSearchParams(params);
+    const searchParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (Array.isArray(value)) {
+        for (const v of value) searchParams.append(key, v);
+      } else {
+        searchParams.append(key, value);
+      }
+    }
     fullUrl += `?${searchParams.toString()}`;
   }
 

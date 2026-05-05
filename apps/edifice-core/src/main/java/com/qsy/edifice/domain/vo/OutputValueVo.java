@@ -56,6 +56,23 @@ public class OutputValueVo implements Serializable {
     /** 公司补贴（只记录不计入产值） */
     private BigDecimal subsidyAmount;
 
+    // ==================== v0.4 阶段累计快照 ====================
+
+    /** 当前阶段累计应得（含基本+效益） */
+    private BigDecimal stageCumulativeAmount;
+
+    /** 上一次产值分配单的累计 */
+    private BigDecimal previousCumulativeAmount;
+
+    /** 本期基本部分 */
+    private BigDecimal baseAmountPart;
+
+    /** 本期效益部分 */
+    private BigDecimal benefitAmountPart;
+
+    /** 快照：本单创建时合同的预计效益值 */
+    private BigDecimal benefitSnapshot;
+
     /** 0-待确认/1-待审核/2-已审批/3-已发放 */
     private Integer status;
 

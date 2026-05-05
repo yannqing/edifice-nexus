@@ -162,14 +162,14 @@ export default function TimesheetPage() {
   })();
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">工时填报</h1>
           <p className="text-slate-500 text-sm mt-1">记录您在各项目上的工作时间，用于成本核算与绩效统计。</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <Button variant="outline" className="flex items-center gap-2">
             <Download className="w-4 h-4" /> 导出记录
           </Button>
@@ -185,7 +185,7 @@ export default function TimesheetPage() {
       {!loading && (
         <>
           {/* Stats */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard icon={<Clock className="w-5 h-5" />} label="本周总工时" value={`${stats?.totalHours ?? 0}h`} color="slate" />
             <StatCard icon={<Users className="w-5 h-5" />} label="管理工作" value={`${stats?.managementHours ?? 0}h`} color="blue" />
             <StatCard icon={<FileText className="w-5 h-5" />} label="基础工作" value={`${stats?.basicHours ?? 0}h`} color="emerald" />
@@ -195,7 +195,7 @@ export default function TimesheetPage() {
           {/* Week View */}
           <div className="glass-card rounded-2xl p-6 shadow-sm">
             <div className="flex justify-between items-center mb-6">
-              <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center gap-3">
                 <button onClick={() => goWeek(-1)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
                   <ChevronLeft className="w-5 h-5" />
                 </button>
@@ -263,7 +263,7 @@ export default function TimesheetPage() {
                           <p className="text-sm text-slate-500 truncate">{record.description}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex flex-wrap items-center gap-3">
                         <span className={cn("text-xs px-2 py-1 rounded-full font-medium", workTypeStyles[record.workType])}>
                           {WORK_TYPE_MAP[record.workType]}
                         </span>
@@ -512,7 +512,7 @@ function TimesheetFormDialog({ open, onOpenChange, editing, defaultDate, onSucce
             <label className="text-sm font-medium text-slate-700 mb-1.5 block">
               工作类型 <span className="text-rose-500">*</span>
             </label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {workTypes.map((type) => (
                 <label key={type.value} className="relative cursor-pointer">
                   <input type="radio" name="workType" value={type.value} checked={form.workType === type.value}

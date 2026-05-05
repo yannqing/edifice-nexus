@@ -7,6 +7,7 @@ import com.qsy.edifice.domain.vo.ApprovalRecordVo;
 import com.qsy.edifice.enums.ApprovalBizType;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 通用审批流服务（Phase 3 #1）
@@ -54,6 +55,12 @@ public interface ApprovalFlowService {
      * 查询某审批人待办，可按业务类型过滤。
      */
     List<ApprovalRecordVo> listPendingByApprover(Long approverId, ApprovalBizType bizType);
+
+    /**
+     * 查询某审批人在各业务类型下的待办数量。
+     * 返回以 {@link ApprovalBizType#getExt()} 为 key 的计数表，未出现的类型视为 0。
+     */
+    Map<String, Long> countPendingByApprover(Long approverId);
 
     /**
      * 审批操作返回结果（业务侧据此判断是否需要更新主表状态）。

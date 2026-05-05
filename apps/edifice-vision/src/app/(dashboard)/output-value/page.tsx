@@ -125,9 +125,9 @@ export default function OutputValuePage() {
   ];
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">产值分配</h1>
           <p className="text-slate-500 text-sm mt-1">
@@ -153,7 +153,7 @@ export default function OutputValuePage() {
       {!loading && (
         <>
           {/* Stats */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard icon={<Clock className="w-5 h-5" />} label="待处理" value={stats?.pendingCount ?? 0} color="amber" />
             <StatCard icon={<CheckCircle className="w-5 h-5" />} label="已审批待发放" value={stats?.approvedCount ?? 0} color="blue" />
             <StatCard icon={<Banknote className="w-5 h-5" />} label="已发放产值" value={formatAmount(stats?.paidAmount ?? 0)} color="emerald" />
@@ -161,7 +161,7 @@ export default function OutputValuePage() {
           </div>
 
           {/* Tabs + Search */}
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="flex bg-white rounded-xl p-1 shadow-sm border border-slate-100">
               {tabs.map((item) => (
                 <button key={item.key} onClick={() => setActiveTab(item.key)}
@@ -178,7 +178,7 @@ export default function OutputValuePage() {
             <div className="flex-1" />
             <input type="text" placeholder="搜索项目名称或编码..." value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
-              className="pl-4 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+              className="pl-4 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm w-full sm:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
           </div>
 
           {/* List */}
@@ -189,7 +189,7 @@ export default function OutputValuePage() {
                 const isExpanded = expandedId === item.outputValueId;
 
                 return (
-                  <div key={item.outputValueId} className="glass-card rounded-2xl shadow-sm overflow-hidden">
+                  <div key={item.outputValueId} className="glass-card rounded-2xl shadow-sm overflow-x-auto">
                     <button onClick={() => setExpandedId(isExpanded ? null : item.outputValueId)}
                       className="w-full flex items-center gap-4 p-5 text-left hover:bg-slate-50/50 transition-colors">
                       <div className="flex-1 min-w-0">
@@ -222,13 +222,23 @@ export default function OutputValuePage() {
 
                     {isExpanded && (
                       <div className="px-5 pb-5 border-t border-slate-100">
-                        {/* 派生金额卡片 */}
-                        <div className="grid grid-cols-4 gap-3 mt-4 text-xs">
-                          <BreakdownBox label="公司留存 (40%)" value={item.companyReserve ?? 0} tone="slate" />
-                          <BreakdownBox label="领导兜底" value={item.leaderExtra ?? 0} tone="amber" />
-                          <BreakdownBox label="其他金额（离职）" value={item.otherAmount ?? 0} tone="rose" />
+                        {/* 派生金额卡片（v0.4） */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-xs">
+                          <BreakdownBox label="公司账 (60% + 转入)" value={item.companyReserve ?? 0} tone="slate" />
+                          <BreakdownBox label="离职兜底（独立记账）" value={item.otherAmount ?? 0} tone="rose" />
                           <BreakdownBox label="公司补贴" value={item.subsidyAmount ?? 0} tone="blue" />
+                          <BreakdownBox label="本期效益部分" value={item.benefitAmountPart ?? 0} tone="amber" />
                         </div>
+                        {item.stageCumulativeAmount != null && (
+                          <p className="text-xs text-slate-400 mt-2">
+                            阶段累计应得 ¥{(item.stageCumulativeAmount ?? 0).toLocaleString()}
+                            （上次累计 ¥{(item.previousCumulativeAmount ?? 0).toLocaleString()}）
+                            · 基本部分 ¥{(item.baseAmountPart ?? 0).toLocaleString()}
+                            {item.benefitSnapshot != null && (
+                              <> · 创建时效益值 ¥{(item.benefitSnapshot ?? 0).toLocaleString()}</>
+                            )}
+                          </p>
+                        )}
 
                         <table className="w-full mt-4">
                           <thead>

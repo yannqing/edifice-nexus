@@ -26,6 +26,9 @@ public class CreateProjectFileDto {
     @Schema(description = "文件id（来自 /file/upload）", requiredMode = Schema.RequiredMode.REQUIRED)
     private Long fileId;
 
+    @Schema(description = "用户填写的文件名称（展示名）")
+    private String fileName;
+
     @Schema(description = "文件分类：图纸/合同/报告/其他")
     private String fileCategory;
 

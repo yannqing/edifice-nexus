@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -30,6 +31,19 @@ import { toast } from "sonner";
 import { navigationConfig } from "@/data/mock-data";
 import { useAuth } from "@/store/auth-context";
 import { post } from "@/lib/request";
+import { getMyPendingCounts } from "@/services/approval-flow";
+import { ResponseCode } from "@/types/api";
+
+/**
+ * 侧边栏 item.id -> 业务类型 ext 的映射。
+ * 未列入的 item 不显示审批 badge。
+ */
+const ITEM_BIZ_TYPE: Record<string, string> = {
+  "inspection-approval": "inspection",
+  "project-files-approval": "file",
+  acceptance: "acceptance",
+  bids: "bid",
+};
 
 // Icon mapping
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -52,10 +66,43 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Target,
 };
 
-export function Sidebar() {
+interface SidebarProps {
+  /** 移动端抽屉是否展开 */
+  mobileOpen?: boolean;
+  /** 关闭抽屉回调 */
+  onMobileClose?: () => void;
+}
+
+export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+
+  const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
+
+  const fetchPendingCounts = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const res = await getMyPendingCounts(signal);
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setPendingCounts(res.data);
+      }
+    } catch {
+      // 静默
+    }
+  }, []);
+
+  // 挂载 + 路由切换时刷新（路由切换往往意味着刚完成了一次审批 / 上传）
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchPendingCounts(controller.signal);
+    return () => controller.abort();
+  }, [fetchPendingCounts, pathname]);
+
+  // 路由切换时自动关闭移动抽屉
+  useEffect(() => {
+    onMobileClose?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   const handleLogout = async () => {
     try {
@@ -69,7 +116,25 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen overflow-hidden">
+    <>
+      {/* 移动端遮罩 */}
+      {mobileOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={onMobileClose}
+          aria-hidden="true"
+        />
+      )}
+      <aside
+        className={cn(
+          "w-full sm:w-64 bg-white border-r border-slate-200 flex flex-col",
+          // mobile: 固定定位抽屉
+          "fixed inset-y-0 left-0 z-50 h-screen overflow-hidden transition-transform",
+          // desktop: 回到 sticky 流内布局
+          "md:sticky md:top-0 md:translate-x-0 md:z-0",
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        )}
+      >
       {/* Logo */}
       <div className="flex-shrink-0 p-6 flex items-center gap-3">
         <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">
@@ -121,14 +186,20 @@ export function Sidebar() {
                     >
                       {item.label}
                     </span>
-                    {item.badge && (
-                      <Badge
-                        variant="secondary"
-                        className="ml-auto text-xs bg-rose-100 text-rose-600 hover:bg-rose-100"
-                      >
-                        {item.badge}
-                      </Badge>
-                    )}
+                    {(() => {
+                      const bizType = ITEM_BIZ_TYPE[item.id];
+                      const dynamicBadge = bizType ? pendingCounts[bizType] ?? 0 : 0;
+                      const badgeValue = dynamicBadge > 0 ? dynamicBadge : item.badge;
+                      if (!badgeValue) return null;
+                      return (
+                        <Badge
+                          variant="secondary"
+                          className="ml-auto text-xs bg-rose-100 text-rose-600 hover:bg-rose-100"
+                        >
+                          {badgeValue}
+                        </Badge>
+                      );
+                    })()}
                   </Link>
                 );
               })}
@@ -169,6 +240,7 @@ export function Sidebar() {
           </button>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }

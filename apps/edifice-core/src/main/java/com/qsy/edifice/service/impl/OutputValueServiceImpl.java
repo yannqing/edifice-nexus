@@ -23,16 +23,22 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * 产值分配服务实现（v0.2）
+ * 产值分配服务实现（v0.4）
  *
- * 核心公式：
- *   companyReserve = totalAmount × 40%
- *   personalPool   = totalAmount × 60%
- *   planned_i      = personalPool × allocRatio_i / 100
- *   actual_i       = planned_i × completionRatio_i / 100       （在职员工）
- *   leaderExtra   += planned_i - actual_i                      （降档差额）
- *   otherAmount   += planned_i                                 （离职成员未发）
- * 守恒：companyReserve + Σ actual + leaderExtra + otherAmount = totalAmount
+ * 核心公式（v0.4 修订）：
+ *   阶段累计应得 = contract.base_amount × stage.stage_output / 100
+ *               + contract.benefit_amount × stage.benefit_inclusion_ratio / 100
+ *   本期 totalAmount = 当前阶段累计 - 历史最大累计（自动多退少补）
+ *
+ *   employeePool   = totalAmount × 40%      （员工池）
+ *   companyAccount = totalAmount × 60%      （公司账主体）
+ *   planned_i      = employeePool × allocRatio_i / 100
+ *   actual_i       = planned_i × completionRatio_i / 100  （在职员工）
+ *   降档差额（planned_i - actual_i） → 公司账
+ *   离职成员 planned_i → 公司账（独立记 other_amount，但实际归公司）
+ *
+ * 守恒：Σ actual + companyReserve = totalAmount
+ *   其中 companyReserve = 60% 主体 + 降档差额 + 离职兜底
  */
 @Slf4j
 @Service
@@ -40,10 +46,10 @@ public class OutputValueServiceImpl implements OutputValueService {
 
     private static final Long ROLE_MANAGER_ID = 101L;
 
-    /** 公司留存比例（%） */
-    private static final BigDecimal COMPANY_RESERVE_RATE = new BigDecimal("40");
-    /** 个人池比例（%） */
-    private static final BigDecimal PERSONAL_POOL_RATE = new BigDecimal("60");
+    /** 公司账比例（%）— v0.4 修订：60% */
+    private static final BigDecimal COMPANY_RESERVE_RATE = new BigDecimal("60");
+    /** 员工池比例（%）— v0.4 修订：40% */
+    private static final BigDecimal PERSONAL_POOL_RATE = new BigDecimal("40");
     private static final BigDecimal BD_100 = new BigDecimal("100");
     /** 守恒校验容差（元），避免 BigDecimal 舍入带来的微分误差误报 */
     private static final BigDecimal INVARIANT_TOLERANCE = new BigDecimal("0.05");
@@ -76,6 +82,9 @@ public class OutputValueServiceImpl implements OutputValueService {
     @Resource
     private SysUserMapper sysUserMapper;
 
+    @Resource
+    private ContractService contractService;
+
     // ==================== 查询 ====================
 
     @Override
@@ -90,16 +99,13 @@ public class OutputValueServiceImpl implements OutputValueService {
         return list.stream().map(this::convertToVo).collect(Collectors.toList());
     }
 
-    // ==================== 创建（v0.2 新公式） ====================
+    // ==================== 创建（v0.4） ====================
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createOutputValue(CreateOutputValueDto dto, Long userId) {
         if (dto.getProjectId() == null || dto.getProjectStageId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择项目和阶段");
-        }
-        if (dto.getTotalAmount() == null || dto.getTotalAmount().signum() <= 0) {
-            throw new BusinessException(ErrorType.ARGS_INVALID, "产值总额必须大于 0");
         }
         if (dto.getDistributions() == null || dto.getDistributions().isEmpty()) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请添加至少一条分配明细");
@@ -108,13 +114,29 @@ public class OutputValueServiceImpl implements OutputValueService {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择所属季度");
         }
 
-        BigDecimal total = dto.getTotalAmount().setScale(2, RoundingMode.HALF_UP);
-        BigDecimal companyReserve = total.multiply(COMPANY_RESERVE_RATE)
+        // 1. 系统自动算 totalAmount（合同 + 阶段比例 + 历史最大累计）
+        StageCumulativeResult cumulative = calcStageCumulative(dto.getProjectId(), dto.getProjectStageId());
+        BigDecimal total = cumulative.current.subtract(cumulative.previous)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        if (total.signum() == 0) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED,
+                    "本阶段累计应得（" + cumulative.current + "）等于上一次累计（"
+                            + cumulative.previous + "），无新增产值");
+        }
+        if (total.signum() < 0 && !Boolean.TRUE.equals(dto.getAllowNegative())) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED,
+                    "效益值下调导致本期产值为负 " + total + "（当前累计 " + cumulative.current
+                            + "，历史累计 " + cumulative.previous + "），如确认请勾选'允许负产值'");
+        }
+
+        // 2. v0.4 比例：员工 40% / 公司 60%
+        BigDecimal employeePool = total.multiply(PERSONAL_POOL_RATE)
                 .divide(BD_100, 2, RoundingMode.HALF_UP);
-        BigDecimal personalPool = total.multiply(PERSONAL_POOL_RATE)
+        BigDecimal companyMain = total.multiply(COMPANY_RESERVE_RATE)
                 .divide(BD_100, 2, RoundingMode.HALF_UP);
 
-        // 校验分配比例合计 ≈ 100
+        // 3. 校验分配比例合计 ≈ 100
         BigDecimal sumAllocRatio = dto.getDistributions().stream()
                 .map(i -> i.getAllocRatio() == null ? BigDecimal.ZERO : i.getAllocRatio())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -123,9 +145,9 @@ public class OutputValueServiceImpl implements OutputValueService {
                     "分配比例合计应为 100%，当前为 " + sumAllocRatio.stripTrailingZeros().toPlainString() + "%");
         }
 
-        // 逐条计算并构建分配明细
-        BigDecimal leaderExtra = BigDecimal.ZERO;
-        BigDecimal otherAmount = BigDecimal.ZERO;
+        // 4. 逐条计算分配明细
+        BigDecimal downgradeDelta = BigDecimal.ZERO;  // 降档差额（→ 公司账）
+        BigDecimal otherAmount = BigDecimal.ZERO;     // 离职兜底（→ 公司账，独立记账）
         List<OutputValueDistribution> distEntities = new ArrayList<>();
 
         for (int i = 0; i < dto.getDistributions().size(); i++) {
@@ -145,28 +167,25 @@ public class OutputValueServiceImpl implements OutputValueService {
                 throw new BusinessException(ErrorType.ARGS_INVALID, "第 " + rowNum + " 行完成比例应在 0-100 之间");
             }
 
-            // 在职快照：优先 DTO，其次查用户表
             int isActive = resolveIsActive(item.getUserId(), item.getIsActive());
 
-            BigDecimal planned = personalPool.multiply(alloc)
+            // 注意：负 total 会让 planned 也是负；按比例计算自然成立
+            BigDecimal planned = employeePool.multiply(alloc)
                     .divide(BD_100, 2, RoundingMode.HALF_UP);
 
             int distType;
             BigDecimal actualAmount;
 
             if (isActive == 0) {
-                // 离职：应得全部归"其他金额"
                 distType = DIST_TYPE_OTHER;
                 actualAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
                 otherAmount = otherAmount.add(planned);
             } else if (completion.compareTo(BD_100) < 0) {
-                // 降档：实得 = planned × completion%，差额归领导
                 distType = DIST_TYPE_DOWNGRADE;
                 actualAmount = planned.multiply(completion)
                         .divide(BD_100, 2, RoundingMode.HALF_UP);
-                leaderExtra = leaderExtra.add(planned.subtract(actualAmount));
+                downgradeDelta = downgradeDelta.add(planned.subtract(actualAmount));
             } else {
-                // 正常全额
                 distType = DIST_TYPE_NORMAL;
                 actualAmount = planned;
             }
@@ -174,7 +193,7 @@ public class OutputValueServiceImpl implements OutputValueService {
             distEntities.add(OutputValueDistribution.builder()
                     .userId(item.getUserId())
                     .workType(item.getWorkType() != null ? item.getWorkType() : 1)
-                    .ratio(alloc)            // 兼容旧字段：沿用 allocRatio 值
+                    .ratio(alloc)
                     .allocRatio(alloc)
                     .completionRatio(completion)
                     .distType(distType)
@@ -183,31 +202,39 @@ public class OutputValueServiceImpl implements OutputValueService {
                     .build());
         }
 
-        // 守恒校验：companyReserve + Σ actual + leaderExtra + otherAmount ≈ total
-        BigDecimal sumPersonal = distEntities.stream()
+        // 5. 公司账（v0.4）= 60% 主体 + 降档差额 + 离职兜底
+        BigDecimal companyReserve = companyMain.add(downgradeDelta).add(otherAmount);
+
+        // 6. 守恒校验：Σ actual + companyReserve ≈ total
+        BigDecimal sumActual = distEntities.stream()
                 .map(OutputValueDistribution::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal sum = companyReserve.add(sumPersonal).add(leaderExtra).add(otherAmount);
+        BigDecimal sum = companyReserve.add(sumActual);
         if (sum.subtract(total).abs().compareTo(INVARIANT_TOLERANCE) > 0) {
             throw new BusinessException(ErrorType.OPERATION_FAILED,
-                    "金额守恒失败：公司留存 " + companyReserve + " + 员工实得 " + sumPersonal
-                            + " + 领导兜底 " + leaderExtra + " + 其他 " + otherAmount
-                            + " = " + sum + "，应为 " + total);
+                    "金额守恒失败：公司账 " + companyReserve + "（60% 主体 " + companyMain
+                            + " + 降档差额 " + downgradeDelta + " + 离职兜底 " + otherAmount
+                            + "）+ 员工实得 " + sumActual + " = " + sum + "，应为 " + total);
         }
 
-        // 保存
+        // 7. 保存
         OutputValue ov = OutputValue.builder()
                 .projectId(dto.getProjectId())
                 .projectStageId(dto.getProjectStageId())
                 .quarter(dto.getQuarter().trim())
                 .totalAmount(total)
                 .companyReserve(companyReserve)
-                .leaderExtra(leaderExtra)
+                .leaderExtra(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
                 .otherAmount(otherAmount)
                 .subsidyAmount(dto.getSubsidyAmount() != null
                         ? dto.getSubsidyAmount().setScale(2, RoundingMode.HALF_UP)
-                        : BigDecimal.ZERO)
-                .status(0) // 待确认
+                        : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                .stageCumulativeAmount(cumulative.current)
+                .previousCumulativeAmount(cumulative.previous)
+                .baseAmountPart(cumulative.basePart)
+                .benefitAmountPart(cumulative.benefitPart)
+                .benefitSnapshot(cumulative.benefitAmountUsed)
+                .status(0)
                 .submitUserId(userId)
                 .submitTime(LocalDateTime.now())
                 .build();
@@ -218,11 +245,71 @@ public class OutputValueServiceImpl implements OutputValueService {
             distributionMapper.insert(d);
         }
 
-        log.info("创建产值分配单 id={} 季度={} 合计={} 公司留存={} 员工实得={} 领导兜底={} 其他={}",
-                ov.getOutputValueId(), ov.getQuarter(), total, companyReserve, sumPersonal, leaderExtra, otherAmount);
+        log.info("[v0.4] 创建产值分配单 id={} 季度={} total={}（基本{} + 效益{}） 累计 {}→{} 公司账={} 员工实得={}",
+                ov.getOutputValueId(), ov.getQuarter(), total,
+                cumulative.basePart, cumulative.benefitPart,
+                cumulative.previous, cumulative.current,
+                companyReserve, sumActual);
 
         return ov.getOutputValueId();
     }
+
+    /**
+     * 计算指定阶段的累计应得（基本+效益）和历史最大累计。
+     */
+    private StageCumulativeResult calcStageCumulative(Long projectId, Long stageId) {
+        ProjectStage stage = projectStageService.getProjectStageById(stageId);
+        if (stage == null || !projectId.equals(stage.getProjectId())) {
+            throw new BusinessException(ErrorType.STAGE_NOT_FOUND);
+        }
+        Contract contract = contractService.getContractByProjectId(projectId);
+        if (contract == null) {
+            throw new BusinessException(ErrorType.CONTRACT_NOT_FOUND);
+        }
+
+        // 基本部分基数：base_amount 优先；老数据兜底到 contract_amount
+        BigDecimal baseAmt = contract.getBaseAmount() != null
+                ? contract.getBaseAmount()
+                : (contract.getContractAmount() != null
+                    ? contract.getContractAmount() : BigDecimal.ZERO);
+        BigDecimal benefitAmt = contract.getBenefitAmount() != null
+                ? contract.getBenefitAmount() : BigDecimal.ZERO;
+
+        BigDecimal baseRatio = stage.getStageOutput() != null
+                ? stage.getStageOutput() : BigDecimal.ZERO;
+        BigDecimal benefitRatio = stage.getBenefitInclusionRatio() != null
+                ? stage.getBenefitInclusionRatio() : BigDecimal.ZERO;
+
+        BigDecimal basePart = baseAmt.multiply(baseRatio)
+                .divide(BD_100, 2, RoundingMode.HALF_UP);
+        BigDecimal benefitPart = benefitAmt.multiply(benefitRatio)
+                .divide(BD_100, 2, RoundingMode.HALF_UP);
+        BigDecimal currentCumulative = basePart.add(benefitPart);
+
+        // 历史最大累计：取该项目所有 status>=0 的产值分配单的最大 stage_cumulative_amount
+        // （包括草稿/审核中，避免重复计入）
+        LambdaQueryWrapper<OutputValue> w = new LambdaQueryWrapper<>();
+        w.eq(OutputValue::getProjectId, projectId)
+                .isNotNull(OutputValue::getStageCumulativeAmount);
+        List<OutputValue> historicalOvs = outputValueMapper.selectList(w);
+        BigDecimal previousCumulative = historicalOvs.stream()
+                .map(OutputValue::getStageCumulativeAmount)
+                .filter(Objects::nonNull)
+                .max(BigDecimal::compareTo)
+                .orElse(BigDecimal.ZERO);
+
+        return new StageCumulativeResult(currentCumulative, previousCumulative,
+                basePart, benefitPart, benefitAmt);
+    }
+
+    /** 阶段累计计算结果 */
+    private record StageCumulativeResult(
+            BigDecimal current,
+            BigDecimal previous,
+            BigDecimal basePart,
+            BigDecimal benefitPart,
+            BigDecimal benefitAmountUsed
+    ) {}
 
     /** 在职状态：优先 DTO 传入，其次查 sys_user.employment_status，默认 1（在职） */
     private int resolveIsActive(Long userId, Integer override) {
@@ -305,6 +392,11 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setLeaderExtra(ov.getLeaderExtra());
         vo.setOtherAmount(ov.getOtherAmount());
         vo.setSubsidyAmount(ov.getSubsidyAmount());
+        vo.setStageCumulativeAmount(ov.getStageCumulativeAmount());
+        vo.setPreviousCumulativeAmount(ov.getPreviousCumulativeAmount());
+        vo.setBaseAmountPart(ov.getBaseAmountPart());
+        vo.setBenefitAmountPart(ov.getBenefitAmountPart());
+        vo.setBenefitSnapshot(ov.getBenefitSnapshot());
         vo.setStatus(ov.getStatus());
         vo.setSubmitTime(ov.getSubmitTime());
         vo.setApprovedTime(ov.getApprovedTime());

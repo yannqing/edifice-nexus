@@ -22,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 通用审批流（Phase 3 #1）
@@ -111,5 +112,16 @@ public class ApprovalFlowController {
         }
         return ResultUtils.success(Code.SUCCESS,
                 approvalFlowService.listPendingByApprover(loginUser.getUserId(), bt));
+    }
+
+    @GetMapping("/my-pending-counts")
+    @Operation(summary = "我的待审批计数（按业务类型分桶）",
+            description = "返回以 ext 为 key（file/inspection/bid/acceptance/output/timesheet）的待办数；用于侧边栏 badge")
+    public BaseResponse<Map<String, Long>> myPendingCounts(HttpServletRequest request)
+            throws JsonProcessingException {
+        String token = request.getHeader("token");
+        SysUser loginUser = jwtUtils.getUserFromToken(token);
+        return ResultUtils.success(Code.SUCCESS,
+                approvalFlowService.countPendingByApprover(loginUser.getUserId()));
     }
 }

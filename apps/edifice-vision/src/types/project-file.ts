@@ -28,8 +28,11 @@ export interface ProjectFileVo {
 
 export interface CreateProjectFileParams {
   projectId: string;
-  projectStageId: string;
+  /** 选填：哪个阶段的文件 */
+  projectStageId?: string;
   fileId: string;
+  /** 用户填写的文件名称（展示名） */
+  fileName?: string;
   fileCategory?: string;
   description?: string;
   /** 一级审批人（项目负责人）；缺省后端按 ProjectMember ROLE_MANAGER 自动选取 */

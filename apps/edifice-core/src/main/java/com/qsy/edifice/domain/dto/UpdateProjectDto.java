@@ -67,10 +67,16 @@ public class UpdateProjectDto {
     private BigDecimal baseAmount;
 
     /**
-     * 效益规则
+     * 效益规则（自由文本说明）
      */
-    @Schema(description = "效益规则")
+    @Schema(description = "效益规则（自由文本说明）")
     private String benefitRule;
+
+    /**
+     * 预计效益金额（v0.4 新增；仅 contractType=1 有意义）
+     */
+    @Schema(description = "预计效益金额（元）")
+    private BigDecimal benefitAmount;
 
     /**
      * 预计开始日期

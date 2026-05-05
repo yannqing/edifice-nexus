@@ -137,16 +137,16 @@ export default function UserManagementPage() {
   ];
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">用户管理</h1>
           <p className="text-slate-500 text-sm mt-1">
             管理系统用户，维护花名册信息（新建默认初始密码 12345678）
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <Button
             variant="outline"
             onClick={() => setImportOpen(true)}
@@ -164,7 +164,7 @@ export default function UserManagementPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex bg-white rounded-xl p-1 shadow-sm border border-slate-100">
           {tabs.map((item) => (
             <button
@@ -195,7 +195,7 @@ export default function UserManagementPage() {
       {loading && <TablePageSkeleton columns={5} rows={5} />}
 
       {!loading && items.length > 0 && (
-        <div className="glass-card rounded-2xl shadow-sm overflow-hidden">
+        <div className="glass-card rounded-2xl shadow-sm overflow-x-auto">
           <table className="w-full">
             <thead className="bg-slate-50/50">
               <tr className="text-slate-500 text-xs uppercase tracking-wider">
@@ -298,7 +298,7 @@ export default function UserManagementPage() {
       )}
 
       {!loading && total > 0 && (
-        <div className="flex justify-between items-center pt-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center pt-2">
           <p className="text-sm text-slate-500">
             共 <span className="font-semibold text-slate-800">{total}</span> 条
           </p>

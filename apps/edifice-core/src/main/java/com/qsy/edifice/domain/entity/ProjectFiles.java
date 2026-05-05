@@ -45,6 +45,10 @@ public class ProjectFiles implements Serializable {
     @JsonSerialize(using = ToStringSerializer.class)
     private Long fileId;
 
+    /** 用户填写的文件名称（展示名） */
+    @TableField("file_name")
+    private String fileName;
+
     /** 上传人id */
     @TableField("upload_user_id")
     @JsonSerialize(using = ToStringSerializer.class)
