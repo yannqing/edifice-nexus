@@ -42,6 +42,15 @@ import {
 
 const PAGE_SIZE = 10;
 const PHASE2_TYPES = new Set(["general", "leave", "business_trip", "makeup_card", "outgoing", "probation", "resignation"]);
+const QUICK_APPLICATION_TYPES = [
+  { type: "leave", label: "请假" },
+  { type: "business_trip", label: "出差" },
+  { type: "makeup_card", label: "补卡" },
+  { type: "outgoing", label: "外出申请" },
+  { type: "probation", label: "转正申请" },
+  { type: "resignation", label: "离职" },
+  { type: "general", label: "通用审批" },
+];
 
 type StatusTab = "all" | "draft" | "approving" | "pending" | "done";
 type FieldDef = { key: string; label: string; type?: "text" | "number" | "date" | "datetime-local" | "textarea" | "select"; options?: string[] };
@@ -225,13 +234,18 @@ export default function OaApplicationsPage() {
     }
   };
 
-  const resetForm = () => {
+  const resetForm = (nextType = visibleTypes[0]?.type ?? "general") => {
     setTitle("");
     setPriority(0);
     setFirstApproverId("");
     setSubmitDescription("");
     setFieldValues({});
-    setApplicationType(visibleTypes[0]?.type ?? "general");
+    setApplicationType(nextType);
+  };
+
+  const openCreateDialog = (nextType = visibleTypes[0]?.type ?? "general") => {
+    resetForm(nextType);
+    setFormOpen(true);
   };
 
   const buildFormData = () => Object.fromEntries(
@@ -340,10 +354,29 @@ export default function OaApplicationsPage() {
             {actionLoading === "open-oa" ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUpRight className="w-4 h-4" />}
             OA 工作台
           </Button>
-          <Button onClick={() => setFormOpen(true)} className="bg-blue-600 hover:bg-blue-700">
+          <Button onClick={() => openCreateDialog()} className="bg-blue-600 hover:bg-blue-700">
             <Plus className="w-4 h-4" />
             新建申请
           </Button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-slate-800">快速发起</h2>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+          {QUICK_APPLICATION_TYPES.map((item) => (
+            <button
+              key={item.type}
+              type="button"
+              onClick={() => openCreateDialog(item.type)}
+              className="flex h-12 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 transition-colors hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            >
+              <Plus className="h-4 w-4" />
+              {item.label}
+            </button>
+          ))}
         </div>
       </div>
 
