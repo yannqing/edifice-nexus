@@ -199,104 +199,22 @@ public class SysUserServiceImpl implements SysUserService {
 
     @Override
     public boolean createUser(SysUserCreateDto sysUserCreateDto) {
-        if (sysUserCreateDto == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
-        }
-        String username = sysUserCreateDto.getUsername();
-        if (StringUtils.isEmpty(username)) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "用户名不能为空");
-        }
-
-        // 精确匹配用户名，防止重复
-        LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(SysUser::getUsername, username);
-        if (sysUserMapper.exists(wrapper)) {
-            throw new BusinessException(ErrorType.USER_ALREADY_EXISTS);
-        }
-
-        SysUser sysUser = SysUserCreateDto.dtoToObj(sysUserCreateDto);
-
-        // 初始密码，新增用户默认 12345678（后续走"首次登录强制改密"流程）
-        sysUser.setPassword(bCryptPasswordEncoder.encode("12345678"));
-        // 默认在职、账号启用
-        if (sysUser.getEmploymentStatus() == null) sysUser.setEmploymentStatus(1);
-        if (sysUser.getStatus() == null) sysUser.setStatus(1);
-
-        int count = sysUserMapper.insert(sysUser);
-        if (count > 0) {
-            oaUserSyncService.enqueueUpsert(sysUser);
-        }
-        return count > 0;
+        throw new BusinessException(ErrorType.OPERATION_FAILED, "员工主数据请在 OA 系统维护，edifice 会自动同步");
     }
 
     @Override
     public boolean updateUser(SysUserUpdateDto sysUserUpdateDto) {
-
-        //1. 参数校验
-        if (sysUserUpdateDto == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
-        }
-
-        //2. 获取参数并校验
-        Long userId = sysUserUpdateDto.getUserId();
-        if (userId == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
-        }
-
-        //3. 有效性校验
-        if (sysUserMapper.selectById(userId) == null) {
-            throw new BusinessException(ErrorType.USER_CANNOT_NULL);
-        }
-
-        //4. 数据转换
-        SysUser sysUser = SysUserUpdateDto.dtoToObj(sysUserUpdateDto);
-
-        //5. 更新操作
-        int count = sysUserMapper.updateById(sysUser);
-        if (count > 0) {
-            oaUserSyncService.enqueueUpsert(sysUserMapper.selectById(userId));
-        }
-
-        return count > 0;
+        throw new BusinessException(ErrorType.OPERATION_FAILED, "员工主数据请在 OA 系统维护，edifice 会自动同步");
     }
 
     @Override
     public boolean deleteUser(Integer id) {
-        //1. 空值校验
-        if (id == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
-        }
-
-        //2. 有效性校验
-        SysUser existing = sysUserMapper.selectById(id);
-        if (existing == null) {
-            throw new BusinessException(ErrorType.USER_CANNOT_NULL);
-        }
-
-        //3. 执行删除操作
-        int count = sysUserMapper.deleteById(id);
-        if (count > 0) {
-            oaUserSyncService.enqueueDelete(existing.getUserId());
-        }
-
-        return count > 0;
+        throw new BusinessException(ErrorType.OPERATION_FAILED, "员工主数据请在 OA 系统维护，edifice 会自动同步");
     }
 
     @Override
     public boolean deleteUserBath(List<Long> ids) {
-        //1. 空值校验
-        if (ids == null || ids.isEmpty()) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
-        }
-
-        //2. 执行删除操作
-        int count = sysUserMapper.deleteByIds(ids);
-        if (count > 0) {
-            ids.forEach(oaUserSyncService::enqueueDelete);
-        }
-
-        //3. 返回删除结果
-        return count > 0;
+        throw new BusinessException(ErrorType.OPERATION_FAILED, "员工主数据请在 OA 系统维护，edifice 会自动同步");
     }
 
     // ==================== 个人中心 ====================
