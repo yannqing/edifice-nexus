@@ -1,6 +1,7 @@
 package com.qsy.edifice.config;
 
 import com.qsy.edifice.common.Constant;
+import com.qsy.edifice.security.OaAwarePasswordEncoder;
 import com.qsy.edifice.security.filter.JwtAuthenticationTokenFilter;
 import com.qsy.edifice.security.handler.MyLoginFailureHandler;
 import com.qsy.edifice.security.handler.MyLoginSuccessHandler;
@@ -16,7 +17,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
@@ -97,8 +97,9 @@ public class SecurityConfig {
      * @return 返回 BCryptEncoder
      */
     @Bean
-    public PasswordEncoder passwordEncoder(){
-        return new BCryptPasswordEncoder();
+    public PasswordEncoder passwordEncoder(org.springframework.jdbc.core.JdbcTemplate jdbcTemplate,
+                                           OaUserSyncProperties oaUserSyncProperties){
+        return new OaAwarePasswordEncoder(jdbcTemplate, oaUserSyncProperties);
     }
 
 

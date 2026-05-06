@@ -36,6 +36,9 @@ public class SecurityUser implements UserDetails {
 
     @Override
     public String getPassword() {
+        if (sysUser.getOaAdminId() != null) {
+            return "{edifice-oa}" + sysUser.getOaAdminId() + ":" + sysUser.getPassword();
+        }
         return sysUser.getPassword();
     }
 
