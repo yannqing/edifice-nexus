@@ -22,6 +22,7 @@ import {
   BadgeCheck,
   Target,
   LogOut,
+  ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -64,6 +65,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   FolderCheck,
   BadgeCheck,
   Target,
+  ClipboardList,
 };
 
 interface SidebarProps {

@@ -222,6 +222,12 @@ export const navigationConfig: NavSection[] = [
         icon: "Clock",
         href: "/timesheet",
       },
+      {
+        id: "oa-applications",
+        label: "OA 申请",
+        icon: "ClipboardList",
+        href: "/oa/applications",
+      },
     ],
   },
   {
