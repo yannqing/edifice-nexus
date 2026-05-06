@@ -37,6 +37,14 @@ public class OaApplicationVo {
 
     private List<Long> attachmentIds;
 
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long currentRecordId;
+
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long currentApproverId;
+
+    private String currentApproverName;
+
     private LocalDateTime submittedTime;
 
     private LocalDateTime approvedTime;

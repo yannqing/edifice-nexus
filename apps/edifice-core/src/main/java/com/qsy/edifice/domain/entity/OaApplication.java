@@ -51,6 +51,10 @@ public class OaApplication {
     @TableField("attachment_ids")
     private String attachmentIds;
 
+    @TableField("current_record_id")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long currentRecordId;
+
     @TableField("submitted_time")
     private LocalDateTime submittedTime;
 

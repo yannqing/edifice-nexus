@@ -33,7 +33,10 @@ public enum ApprovalBizType {
     BID(4, "bid", "投标"),
 
     /** 成果 / 过程 / 阶段性验收审批 */
-    ACCEPTANCE(5, "acceptance", "验收");
+    ACCEPTANCE(5, "acceptance", "验收"),
+
+    /** OA 统一申请单 */
+    OA_APPLICATION(6, "oa_application", "OA申请");
 
     private final Integer code;
     private final String ext;

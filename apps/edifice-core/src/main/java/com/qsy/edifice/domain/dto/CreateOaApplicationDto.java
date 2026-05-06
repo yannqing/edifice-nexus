@@ -15,6 +15,11 @@ public class CreateOaApplicationDto {
     /** 0-草稿，1-提交审批 */
     private Integer status;
 
+    /** status=1 时必填：首审人 */
+    private Long firstApproverId;
+
+    private String submitDescription;
+
     /** 0-普通，1-重要，2-紧急 */
     private Integer priority;
 

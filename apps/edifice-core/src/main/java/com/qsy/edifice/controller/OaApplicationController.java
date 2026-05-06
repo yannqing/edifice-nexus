@@ -6,10 +6,13 @@ import com.qsy.edifice.common.Code;
 import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.dto.CreateOaApplicationDto;
 import com.qsy.edifice.domain.dto.GetOaApplicationListDto;
+import com.qsy.edifice.domain.dto.SubmitOaApplicationDto;
 import com.qsy.edifice.domain.dto.UpdateOaApplicationDto;
+import com.qsy.edifice.domain.dto.ApproveDto;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.domain.vo.OaApplicationTypeVo;
 import com.qsy.edifice.domain.vo.OaApplicationVo;
+import com.qsy.edifice.service.ApprovalFlowService;
 import com.qsy.edifice.service.OaApplicationService;
 import com.qsy.edifice.utils.JwtUtils;
 import com.qsy.edifice.utils.ResultUtils;
@@ -52,6 +55,14 @@ public class OaApplicationController {
         return ResultUtils.success(Code.SUCCESS, oaApplicationService.list(dto, loginUser.getUserId()));
     }
 
+    @GetMapping("/pending")
+    @Operation(summary = "我的 OA 待审批")
+    public BaseResponse<Page<OaApplicationVo>> pending(GetOaApplicationListDto dto,
+                                                       HttpServletRequest request) throws JsonProcessingException {
+        SysUser loginUser = currentUser(request);
+        return ResultUtils.success(Code.SUCCESS, oaApplicationService.listMyPending(dto, loginUser.getUserId()));
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "OA 申请详情")
     public BaseResponse<OaApplicationVo> detail(@PathVariable("id") Long id,
@@ -81,9 +92,10 @@ public class OaApplicationController {
     @PutMapping("/submit/{id}")
     @Operation(summary = "提交 OA 申请")
     public BaseResponse<Boolean> submit(@PathVariable("id") Long id,
+                                        @RequestBody(required = false) SubmitOaApplicationDto dto,
                                         HttpServletRequest request) throws JsonProcessingException {
         SysUser loginUser = currentUser(request);
-        oaApplicationService.submit(id, loginUser.getUserId());
+        oaApplicationService.submit(id, dto, loginUser.getUserId());
         return ResultUtils.success(Code.SUCCESS, true, "提交成功");
     }
 
@@ -94,6 +106,15 @@ public class OaApplicationController {
         SysUser loginUser = currentUser(request);
         oaApplicationService.withdraw(id, loginUser.getUserId());
         return ResultUtils.success(Code.SUCCESS, true, "撤回成功");
+    }
+
+    @PostMapping("/approve")
+    @Operation(summary = "审批 OA 申请")
+    public BaseResponse<ApprovalFlowService.ApprovalResult> approve(@RequestBody ApproveDto dto,
+                                                                    HttpServletRequest request) throws JsonProcessingException {
+        SysUser loginUser = currentUser(request);
+        ApprovalFlowService.ApprovalResult result = oaApplicationService.approve(dto, loginUser.getUserId());
+        return ResultUtils.success(Code.SUCCESS, result, "审批完成");
     }
 
     private SysUser currentUser(HttpServletRequest request) throws JsonProcessingException {
