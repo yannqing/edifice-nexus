@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import {
@@ -462,13 +462,50 @@ function UserSelector({
   selected: string[];
   onToggle: (userId: string) => void;
 }) {
+  const [keyword, setKeyword] = useState("");
+  const [departmentName, setDepartmentName] = useState("");
+
+  const departments = useMemo(
+    () => Array.from(new Set(users.map((u) => u.departmentName).filter(Boolean) as string[])).sort(),
+    [users]
+  );
+  const visibleUsers = useMemo(() => {
+    const kw = keyword.trim().toLowerCase();
+    return users.filter((user) => {
+      if (departmentName && user.departmentName !== departmentName) return false;
+      if (!kw) return true;
+      return [user.realName, user.username, user.phone, user.departmentName, user.positionName, user.position]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(kw));
+    });
+  }, [users, keyword, departmentName]);
+
   if (users.length === 0) {
     return <p className="text-sm text-slate-400">暂无可选用户</p>;
   }
 
   return (
-    <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-1">
-      {users.map((user) => (
+    <div className="border border-slate-200 rounded-xl p-2 space-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-2">
+        <input
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          placeholder="搜索姓名 / 手机号 / 岗位"
+          className="form-input text-sm"
+        />
+        <select
+          value={departmentName}
+          onChange={(e) => setDepartmentName(e.target.value)}
+          className="form-input text-sm"
+        >
+          <option value="">全部部门</option>
+          {departments.map((name) => (
+            <option key={name} value={name}>{name}</option>
+          ))}
+        </select>
+      </div>
+      <div className="max-h-48 overflow-y-auto space-y-1">
+      {visibleUsers.map((user) => (
         <label
           key={user.userId}
           className={cn(
@@ -496,9 +533,18 @@ function UserSelector({
                 {user.username}
               </span>
             )}
+            {(user.departmentName || user.positionName || user.position) && (
+              <p className="text-xs text-slate-400 mt-0.5">
+                {[user.departmentName, user.positionName ?? user.position].filter(Boolean).join(" · ")}
+              </p>
+            )}
           </div>
         </label>
       ))}
+      {visibleUsers.length === 0 && (
+        <p className="text-sm text-slate-400 px-3 py-6 text-center">当前条件下没有可选用户</p>
+      )}
+      </div>
     </div>
   );
 }

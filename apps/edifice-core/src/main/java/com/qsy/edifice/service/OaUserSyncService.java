@@ -14,5 +14,7 @@ public interface OaUserSyncService {
 
     int processPending();
 
+    int syncFromOa();
+
     Map<String, Object> getStatus();
 }

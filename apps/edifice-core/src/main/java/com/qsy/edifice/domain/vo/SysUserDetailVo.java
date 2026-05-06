@@ -72,6 +72,20 @@ public class SysUserDetailVo implements Serializable {
     @Schema(description = "职务")
     private String position;
 
+    @Schema(description = "部门ID")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long departmentId;
+
+    @Schema(description = "部门名称")
+    private String departmentName;
+
+    @Schema(description = "岗位ID")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long positionId;
+
+    @Schema(description = "岗位名称")
+    private String positionName;
+
     @Schema(description = "职称")
     private String professionalTitle;
 

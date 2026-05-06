@@ -27,11 +27,9 @@ public class OaSyncController {
 
     @PostMapping("/users/full")
     public BaseResponse<Map<String, Object>> fullSync() {
-        int queued = oaUserSyncService.enqueueFullSync();
-        int pushed = oaUserSyncService.processPending();
+        int synced = oaUserSyncService.syncFromOa();
         Map<String, Object> data = new LinkedHashMap<>();
-        data.put("queued", queued);
-        data.put("pushed", pushed);
+        data.put("synced", synced);
         return ResultUtils.success(Code.SUCCESS, data, "success");
     }
 

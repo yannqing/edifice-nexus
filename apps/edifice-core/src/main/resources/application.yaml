@@ -7,6 +7,8 @@ oa:
     enabled: ${OA_SYNC_ENABLED:true}
     base-url: ${OA_SYNC_BASE_URL:http://127.0.0.1:8088}
     api-key: ${OA_SYNC_API_KEY:}
+    office-database: ${OA_SYNC_OFFICE_DATABASE:office_db}
+    default-password: ${OA_SYNC_DEFAULT_PASSWORD:12345678}
     timeout-ms: ${OA_SYNC_TIMEOUT_MS:5000}
     batch-size: ${OA_SYNC_BATCH_SIZE:50}
     max-retry-count: ${OA_SYNC_MAX_RETRY_COUNT:10}

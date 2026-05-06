@@ -25,10 +25,12 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -180,6 +182,7 @@ public class ProjectServiceImpl implements ProjectService {
         for (Long id : chargeIds) {
             if (id != null) desired.put(id, ROLE_MANAGER_ID); // 覆盖成员角色
         }
+        validateActiveUsers(desired.keySet());
 
         // 当前状态
         List<ProjectMember> current = projectMemberService.getProjectMembersByProjectId(projectId);
@@ -295,6 +298,13 @@ public class ProjectServiceImpl implements ProjectService {
         if (dto.getProjectCharges() == null || dto.getProjectCharges().isEmpty()) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请至少选择一位项目经理");
         }
+        Set<Long> requestedMemberIds = new HashSet<>();
+        requestedMemberIds.addAll(dto.getProjectCharges());
+        if (dto.getProjectMembers() != null) {
+            requestedMemberIds.addAll(dto.getProjectMembers());
+        }
+        requestedMemberIds.add(userId);
+        validateActiveUsers(requestedMemberIds);
 
         // 2. 自动生成项目编码（如果为空）
         String projectCode = dto.getProjectCode();
@@ -409,6 +419,31 @@ public class ProjectServiceImpl implements ProjectService {
         }
 
         return projectId;
+    }
+
+    private void validateActiveUsers(Collection<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return;
+        }
+        Set<Long> distinctIds = userIds.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (distinctIds.isEmpty()) {
+            return;
+        }
+        List<SysUser> users = sysUserMapper.selectBatchIds(distinctIds);
+        Map<Long, SysUser> byId = users.stream()
+                .collect(Collectors.toMap(SysUser::getUserId, user -> user, (a, b) -> a));
+        for (Long userId : distinctIds) {
+            SysUser user = byId.get(userId);
+            if (user == null) {
+                throw new BusinessException(ErrorType.USER_CANNOT_NULL, "项目成员不存在：" + userId);
+            }
+            if (!Objects.equals(user.getStatus(), 1) || !Objects.equals(user.getEmploymentStatus(), 1)) {
+                String name = StringUtils.hasText(user.getRealName()) ? user.getRealName() : user.getUsername();
+                throw new BusinessException(ErrorType.ARGS_INVALID, "项目成员不可用或已离职：" + name);
+            }
+        }
     }
 
     @Override
@@ -702,4 +737,3 @@ public class ProjectServiceImpl implements ProjectService {
         return vo;
     }
 }
-

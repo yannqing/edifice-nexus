@@ -34,6 +34,12 @@ public class GetUserListDto {
     @Schema(description = "职务（模糊匹配）")
     private String position;
 
+    @Schema(description = "部门ID")
+    private Long departmentId;
+
+    @Schema(description = "是否包含子部门")
+    private Boolean includeChildren = true;
+
     /** 0-离职/1-在职 */
     @Schema(description = "在职状态：0-离职/1-在职")
     private Integer employmentStatus;

@@ -10,6 +10,34 @@
         <result column="real_name" property="realName" jdbcType="VARCHAR"/>
         <result column="email" property="email" jdbcType="VARCHAR"/>
         <result column="phone" property="phone" jdbcType="VARCHAR"/>
+        <result column="employee_no" property="employeeNo" jdbcType="VARCHAR"/>
+        <result column="gender" property="gender" jdbcType="TINYINT"/>
+        <result column="ethnicity" property="ethnicity" jdbcType="VARCHAR"/>
+        <result column="birth_date" property="birthDate" jdbcType="DATE"/>
+        <result column="id_card" property="idCard" jdbcType="VARCHAR"/>
+        <result column="avatar" property="avatar" jdbcType="VARCHAR"/>
+        <result column="education" property="education" jdbcType="VARCHAR"/>
+        <result column="school" property="school" jdbcType="VARCHAR"/>
+        <result column="major" property="major" jdbcType="VARCHAR"/>
+        <result column="position" property="position" jdbcType="VARCHAR"/>
+        <result column="oa_admin_id" property="oaAdminId" jdbcType="INTEGER"/>
+        <result column="oa_userid" property="oaUserid" jdbcType="VARCHAR"/>
+        <result column="department_id" property="departmentId" jdbcType="BIGINT"/>
+        <result column="oa_department_id" property="oaDepartmentId" jdbcType="INTEGER"/>
+        <result column="position_id" property="positionId" jdbcType="BIGINT"/>
+        <result column="oa_position_id" property="oaPositionId" jdbcType="INTEGER"/>
+        <result column="professional_title" property="professionalTitle" jdbcType="VARCHAR"/>
+        <result column="certificates" property="certificates" jdbcType="VARCHAR"/>
+        <result column="entry_date" property="entryDate" jdbcType="DATE"/>
+        <result column="contract_end_date" property="contractEndDate" jdbcType="DATE"/>
+        <result column="social_insurance_date" property="socialInsuranceDate" jdbcType="DATE"/>
+        <result column="employment_status" property="employmentStatus" jdbcType="TINYINT"/>
+        <result column="resign_date" property="resignDate" jdbcType="DATE"/>
+        <result column="domicile" property="domicile" jdbcType="VARCHAR"/>
+        <result column="address" property="address" jdbcType="VARCHAR"/>
+        <result column="remark" property="remark" jdbcType="VARCHAR"/>
+        <result column="sync_source" property="syncSource" jdbcType="VARCHAR"/>
+        <result column="synced_at" property="syncedAt" jdbcType="TIMESTAMP"/>
         <result column="status" property="status" jdbcType="TINYINT"/>
         <result column="last_login_ip" property="lastLoginIp" jdbcType="VARCHAR"/>
         <result column="last_login_time" property="lastLoginTime" jdbcType="TIMESTAMP"/>
@@ -20,8 +48,13 @@
 
     <!-- 基础字段列表 -->
     <sql id="Base_Column_List">
-        user_id, username, password, real_name, email, phone, status,
-        last_login_ip, last_login_time, created_time, updated_time, is_delete
+        user_id, username, password, employee_no, real_name, gender, ethnicity, birth_date,
+        id_card, email, phone, avatar, education, school, major, position, oa_admin_id,
+        oa_userid, department_id, oa_department_id, position_id, oa_position_id,
+        professional_title, certificates, entry_date, contract_end_date,
+        social_insurance_date, employment_status, resign_date, domicile, address,
+        remark, sync_source, synced_at, status, last_login_ip, last_login_time,
+        created_time, updated_time, is_delete
     </sql>
 
 

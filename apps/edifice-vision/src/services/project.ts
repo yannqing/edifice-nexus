@@ -145,11 +145,25 @@ export async function getStageTemplates(
 /**
  * 获取用户列表（用于选择项目成员）
  */
-export async function getUserList(): Promise<
+export async function getUserList(params?: {
+  keywords?: string;
+  departmentId?: string;
+  includeChildren?: boolean;
+}): Promise<
   BaseResponse<PageResult<UserListItem>>
 > {
+  const query: Record<string, string> = {
+    pageSize: "500",
+    status: "1",
+    employmentStatus: "1",
+  };
+  if (params?.keywords) query.keywords = params.keywords;
+  if (params?.departmentId) query.departmentId = params.departmentId;
+  if (params?.includeChildren !== undefined) {
+    query.includeChildren = String(params.includeChildren);
+  }
   return get<PageResult<UserListItem>>("/users/all", {
-    params: { pageSize: "100" },
+    params: query,
   });
 }
 

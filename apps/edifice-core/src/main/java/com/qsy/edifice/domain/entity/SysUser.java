@@ -124,6 +124,44 @@ public class SysUser implements Serializable {
     private String position;
 
     /**
+     * OA 员工主键
+     */
+    @TableField("oa_admin_id")
+    private Integer oaAdminId;
+
+    /**
+     * OA userid / 外部用户标识
+     */
+    @TableField("oa_userid")
+    private String oaUserid;
+
+    /**
+     * 主部门
+     */
+    @TableField("department_id")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long departmentId;
+
+    /**
+     * OA 主部门 id
+     */
+    @TableField("oa_department_id")
+    private Integer oaDepartmentId;
+
+    /**
+     * 本地岗位 id
+     */
+    @TableField("position_id")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long positionId;
+
+    /**
+     * OA 岗位 id
+     */
+    @TableField("oa_position_id")
+    private Integer oaPositionId;
+
+    /**
      * 职称
      */
     @TableField("professional_title")
@@ -182,6 +220,18 @@ public class SysUser implements Serializable {
      */
     @TableField("remark")
     private String remark;
+
+    /**
+     * 主数据来源
+     */
+    @TableField("sync_source")
+    private String syncSource;
+
+    /**
+     * 最近一次从 OA 同步时间
+     */
+    @TableField("synced_at")
+    private LocalDateTime syncedAt;
 
     /**
      * 账号状态：0禁用 1启用（能否登录）

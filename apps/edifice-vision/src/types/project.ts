@@ -197,7 +197,12 @@ export interface UserListItem {
   realName: string;
   email: string;
   phone: string;
+  departmentId?: string | null;
+  departmentName?: string | null;
+  position?: string | null;
+  positionName?: string | null;
   status: number;
+  employmentStatus?: number | null;
 }
 
 // ==================== 状态映射工具 ====================

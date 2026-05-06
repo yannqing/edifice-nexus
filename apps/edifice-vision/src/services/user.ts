@@ -58,6 +58,8 @@ export interface GetUserListParams {
   email?: string;
   phone?: string;
   position?: string;
+  departmentId?: string;
+  includeChildren?: boolean;
   /** 0-离职/1-在职 */
   employmentStatus?: number;
   /** 0-禁用/1-启用 */
@@ -77,6 +79,10 @@ export interface SysUserListItem {
   phone: string | null;
   avatar: string | null;
   position: string | null;
+  departmentId: string | null;
+  departmentName: string | null;
+  positionId: string | null;
+  positionName: string | null;
   professionalTitle: string | null;
   entryDate: string | null;
   employmentStatus: number | null;
@@ -131,6 +137,8 @@ export async function getUserList(
   if (params?.email) query.email = params.email;
   if (params?.phone) query.phone = params.phone;
   if (params?.position) query.position = params.position;
+  if (params?.departmentId) query.departmentId = params.departmentId;
+  if (params?.includeChildren !== undefined) query.includeChildren = String(params.includeChildren);
   if (params?.employmentStatus !== undefined) query.employmentStatus = String(params.employmentStatus);
   if (params?.status !== undefined) query.status = String(params.status);
   if (params?.current !== undefined) query.current = String(params.current);

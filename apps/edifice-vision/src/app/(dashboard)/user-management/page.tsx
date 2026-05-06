@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Loader2,
   X,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ import {
   type UpdateUserParams,
 } from "@/services/user";
 import { ImportUserDialog } from "@/components/user/import-user-dialog";
+import { getOaSsoToken } from "@/services/oa";
 
 type EmploymentTab = "all" | "active" | "resigned";
 
@@ -130,6 +132,18 @@ export default function UserManagementPage() {
     finally { setActionLoading(null); }
   };
 
+  const handleOpenOa = async () => {
+    try {
+      const res = await getOaSsoToken();
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        const url = `${res.data.oaUrl.replace(/\/$/, "")}/home/sso/login?ssoToken=${encodeURIComponent(res.data.token)}`;
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      toast.error("无法打开 OA");
+    }
+  };
+
   const tabs: { key: EmploymentTab; label: string }[] = [
     { key: "all", label: "全部" },
     { key: "active", label: "在职" },
@@ -143,22 +157,15 @@ export default function UserManagementPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">用户管理</h1>
           <p className="text-slate-500 text-sm mt-1">
-            管理系统用户，维护花名册信息（新建默认初始密码 12345678）
+            OA 组织人事数据镜像；员工、部门、岗位请在 OA 中维护
           </p>
         </div>
         <div className="flex flex-wrap gap-2 sm:gap-3">
           <Button
-            variant="outline"
-            onClick={() => setImportOpen(true)}
-            className="flex items-center gap-2"
-          >
-            <Upload className="w-4 h-4" /> 导入
-          </Button>
-          <Button
-            onClick={() => { setEditing(null); setFormOpen(true); }}
+            onClick={handleOpenOa}
             className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
           >
-            <Plus className="w-4 h-4" /> 新建用户
+            <ExternalLink className="w-4 h-4" /> 进入 OA 维护
           </Button>
         </div>
       </div>
@@ -202,11 +209,11 @@ export default function UserManagementPage() {
                 <th className="text-left py-4 px-6 font-semibold">用户</th>
                 <th className="text-left py-4 px-4 font-semibold">工号</th>
                 <th className="text-left py-4 px-4 font-semibold">职务 / 职称</th>
+                <th className="text-left py-4 px-4 font-semibold">部门</th>
                 <th className="text-left py-4 px-4 font-semibold">联系方式</th>
                 <th className="text-left py-4 px-4 font-semibold">入职日期</th>
                 <th className="text-center py-4 px-4 font-semibold">在职状态</th>
                 <th className="text-center py-4 px-4 font-semibold">账号</th>
-                <th className="text-right py-4 px-6 font-semibold">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -237,11 +244,12 @@ export default function UserManagementPage() {
                     </td>
                     <td className="py-4 px-4 text-sm text-slate-600">{item.employeeNo ?? "-"}</td>
                     <td className="py-4 px-4">
-                      <p className="text-sm text-slate-700">{item.position ?? "-"}</p>
+                      <p className="text-sm text-slate-700">{item.positionName ?? item.position ?? "-"}</p>
                       {item.professionalTitle && (
                         <p className="text-xs text-slate-400">{item.professionalTitle}</p>
                       )}
                     </td>
+                    <td className="py-4 px-4 text-sm text-slate-600">{item.departmentName ?? "-"}</td>
                     <td className="py-4 px-4">
                       <p className="text-sm text-slate-600">{item.phone ?? "-"}</p>
                       {item.email && <p className="text-xs text-slate-400 truncate max-w-[180px]">{item.email}</p>}
@@ -258,26 +266,6 @@ export default function UserManagementPage() {
                       <Badge variant="secondary" className={cn("text-xs", statusBadgeStyles[item.status])}>
                         {item.status === 1 ? "启用" : "禁用"}
                       </Badge>
-                    </td>
-                    <td className="py-4 px-6 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => { setEditing(item); setFormOpen(true); }}
-                          disabled={isBusy}
-                          title="编辑"
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.userId)}
-                          disabled={isBusy}
-                          title="删除"
-                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50"
-                        >
-                          {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                        </button>
-                      </div>
                     </td>
                   </tr>
                 );
@@ -333,18 +321,6 @@ export default function UserManagementPage() {
         </div>
       )}
 
-      <UserFormDialog
-        open={formOpen}
-        onOpenChange={setFormOpen}
-        editing={editing}
-        onSuccess={fetchList}
-      />
-
-      <ImportUserDialog
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        onSuccess={fetchList}
-      />
     </div>
   );
 }

@@ -84,7 +84,7 @@ public class AuthController {
         String username = user.getUsername() == null ? String.valueOf(user.getUserId()) : user.getUsername();
         String token = com.auth0.jwt.JWT.create()
                 .withIssuer("edifice-nexus")
-                .withAudience("ruoyi-flowable-plus")
+                .withAudience("gougu-oa")
                 .withClaim("userId", user.getUserId())
                 .withClaim("username", username)
                 .withClaim("realName", user.getRealName())

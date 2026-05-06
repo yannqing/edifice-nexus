@@ -43,6 +43,16 @@ public class SysUserListVo implements Serializable {
 
     private String position;
 
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long departmentId;
+
+    private String departmentName;
+
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long positionId;
+
+    private String positionName;
+
     private String professionalTitle;
 
     private LocalDate entryDate;

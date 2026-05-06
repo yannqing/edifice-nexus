@@ -7,11 +7,17 @@ import com.qsy.edifice.domain.dto.SysUserCreateDto;
 import com.qsy.edifice.domain.dto.SysUserUpdateDto;
 import com.qsy.edifice.domain.dto.UpdateProfileDto;
 import com.qsy.edifice.domain.entity.SysUser;
+import com.qsy.edifice.domain.entity.SysDepartment;
+import com.qsy.edifice.domain.entity.SysPosition;
+import com.qsy.edifice.domain.entity.SysUserDepartment;
 import com.qsy.edifice.domain.vo.SysUserDetailVo;
 import com.qsy.edifice.domain.vo.SysUserListVo;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.SysUserMapper;
+import com.qsy.edifice.mapper.SysDepartmentMapper;
+import com.qsy.edifice.mapper.SysPositionMapper;
+import com.qsy.edifice.mapper.SysUserDepartmentMapper;
 import com.qsy.edifice.service.OaUserSyncService;
 import com.qsy.edifice.service.SysUserService;
 import jakarta.annotation.Resource;
@@ -22,6 +28,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -29,6 +41,15 @@ public class SysUserServiceImpl implements SysUserService {
 
     @Resource
     private SysUserMapper sysUserMapper;
+
+    @Resource
+    private SysDepartmentMapper sysDepartmentMapper;
+
+    @Resource
+    private SysPositionMapper sysPositionMapper;
+
+    @Resource
+    private SysUserDepartmentMapper sysUserDepartmentMapper;
 
     @Resource
     private PasswordEncoder bCryptPasswordEncoder;
@@ -65,11 +86,15 @@ public class SysUserServiceImpl implements SysUserService {
         if (getUserListDto.getStatus() != null) {
             wrapper.eq(SysUser::getStatus, getUserListDto.getStatus());
         }
+        applyDepartmentFilter(wrapper, getUserListDto);
         wrapper.orderByDesc(SysUser::getCreatedTime);
 
         Page<SysUser> sysUserPage = sysUserMapper.selectPage(new Page<>(current, pageSize), wrapper);
 
-        List<SysUserListVo> sysUserListVos = sysUserPage.getRecords().stream().map(SysUserListVo::objToVo).toList();
+        List<SysUserListVo> sysUserListVos = sysUserPage.getRecords().stream()
+                .map(SysUserListVo::objToVo)
+                .toList();
+        fillOrgNames(sysUserListVos);
 
         return new Page<SysUserListVo>(current, pageSize, sysUserPage.getTotal()).setRecords(sysUserListVos);
     }
@@ -91,6 +116,7 @@ public class SysUserServiceImpl implements SysUserService {
 
         // 3. 封装为 vo
         SysUserDetailVo userDetailVo = SysUserDetailVo.objToVo(sysUser);
+        fillOrgName(userDetailVo);
 
         //4. 给用户角色赋值
 
@@ -99,6 +125,76 @@ public class SysUserServiceImpl implements SysUserService {
 
         //6. 返回
         return userDetailVo;
+    }
+
+    private void applyDepartmentFilter(LambdaQueryWrapper<SysUser> wrapper, GetUserListDto dto) {
+        if (dto.getDepartmentId() == null) {
+            return;
+        }
+        Set<Long> departmentIds = new HashSet<>();
+        departmentIds.add(dto.getDepartmentId());
+        if (Boolean.TRUE.equals(dto.getIncludeChildren())) {
+            departmentIds.addAll(findChildDepartmentIds(dto.getDepartmentId()));
+        }
+
+        List<SysUserDepartment> relations = sysUserDepartmentMapper.selectList(new LambdaQueryWrapper<SysUserDepartment>()
+                .in(SysUserDepartment::getDepartmentId, departmentIds));
+        Set<Long> relationUserIds = relations.stream()
+                .map(SysUserDepartment::getUserId)
+                .filter(id -> id != null)
+                .collect(Collectors.toSet());
+
+        wrapper.and(w -> {
+            w.in(SysUser::getDepartmentId, departmentIds);
+            if (!relationUserIds.isEmpty()) {
+                w.or().in(SysUser::getUserId, relationUserIds);
+            }
+        });
+    }
+
+    private Set<Long> findChildDepartmentIds(Long departmentId) {
+        Set<Long> result = new HashSet<>();
+        List<SysDepartment> departments = sysDepartmentMapper.selectList(null);
+        Map<Long, List<SysDepartment>> byParent = departments.stream()
+                .filter(item -> item.getParentId() != null)
+                .collect(Collectors.groupingBy(SysDepartment::getParentId));
+        List<Long> queue = new ArrayList<>();
+        queue.add(departmentId);
+        while (!queue.isEmpty()) {
+            Long current = queue.remove(0);
+            for (SysDepartment child : byParent.getOrDefault(current, List.of())) {
+                if (child.getDepartmentId() != null && result.add(child.getDepartmentId())) {
+                    queue.add(child.getDepartmentId());
+                }
+            }
+        }
+        return result;
+    }
+
+    private void fillOrgNames(List<SysUserListVo> users) {
+        if (users == null || users.isEmpty()) return;
+        Map<Long, SysDepartment> departments = sysDepartmentMapper.selectList(null).stream()
+                .collect(Collectors.toMap(SysDepartment::getDepartmentId, Function.identity(), (a, b) -> a));
+        Map<Long, SysPosition> positions = sysPositionMapper.selectList(null).stream()
+                .collect(Collectors.toMap(SysPosition::getPositionId, Function.identity(), (a, b) -> a));
+        for (SysUserListVo user : users) {
+            SysDepartment department = departments.get(user.getDepartmentId());
+            if (department != null) user.setDepartmentName(department.getName());
+            SysPosition position = positions.get(user.getPositionId());
+            if (position != null) user.setPositionName(position.getName());
+        }
+    }
+
+    private void fillOrgName(SysUserDetailVo user) {
+        if (user == null) return;
+        if (user.getDepartmentId() != null) {
+            SysDepartment department = sysDepartmentMapper.selectById(user.getDepartmentId());
+            if (department != null) user.setDepartmentName(department.getName());
+        }
+        if (user.getPositionId() != null) {
+            SysPosition position = sysPositionMapper.selectById(user.getPositionId());
+            if (position != null) user.setPositionName(position.getName());
+        }
     }
 
     @Override
@@ -214,7 +310,9 @@ public class SysUserServiceImpl implements SysUserService {
         if (user == null) {
             throw new BusinessException(ErrorType.USER_CANNOT_NULL);
         }
-        return SysUserDetailVo.objToVo(user);
+        SysUserDetailVo vo = SysUserDetailVo.objToVo(user);
+        fillOrgName(vo);
+        return vo;
     }
 
     @Override
@@ -249,6 +347,8 @@ public class SysUserServiceImpl implements SysUserService {
 
         sysUserMapper.updateById(existing);
         oaUserSyncService.enqueueUpsert(existing);
-        return SysUserDetailVo.objToVo(existing);
+        SysUserDetailVo vo = SysUserDetailVo.objToVo(existing);
+        fillOrgName(vo);
+        return vo;
     }
 }
