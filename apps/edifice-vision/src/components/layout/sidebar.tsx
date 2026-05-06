@@ -44,6 +44,7 @@ const ITEM_BIZ_TYPE: Record<string, string> = {
   "project-files-approval": "file",
   acceptance: "acceptance",
   bids: "bid",
+  "oa-applications": "oa_application",
 };
 
 // Icon mapping

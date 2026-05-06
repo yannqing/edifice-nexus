@@ -17,6 +17,9 @@ export interface OaApplication {
   priority: number;
   formData: Record<string, unknown>;
   attachmentIds: number[];
+  currentRecordId?: string | null;
+  currentApproverId?: string | null;
+  currentApproverName?: string | null;
   submittedTime?: string | null;
   approvedTime?: string | null;
   createdTime: string;
@@ -36,9 +39,23 @@ export interface CreateOaApplicationParams {
   applicationType: string;
   title: string;
   status?: number;
+  firstApproverId?: string;
+  submitDescription?: string;
   priority?: number;
   formData?: Record<string, unknown>;
   attachmentIds?: number[];
+}
+
+export interface SubmitOaApplicationParams {
+  firstApproverId: string;
+  description?: string;
+}
+
+export interface ApproveOaApplicationParams {
+  recordId: string;
+  pass: boolean;
+  nextApproverId?: string;
+  comment?: string;
 }
 
 export interface OaSsoTokenData {
