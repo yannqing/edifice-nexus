@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS `oa_application` (
+  `application_id` bigint NOT NULL COMMENT '申请单id',
+  `application_no` varchar(64) NOT NULL COMMENT '申请编号',
+  `application_type` varchar(64) NOT NULL COMMENT '申请类型',
+  `title` varchar(200) NOT NULL COMMENT '申请标题',
+  `applicant_id` bigint NOT NULL COMMENT '申请人id',
+  `status` tinyint NOT NULL DEFAULT 0 COMMENT '0草稿 1审批中 2已通过 3已驳回 4已撤回',
+  `priority` tinyint NOT NULL DEFAULT 0 COMMENT '0普通 1重要 2紧急',
+  `form_data` json DEFAULT NULL COMMENT '统一表单数据',
+  `attachment_ids` json DEFAULT NULL COMMENT '附件id数组',
+  `submitted_time` datetime DEFAULT NULL COMMENT '提交时间',
+  `approved_time` datetime DEFAULT NULL COMMENT '终审时间',
+  `created_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `is_delete` tinyint NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (`application_id`),
+  UNIQUE KEY `uk_oa_application_no` (`application_no`),
+  KEY `idx_oa_application_applicant` (`applicant_id`),
+  KEY `idx_oa_application_type_status` (`application_type`, `status`),
+  KEY `idx_oa_application_created` (`created_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='OA统一申请单表';

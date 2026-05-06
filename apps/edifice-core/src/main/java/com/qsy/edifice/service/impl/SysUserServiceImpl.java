@@ -12,6 +12,7 @@ import com.qsy.edifice.domain.vo.SysUserListVo;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.SysUserMapper;
+import com.qsy.edifice.service.OaUserSyncService;
 import com.qsy.edifice.service.SysUserService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,9 @@ public class SysUserServiceImpl implements SysUserService {
 
     @Resource
     private PasswordEncoder bCryptPasswordEncoder;
+
+    @Resource
+    private OaUserSyncService oaUserSyncService;
 
     @Override
     public Page<SysUserListVo> getAllUsers(GetUserListDto getUserListDto) {
@@ -123,6 +127,9 @@ public class SysUserServiceImpl implements SysUserService {
         if (sysUser.getStatus() == null) sysUser.setStatus(1);
 
         int count = sysUserMapper.insert(sysUser);
+        if (count > 0) {
+            oaUserSyncService.enqueueUpsert(sysUser);
+        }
         return count > 0;
     }
 
@@ -150,6 +157,9 @@ public class SysUserServiceImpl implements SysUserService {
 
         //5. 更新操作
         int count = sysUserMapper.updateById(sysUser);
+        if (count > 0) {
+            oaUserSyncService.enqueueUpsert(sysUserMapper.selectById(userId));
+        }
 
         return count > 0;
     }
@@ -162,12 +172,16 @@ public class SysUserServiceImpl implements SysUserService {
         }
 
         //2. 有效性校验
-        if (sysUserMapper.selectById(id) == null) {
+        SysUser existing = sysUserMapper.selectById(id);
+        if (existing == null) {
             throw new BusinessException(ErrorType.USER_CANNOT_NULL);
         }
 
         //3. 执行删除操作
         int count = sysUserMapper.deleteById(id);
+        if (count > 0) {
+            oaUserSyncService.enqueueDelete(existing.getUserId());
+        }
 
         return count > 0;
     }
@@ -181,6 +195,9 @@ public class SysUserServiceImpl implements SysUserService {
 
         //2. 执行删除操作
         int count = sysUserMapper.deleteByIds(ids);
+        if (count > 0) {
+            ids.forEach(oaUserSyncService::enqueueDelete);
+        }
 
         //3. 返回删除结果
         return count > 0;
@@ -231,6 +248,7 @@ public class SysUserServiceImpl implements SysUserService {
         if (dto.getRemark() != null) existing.setRemark(dto.getRemark());
 
         sysUserMapper.updateById(existing);
+        oaUserSyncService.enqueueUpsert(existing);
         return SysUserDetailVo.objToVo(existing);
     }
 }

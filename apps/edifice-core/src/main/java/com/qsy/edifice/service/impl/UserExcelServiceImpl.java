@@ -6,6 +6,7 @@ import com.alibaba.excel.write.metadata.WriteSheet;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.domain.excel.UserExcelData;
 import com.qsy.edifice.mapper.SysUserMapper;
+import com.qsy.edifice.service.OaUserSyncService;
 import com.qsy.edifice.service.UserExcelService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
@@ -54,6 +55,9 @@ public class UserExcelServiceImpl implements UserExcelService {
 
     @Resource
     private PasswordEncoder bCryptPasswordEncoder;
+
+    @Resource
+    private OaUserSyncService oaUserSyncService;
 
     // ==================== 下载模板 ====================
 
@@ -191,6 +195,7 @@ public class UserExcelServiceImpl implements UserExcelService {
                 user.setStatus(1);
 
                 sysUserMapper.insert(user);
+                oaUserSyncService.enqueueUpsert(user);
                 successCount++;
                 batchUsernames.add(username);
                 if (employeeNo != null) batchEmployeeNos.add(employeeNo);

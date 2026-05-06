@@ -1,5 +1,18 @@
 app:
   url: ${APP_URL:http://localhost:8080}
+oa:
+  url: ${OA_URL:http://211.149.166.182:8080}
+  sso-secret: ${OA_SSO_SECRET:edifice-oa-sso-secret-2026}
+  sync:
+    enabled: ${OA_SYNC_ENABLED:true}
+    base-url: ${OA_SYNC_BASE_URL:http://127.0.0.1:8088}
+    api-key: ${OA_SYNC_API_KEY:}
+    timeout-ms: ${OA_SYNC_TIMEOUT_MS:5000}
+    batch-size: ${OA_SYNC_BATCH_SIZE:50}
+    max-retry-count: ${OA_SYNC_MAX_RETRY_COUNT:10}
+    retry-delay-ms: ${OA_SYNC_RETRY_DELAY_MS:30000}
+    full-sync-delay-ms: ${OA_SYNC_FULL_SYNC_DELAY_MS:1800000}
+    full-sync-initial-delay-ms: ${OA_SYNC_FULL_SYNC_INITIAL_DELAY_MS:60000}
 spring:
   application:
     name: edifice-core

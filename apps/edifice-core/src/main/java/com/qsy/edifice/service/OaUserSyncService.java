@@ -1,0 +1,18 @@
+package com.qsy.edifice.service;
+
+import com.qsy.edifice.domain.entity.SysUser;
+
+import java.util.Map;
+
+public interface OaUserSyncService {
+
+    void enqueueUpsert(SysUser user);
+
+    void enqueueDelete(Long userId);
+
+    int enqueueFullSync();
+
+    int processPending();
+
+    Map<String, Object> getStatus();
+}

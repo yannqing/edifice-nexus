@@ -13,12 +13,16 @@ import com.qsy.edifice.utils.ResultUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -32,6 +36,12 @@ import java.util.concurrent.TimeUnit;
 @RequestMapping("/auth")
 public class AuthController {
 
+    @Value("${oa.sso-secret:edifice-oa-sso-secret-2026}")
+    private String oaSsoSecret;
+
+    @Value("${oa.url:http://211.149.166.182:8080}")
+    private String oaUrl;
+
     @Resource
     private JwtUtils jwtUtils;
 
@@ -40,6 +50,55 @@ public class AuthController {
 
     @Resource
     private SysUserMapper sysUserMapper;
+
+    @GetMapping("/oa-sso-token")
+    @Operation(summary = "获取 OA 单点登录 Token", description = "为当前登录用户签发 5 分钟有效的 OA SSO Token")
+    public BaseResponse<Map<String, Object>> getOaSsoToken(HttpServletRequest request) {
+        String accessToken = request.getHeader("token");
+        if (accessToken == null || accessToken.isBlank()) {
+            accessToken = request.getParameter("token");
+        }
+        if (accessToken == null || accessToken.isBlank()) {
+            return ResultUtils.failure(Code.TOKEN_ERROR, null, "请先登录");
+        }
+        if (redisCache.getCacheObject("access_token:" + accessToken) == null) {
+            return ResultUtils.failure(Code.ACCESS_TOKEN_EXPIRE, null, "登录已过期，请重新登录");
+        }
+
+        SysUser user;
+        try {
+            jwtUtils.tokenVerify(accessToken);
+            if (!"access".equals(JwtUtils.getTokenType(accessToken))) {
+                return ResultUtils.failure(Code.TOKEN_AUTHENTICATE_FAILURE, null, "无效的 Token 类型");
+            }
+            user = jwtUtils.getUserFromToken(accessToken);
+        } catch (Exception e) {
+            return ResultUtils.failure(Code.TOKEN_AUTHENTICATE_FAILURE, null, "非法 Access Token");
+        }
+
+        SysUser latestUser = sysUserMapper.selectById(user.getUserId());
+        if (latestUser != null) {
+            user = latestUser;
+        }
+
+        String username = user.getUsername() == null ? String.valueOf(user.getUserId()) : user.getUsername();
+        String token = com.auth0.jwt.JWT.create()
+                .withIssuer("edifice-nexus")
+                .withAudience("ruoyi-flowable-plus")
+                .withClaim("userId", user.getUserId())
+                .withClaim("username", username)
+                .withClaim("realName", user.getRealName())
+                .withClaim("email", user.getEmail())
+                .withClaim("phone", user.getPhone())
+                .withClaim("status", user.getStatus())
+                .withExpiresAt(new Date(System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(5)))
+                .sign(com.auth0.jwt.algorithms.Algorithm.HMAC256(oaSsoSecret));
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("token", token);
+        data.put("oaUrl", oaUrl);
+        return ResultUtils.success(Code.SUCCESS, data, "success");
+    }
 
     @PostMapping("/refresh")
     @Operation(summary = "刷新 Access Token", description = "凭合法 Refresh Token 换取新的 Access Token")
