@@ -236,37 +236,6 @@ public class SysUserServiceImpl implements SysUserService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public SysUserDetailVo updateProfile(Long userId, UpdateProfileDto dto) {
-        if (userId == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
-        }
-        if (dto == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
-        }
-        SysUser existing = sysUserMapper.selectById(userId);
-        if (existing == null) {
-            throw new BusinessException(ErrorType.USER_CANNOT_NULL);
-        }
-
-        // 仅更新允许自助修改的字段，其它字段（员工编号/身份证/入职/离职/账号状态等）维持原值
-        if (dto.getRealName() != null) existing.setRealName(dto.getRealName());
-        if (dto.getGender() != null) existing.setGender(dto.getGender());
-        if (dto.getEthnicity() != null) existing.setEthnicity(dto.getEthnicity());
-        if (dto.getBirthDate() != null) existing.setBirthDate(dto.getBirthDate());
-        if (dto.getEmail() != null) existing.setEmail(dto.getEmail());
-        if (dto.getPhone() != null) existing.setPhone(dto.getPhone());
-        if (dto.getAvatar() != null) existing.setAvatar(dto.getAvatar());
-        if (dto.getEducation() != null) existing.setEducation(dto.getEducation());
-        if (dto.getSchool() != null) existing.setSchool(dto.getSchool());
-        if (dto.getMajor() != null) existing.setMajor(dto.getMajor());
-        if (dto.getCertificates() != null) existing.setCertificates(dto.getCertificates());
-        if (dto.getDomicile() != null) existing.setDomicile(dto.getDomicile());
-        if (dto.getAddress() != null) existing.setAddress(dto.getAddress());
-        if (dto.getRemark() != null) existing.setRemark(dto.getRemark());
-
-        sysUserMapper.updateById(existing);
-        oaUserSyncService.enqueueUpsert(existing);
-        SysUserDetailVo vo = SysUserDetailVo.objToVo(existing);
-        fillOrgName(vo);
-        return vo;
+        throw new BusinessException(ErrorType.OPERATION_FAILED, "个人资料请在 OA 系统维护，edifice 会自动同步");
     }
 }

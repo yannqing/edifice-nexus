@@ -53,7 +53,7 @@ public class UserController {
     }
 
     @PutMapping("/profile")
-    @Operation(summary = "更新当前登录用户的个人资料", description = "仅允许自助修改部分字段；员工编号/身份证/入职/离职/账号状态等由管理端维护")
+    @Operation(summary = "更新当前登录用户的个人资料", description = "员工主数据以 OA 为准，当前接口会拒绝修改")
     public BaseResponse<SysUserDetailVo> updateProfile(@RequestBody UpdateProfileDto dto,
                                                        HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
