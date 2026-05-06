@@ -1,7 +1,6 @@
 package com.qsy.edifice.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.qsy.edifice.config.OaUserSyncProperties;
 import com.qsy.edifice.domain.entity.SysDepartment;
 import com.qsy.edifice.domain.entity.SysPosition;
@@ -280,8 +279,9 @@ public class OaUserSyncServiceImpl implements OaUserSyncService {
     private void syncUserDepartments(String db, Long userId, Integer oaAdminId, Integer primaryOaDepartmentId, Long primaryDepartmentId) {
         if (userId == null) return;
 
-        sysUserDepartmentMapper.delete(new LambdaUpdateWrapper<SysUserDepartment>()
-                .eq(SysUserDepartment::getUserId, userId));
+        // 这里使用物理删除重建镜像关系。sys_user_department 是 OA 镜像表，
+        // 逻辑删除会与唯一键 (user_id, department_id, is_delete) 在重复同步时冲突。
+        jdbcTemplate.update("DELETE FROM sys_user_department WHERE user_id = ?", userId);
 
         Set<Integer> oaDepartmentIds = new LinkedHashSet<>();
         if (primaryOaDepartmentId != null && primaryOaDepartmentId > 0) {
