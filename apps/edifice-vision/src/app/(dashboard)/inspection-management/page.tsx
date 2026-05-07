@@ -5,7 +5,6 @@ import {
   Download,
   Plus,
   Search,
-  Eye,
   FileText,
   Clock,
   CheckCircle,
@@ -13,11 +12,7 @@ import {
   Banknote,
   ChevronLeft,
   ChevronRight,
-  Loader2,
-  Upload,
-  X,
 } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -30,14 +25,13 @@ import {
 import { cn } from "@/lib/utils";
 import { isAbortError } from "@/lib/request";
 import { TablePageSkeleton, DialogSkeleton } from "@/components/ui/skeleton";
+import { CreateInspectionDialog } from "@/components/inspection/create-inspection-dialog";
 import {
   getAllInspectionList,
   getInspectionDetail,
   getInspectionOverview,
-  applyInspection,
   getAllInspectionExportUrl,
 } from "@/services/inspection";
-import { getMyProjects, getProjectDetail, uploadDocument } from "@/services/project";
 import { getAccessToken } from "@/lib/token";
 import { ResponseCode } from "@/types/api";
 import type {
@@ -46,7 +40,6 @@ import type {
   InspectionOverviewVo,
 } from "@/types/inspection";
 import { INSPECTION_STATUS_MAP } from "@/types/inspection";
-import type { ProjectListVo, ProjectStageVo, FilesVo } from "@/types/project";
 
 type TabKey = "all" | "pending" | "passed" | "rejected";
 
@@ -482,217 +475,6 @@ function InspectionDetailDialog({ open, onOpenChange, detail, loading }: {
             </div>
           </>
         )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ==================== 发起验工弹窗 ====================
-
-function CreateInspectionDialog({ open, onOpenChange, onSuccess }: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  onSuccess: () => void;
-}) {
-  const [projects, setProjects] = useState<ProjectListVo[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [stages, setStages] = useState<ProjectStageVo[]>([]);
-  const [selectedStageId, setSelectedStageId] = useState("");
-  const [description, setDescription] = useState("");
-  const [files, setFiles] = useState<FilesVo[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  // 加载我的项目（进行中的）
-  useEffect(() => {
-    if (!open) {
-      setSelectedProjectId("");
-      setSelectedStageId("");
-      setDescription("");
-      setFiles([]);
-      setStages([]);
-      return;
-    }
-    async function loadProjects() {
-      try {
-        const res = await getMyProjects({ projectStatus: 1, pageSize: 100 });
-        if (res.code === ResponseCode.SUCCESS && res.data) {
-          setProjects(res.data.records ?? []);
-        }
-      } catch { /* 静默 */ }
-    }
-    loadProjects();
-  }, [open]);
-
-  // 选择项目后加载阶段
-  useEffect(() => {
-    if (!selectedProjectId) {
-      setStages([]);
-      setSelectedStageId("");
-      return;
-    }
-    async function loadStages() {
-      try {
-        const res = await getProjectDetail(selectedProjectId);
-        if (res.code === ResponseCode.SUCCESS && res.data?.projectStages) {
-          // 只显示状态为 1(进行中) 的阶段
-          const inProgressStages = res.data.projectStages.filter((s) => s.stageStatus === 1);
-          setStages(inProgressStages);
-        }
-      } catch { /* 静默 */ }
-    }
-    loadStages();
-  }, [selectedProjectId]);
-
-  const handleFileUpload = async (file: File) => {
-    setUploading(true);
-    try {
-      const res = await uploadDocument(file);
-      if (res.code === ResponseCode.SUCCESS && res.data) {
-        setFiles((prev) => [...prev, res.data]);
-      }
-      // 业务/网络错误由 request.ts 统一提示
-    } catch {
-      /* 由 request.ts 提示 */
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (!selectedProjectId) { toast.error("请选择项目"); return; }
-    if (!selectedStageId) { toast.error("请选择验工阶段"); return; }
-    if (!description.trim()) { toast.error("请填写验工说明"); return; }
-
-    setSubmitting(true);
-    try {
-      const fileIds = files.length > 0
-        ? JSON.stringify(files.map((f) => f.fileId))
-        : undefined;
-
-      const res = await applyInspection({
-        projectId: Number(selectedProjectId),
-        projectStageId: Number(selectedStageId),
-        inspectionFormDescription: description,
-        fileIds,
-      });
-
-      if (res.code === ResponseCode.SUCCESS) {
-        toast.success("验工单提交成功");
-        onOpenChange(false);
-        onSuccess();
-      }
-    } catch {
-      /* 网络错误由 request.ts 提示 */
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>发起验工申请</DialogTitle>
-          <DialogDescription>选择项目和阶段，提交验工材料</DialogDescription>
-        </DialogHeader>
-
-        <div className="mt-4 space-y-5">
-          {/* 选择项目 */}
-          <div>
-            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
-              选择项目 <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="form-input"
-            >
-              <option value="">请选择进行中的项目</option>
-              {projects.map((p) => (
-                <option key={p.projectId} value={p.projectId}>
-                  {p.projectName} ({p.projectCode})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 选择阶段 */}
-          <div>
-            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
-              验工阶段 <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={selectedStageId}
-              onChange={(e) => setSelectedStageId(e.target.value)}
-              className="form-input"
-              disabled={!selectedProjectId}
-            >
-              <option value="">{selectedProjectId ? "请选择阶段" : "请先选择项目"}</option>
-              {stages.map((s) => (
-                <option key={s.projectStageId} value={s.projectStageId}>
-                  {s.stageName} (产值比例 {s.stageOutput}%)
-                </option>
-              ))}
-            </select>
-            {selectedProjectId && stages.length === 0 && (
-              <p className="text-xs text-amber-500 mt-1">该项目暂无进行中的阶段，请先在项目详情中启动阶段</p>
-            )}
-          </div>
-
-          {/* 验工说明 */}
-          <div>
-            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
-              验工说明 <span className="text-rose-500">*</span>
-            </label>
-            <textarea
-              rows={4}
-              placeholder="请描述本阶段完成的主要工作内容..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="form-input resize-none"
-            />
-          </div>
-
-          {/* 附件上传 */}
-          <div>
-            <label className="text-sm font-medium text-slate-700 mb-1.5 block">验收材料</label>
-            {files.length > 0 && (
-              <div className="space-y-2 mb-2">
-                {files.map((f) => (
-                  <div key={f.fileId} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-                    <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                    <span className="text-xs text-slate-600 truncate flex-1">{f.displayName}</span>
-                    <button onClick={() => setFiles((prev) => prev.filter((x) => x.fileId !== f.fileId))}
-                      className="p-0.5 text-slate-400 hover:text-rose-500 transition-colors">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
-              {uploading
-                ? <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                : <Upload className="w-4 h-4 text-slate-400" />}
-              <span className="text-sm text-slate-500">{uploading ? "上传中..." : "点击上传验收材料"}</span>
-              <input type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx"
-                disabled={uploading} onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileUpload(file);
-                  e.target.value = "";
-                }} />
-            </label>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={submitting} onClick={handleSubmit}>
-            {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-1" />提交中...</> : "提交验工"}
-          </Button>
-        </div>
       </DialogContent>
     </Dialog>
   );

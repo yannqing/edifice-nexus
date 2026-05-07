@@ -14,7 +14,6 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderOpen,
-  Loader2,
   Paperclip,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -27,6 +26,7 @@ import { ProjectDetailDialog } from "@/components/project/project-detail-dialog"
 import { CreateProjectDialog } from "@/components/project/create-project-dialog";
 import { EditProjectDialog } from "@/components/project/edit-project-dialog";
 import { ImportProjectDialog } from "@/components/project/import-project-dialog";
+import { CreateInspectionDialog } from "@/components/inspection/create-inspection-dialog";
 import { useAuth } from "@/store/auth-context";
 import { getAccessToken } from "@/lib/token";
 import { ResponseCode } from "@/types/api";
@@ -124,6 +124,8 @@ export default function MyProjectsPage() {
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [inspectionOpen, setInspectionOpen] = useState(false);
+  const [inspectionProject, setInspectionProject] = useState<ProjectListVo | null>(null);
 
   /** 判断当前用户是否为该项目的项目经理 */
   const isManager = (project: ProjectListVo): boolean => {
@@ -449,7 +451,13 @@ export default function MyProjectsPage() {
                     </button>
                   )}
                   {isManager(project) && project.projectStatus === 1 && (
-                    <button className="flex-1 py-2 text-xs text-blue-600 font-medium bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center justify-center gap-1">
+                    <button
+                      onClick={() => {
+                        setInspectionProject(project);
+                        setInspectionOpen(true);
+                      }}
+                      className="flex-1 py-2 text-xs text-blue-600 font-medium bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors flex items-center justify-center gap-1"
+                    >
                       <ClipboardCheck className="w-3 h-3" /> 发起验工
                     </button>
                   )}
@@ -553,6 +561,20 @@ export default function MyProjectsPage() {
       <CreateProjectDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
+        onSuccess={() => {
+          fetchProjects();
+          fetchFilterCounts();
+        }}
+      />
+
+      {/* 发起验工弹窗 */}
+      <CreateInspectionDialog
+        open={inspectionOpen}
+        onOpenChange={(open) => {
+          setInspectionOpen(open);
+          if (!open) setInspectionProject(null);
+        }}
+        initialProject={inspectionProject}
         onSuccess={() => {
           fetchProjects();
           fetchFilterCounts();
