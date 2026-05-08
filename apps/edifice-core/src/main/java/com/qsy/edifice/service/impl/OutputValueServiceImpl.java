@@ -273,12 +273,8 @@ public class OutputValueServiceImpl implements OutputValueService {
             throw new BusinessException(ErrorType.CONTRACT_NOT_FOUND);
         }
 
-        // 基本部分基数：base_amount 优先；老数据兜底到 contract_amount
-        BigDecimal baseAmt = contract.getBaseAmount() != null
-                ? contract.getBaseAmount()
-                : (contract.getContractAmount() != null
-                    ? contract.getContractAmount() : BigDecimal.ZERO);
         boolean hasBenefit = Objects.equals(contract.getContractType(), 1);
+        BigDecimal baseAmt = resolveBaseAmount(contract, hasBenefit);
         BigDecimal benefitAmt = hasBenefit && contract.getBenefitAmount() != null
                 ? contract.getBenefitAmount() : BigDecimal.ZERO;
 
@@ -307,6 +303,22 @@ public class OutputValueServiceImpl implements OutputValueService {
 
         return new StageCumulativeResult(currentCumulative, previousCumulative,
                 basePart, benefitPart, benefitAmt);
+    }
+
+    /**
+     * 基本收费合同以合同金额作为基本部分基数；基本+效益合同优先使用 base_amount，
+     * 老数据未维护 base_amount 或为 0 时兜底到 contract_amount。
+     */
+    private BigDecimal resolveBaseAmount(Contract contract, boolean hasBenefit) {
+        BigDecimal contractAmount = contract.getContractAmount() != null
+                ? contract.getContractAmount() : BigDecimal.ZERO;
+        BigDecimal baseAmount = contract.getBaseAmount() != null
+                ? contract.getBaseAmount() : BigDecimal.ZERO;
+
+        if (!hasBenefit) {
+            return contractAmount.signum() > 0 ? contractAmount : baseAmount;
+        }
+        return baseAmount.signum() > 0 ? baseAmount : contractAmount;
     }
 
     /** 阶段累计计算结果 */

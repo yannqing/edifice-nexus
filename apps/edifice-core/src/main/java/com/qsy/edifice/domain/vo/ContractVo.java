@@ -70,6 +70,16 @@ public class ContractVo implements Serializable {
     private String benefitRules;
 
     /**
+     * 当前预计效益金额
+     */
+    private BigDecimal benefitAmount;
+
+    /**
+     * 效益状态：0-预计中 / 1-已最终确认
+     */
+    private Integer benefitStatus;
+
+    /**
      * 项目签订日期
      */
     private LocalDateTime signingDate;

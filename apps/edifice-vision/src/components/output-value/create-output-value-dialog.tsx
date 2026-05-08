@@ -64,6 +64,17 @@ function getStageStatusLabel(status: number): string {
   return labels[status] ?? "未知";
 }
 
+function resolveBaseAmount(contract: ProjectDetailVo["contract"] | undefined): number {
+  const contractAmount = contract?.contractAmount ?? 0;
+  const baseAmount = contract?.baseAmount ?? 0;
+
+  if ((contract?.contractType ?? 0) === 0) {
+    return contractAmount || baseAmount;
+  }
+
+  return baseAmount > 0 ? baseAmount : contractAmount;
+}
+
 export function CreateOutputValueDialog({
   open,
   onOpenChange,
@@ -171,7 +182,7 @@ export function CreateOutputValueDialog({
     const contract = projectDetail?.contract;
     const contractType = contract?.contractType ?? 0;
     const hasBenefit = contractType === 1;
-    const baseAmt = contract?.baseAmount ?? contract?.contractAmount ?? 0;
+    const baseAmt = resolveBaseAmount(contract);
     const benefitAmt = hasBenefit ? contract?.benefitAmount ?? 0 : 0;
     const baseRatio = selectedStage?.stageOutput ?? 0;
     const benefitRatio = hasBenefit ? selectedStage?.benefitInclusionRatio ?? 0 : 0;
