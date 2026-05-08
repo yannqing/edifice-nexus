@@ -10,11 +10,12 @@ import {
   Loader2,
   Play,
   RotateCcw,
-  ExternalLink,
   FolderPlus,
   Paperclip,
   TrendingUp,
   Pencil,
+  Eye,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DialogSkeleton } from "@/components/ui/skeleton";
@@ -29,7 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getProjectDetail, startStages, restartStage } from "@/services/project";
-import { getProjectFileList } from "@/services/project-file";
+import { fetchProjectFileBlob, getProjectFileList } from "@/services/project-file";
 import { getBenefitHistory } from "@/services/contract-benefit";
 import type { ContractBenefitRevisionVo } from "@/types/contract-benefit";
 import { ReviseBenefitDialog } from "@/components/contract-benefit/revise-benefit-dialog";
@@ -58,6 +59,35 @@ const categoryStyles: Record<ProjectCategory, string> = {
   D类: "bg-purple-50 text-purple-600",
   E类: "bg-rose-50 text-rose-600",
 };
+
+const browserPreviewableExtensions = new Set([
+  "pdf",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "bmp",
+  "webp",
+  "svg",
+  "txt",
+  "md",
+  "csv",
+]);
+
+function getProjectFileDisplayName(file: ProjectFileVo): string {
+  const name = file.fileName?.trim() || "项目文件";
+  const extension = file.fileExtension?.replace(/^\./, "").trim();
+  if (!extension) return name;
+
+  return name.toLowerCase().endsWith(`.${extension.toLowerCase()}`)
+    ? name
+    : `${name}.${extension}`;
+}
+
+function isBrowserPreviewable(file: ProjectFileVo): boolean {
+  const extension = file.fileExtension?.replace(/^\./, "").toLowerCase();
+  return !!extension && browserPreviewableExtensions.has(extension);
+}
 
 const stageStatusLabels: Record<number, string> = {
   0: "未开始",
@@ -288,7 +318,7 @@ function ProjectFilesSection({
         <p className="text-xs text-slate-400 text-center py-4">加载中...</p>
       ) : items.length === 0 ? (
         <p className="text-xs text-slate-400 text-center py-4 bg-slate-50 rounded-lg">
-          暂无文件，点击右上角"上传文件"开始
+          暂无文件，点击右上角上传文件开始
         </p>
       ) : (
         <div className="space-y-1.5 max-h-64 overflow-y-auto">
@@ -310,6 +340,7 @@ function ProjectFilesSection({
 }
 
 function ProjectFileRow({ file }: { file: ProjectFileVo }) {
+  const [action, setAction] = useState<"preview" | "download" | null>(null);
   const statusStyle =
     file.approvalStatus === 2
       ? "bg-emerald-100 text-emerald-600"
@@ -318,11 +349,70 @@ function ProjectFileRow({ file }: { file: ProjectFileVo }) {
         : file.approvalStatus === 1
           ? "bg-amber-100 text-amber-600"
           : "bg-slate-100 text-slate-500";
+  const fileName = getProjectFileDisplayName(file);
+
+  const handlePreview = async () => {
+    if (!file.fileId) {
+      toast.error("文件不存在");
+      return;
+    }
+    if (!isBrowserPreviewable(file)) {
+      toast.info("该格式浏览器可能不支持直接预览，将尝试打开文件");
+    }
+
+    setAction("preview");
+    const previewWindow = window.open("", "_blank", "noopener,noreferrer");
+    try {
+      const blob = await fetchProjectFileBlob(file.fileId);
+      const url = URL.createObjectURL(blob);
+      if (previewWindow) {
+        previewWindow.location.href = url;
+      } else {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      previewWindow?.close();
+      toast.error(err instanceof Error ? err.message : "文件预览失败");
+    } finally {
+      setAction(null);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!file.fileId) {
+      toast.error("文件不存在");
+      return;
+    }
+
+    setAction("download");
+    try {
+      const blob = await fetchProjectFileBlob(file.fileId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "文件下载失败");
+    } finally {
+      setAction(null);
+    }
+  };
 
   return (
     <div className="flex items-center gap-3 py-2 px-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
       <FileText className="w-4 h-4 text-blue-500 shrink-0" />
-      <div className="flex-1 min-w-0">
+      <button
+        type="button"
+        className="flex-1 min-w-0 text-left"
+        onClick={handlePreview}
+        title="预览文件"
+        disabled={action !== null}
+      >
         <div className="flex items-center gap-2">
           <p className="text-sm text-slate-700 font-medium truncate">
             {file.fileName ?? "(未命名)"}
@@ -338,21 +428,34 @@ function ProjectFileRow({ file }: { file: ProjectFileVo }) {
           {file.stageName && <> · {file.stageName}</>}
           {file.createdTime && <> · {file.createdTime.replace("T", " ").slice(0, 16)}</>}
         </p>
-      </div>
+      </button>
       <span className={cn("text-xs px-2 py-0.5 rounded-full", statusStyle)}>
         {PROJECT_FILE_STATUS_MAP[file.approvalStatus] ?? "-"}
       </span>
-      {file.fileUrl && (
-        <a
-          href={file.fileUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="text-slate-400 hover:text-blue-500"
-          title="打开文件"
+      <div className="flex items-center gap-1 shrink-0">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-slate-400 hover:text-blue-600"
+          title="预览文件"
+          onClick={handlePreview}
+          disabled={action !== null}
         >
-          <ExternalLink className="w-4 h-4" />
-        </a>
-      )}
+          {action === "preview" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-slate-400 hover:text-blue-600"
+          title="下载文件"
+          onClick={handleDownload}
+          disabled={action !== null}
+        >
+          {action === "download" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+        </Button>
+      </div>
     </div>
   );
 }

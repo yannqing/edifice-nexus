@@ -1,10 +1,13 @@
 import { get, post } from "@/lib/request";
+import { getAccessToken } from "@/lib/token";
 import type { BaseResponse } from "@/types/api";
 import type {
   ApproveProjectFileParams,
   CreateProjectFileParams,
   ProjectFileVo,
 } from "@/types/project-file";
+
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 export async function createProjectFile(
   params: CreateProjectFileParams,
@@ -38,4 +41,28 @@ export async function getProjectFileDetail(
 
 export async function getMyPendingProjectFiles(): Promise<BaseResponse<ProjectFileVo[]>> {
   return get<ProjectFileVo[]>("/project-files/my-pending");
+}
+
+export function getProjectFileDownloadUrl(fileId: string, token?: string | null): string {
+  const query = token ? `?token=${encodeURIComponent(token)}` : "";
+  return `${BASE_URL}/file/download/${fileId}${query}`;
+}
+
+export async function fetchProjectFileBlob(fileId: string): Promise<Blob> {
+  const token = getAccessToken();
+  const response = await fetch(getProjectFileDownloadUrl(fileId), {
+    headers: token ? { token } : {},
+  });
+
+  if (!response.ok) {
+    throw new Error(response.status >= 500 ? "服务器异常，请稍后重试" : "文件获取失败");
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const data = (await response.json().catch(() => null)) as BaseResponse<unknown> | null;
+    throw new Error(data?.msg || "文件获取失败");
+  }
+
+  return response.blob();
 }
