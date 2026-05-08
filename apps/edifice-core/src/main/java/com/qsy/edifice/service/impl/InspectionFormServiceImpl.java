@@ -39,6 +39,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -98,6 +99,56 @@ public class InspectionFormServiceImpl implements InspectionFormService {
     }
 
     @Override
+    public Page<InspectionFormListVo> getMyPendingInspections(GetInspectionFormListDto dto, Long userId) {
+        GetInspectionFormListDto query = dto == null ? new GetInspectionFormListDto() : dto;
+        Integer current = query.getCurrent() != null ? query.getCurrent() : 1;
+        Integer pageSize = query.getPageSize() != null ? query.getPageSize() : 10;
+
+        List<ApprovalRecordVo> pendingRecords = approvalFlowService.listPendingByApprover(
+                userId, ApprovalBizType.INSPECTION);
+        Set<Long> inspectionIds = pendingRecords.stream()
+                .map(ApprovalRecordVo::getBizId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (inspectionIds.isEmpty()) {
+            return new Page<>(current, pageSize, 0);
+        }
+
+        LambdaQueryWrapper<InspectionForm> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(InspectionForm::getInspectionFormId, inspectionIds);
+        if (StringUtils.hasText(query.getInspectionFormCode())) {
+            wrapper.like(InspectionForm::getInspectionFormCode, query.getInspectionFormCode());
+        }
+        if (StringUtils.hasText(query.getProjectId())) {
+            wrapper.eq(InspectionForm::getProjectId, query.getProjectId());
+        }
+        if (query.getInspectionFormStatuses() != null && !query.getInspectionFormStatuses().isEmpty()) {
+            wrapper.in(InspectionForm::getInspectionFormStatus, query.getInspectionFormStatuses());
+        } else if (query.getInspectionFormStatus() != null) {
+            wrapper.eq(InspectionForm::getInspectionFormStatus, query.getInspectionFormStatus());
+        }
+        wrapper.orderByDesc(InspectionForm::getCreatedTime);
+
+        Page<InspectionForm> page = inspectionFormMapper.selectPage(new Page<>(current, pageSize), wrapper);
+        ListResolveCtx ctx = prefetchForList(page.getRecords());
+        Map<Long, ApprovalRecordVo> currentRecordMap = pendingRecords.stream()
+                .filter(record -> record.getBizId() != null)
+                .collect(Collectors.toMap(ApprovalRecordVo::getBizId, record -> record, (a, b) -> a));
+
+        List<InspectionFormListVo> voList = page.getRecords().stream()
+                .map(f -> {
+                    InspectionFormListVo vo = convertToListVo(f, ctx);
+                    fillCurrentApprovalInfo(vo, currentRecordMap.get(f.getInspectionFormId()));
+                    return vo;
+                })
+                .collect(Collectors.toList());
+
+        Page<InspectionFormListVo> voPage = new Page<>(current, pageSize, page.getTotal());
+        voPage.setRecords(voList);
+        return voPage;
+    }
+
+    @Override
     public Page<InspectionFormListVo> getAllInspections(GetInspectionFormListDto dto) {
         return queryInspections(dto);
     }
@@ -136,6 +187,7 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         List<InspectionFormListVo> voList = page.getRecords().stream()
                 .map(f -> convertToListVo(f, ctx))
                 .collect(Collectors.toList());
+        fillCurrentApprovalInfo(voList);
 
         Page<InspectionFormListVo> voPage = new Page<>(current, pageSize, page.getTotal());
         voPage.setRecords(voList);
@@ -242,6 +294,10 @@ public class InspectionFormServiceImpl implements InspectionFormService {
                 ApprovalBizType.INSPECTION, form.getInspectionFormId());
         if (!chain.isEmpty()) {
             vo.setApprovalRecords(chain);
+            chain.stream()
+                    .filter(record -> Objects.equals(record.getInspectionFormStatus(), 0))
+                    .findFirst()
+                    .ifPresent(record -> fillCurrentApprovalInfo(vo, record));
         }
 
         return vo;
@@ -256,6 +312,31 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         vo.setPendingFirstReview(countByStatus(1, applyUserId));
         vo.setApproved(countByStatus(3, applyUserId));
         vo.setRejected(countByStatus(2, applyUserId));
+        return vo;
+    }
+
+    @Override
+    public InspectionOverviewVo getMyPendingInspectionOverview(Long approverId) {
+        InspectionOverviewVo vo = new InspectionOverviewVo();
+        vo.setPendingApproval(0L);
+        vo.setPendingFirstReview(0L);
+        vo.setApproved(0L);
+        vo.setRejected(0L);
+        if (approverId == null) return vo;
+
+        List<ApprovalRecordVo> pendingRecords = approvalFlowService.listPendingByApprover(
+                approverId, ApprovalBizType.INSPECTION);
+        Set<Long> inspectionIds = pendingRecords.stream()
+                .map(ApprovalRecordVo::getBizId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (inspectionIds.isEmpty()) return vo;
+
+        LambdaQueryWrapper<InspectionForm> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(InspectionForm::getInspectionFormId, inspectionIds);
+        List<InspectionForm> forms = inspectionFormMapper.selectList(wrapper);
+        vo.setPendingApproval(forms.stream().filter(f -> Objects.equals(f.getInspectionFormStatus(), 0)).count());
+        vo.setPendingFirstReview(forms.stream().filter(f -> Objects.equals(f.getInspectionFormStatus(), 1)).count());
         return vo;
     }
 
@@ -278,6 +359,9 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         }
         if (dto.getProjectId() == null || dto.getProjectStageId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目和阶段不能为空");
+        }
+        if (dto.getFirstApproverId() == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "一级审批人不能为空");
         }
 
         // 校验阶段状态：必须是 1(进行中) 才能提交验工
@@ -313,6 +397,16 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         form.setFileIds(dto.getFileIds());
 
         inspectionFormMapper.insert(form);
+
+        SubmitApprovalDto submit = new SubmitApprovalDto(
+                ApprovalBizType.INSPECTION.getExt(),
+                form.getInspectionFormId(),
+                dto.getFirstApproverId(),
+                dto.getInspectionFormDescription()
+        );
+        ApprovalRecords record = approvalFlowService.submit(submit, userId);
+        log.info("验工单已提交审批 inspectionId={} firstApprover={} recordId={}",
+                form.getInspectionFormId(), dto.getFirstApproverId(), record.getApprovalRecordId());
 
         // 阶段状态：1(进行中) → 2(待验收)
         stage.setStageStatus(2);
@@ -448,6 +542,43 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         }
 
         return vo;
+    }
+
+    private void fillCurrentApprovalInfo(List<InspectionFormListVo> list) {
+        if (list == null || list.isEmpty()) return;
+        for (InspectionFormListVo vo : list) {
+            if (vo.getInspectionFormId() == null) continue;
+            ApprovalRecords current = approvalFlowService.getCurrentPending(
+                    ApprovalBizType.INSPECTION, vo.getInspectionFormId());
+            if (current == null) continue;
+
+            ApprovalRecordVo record = ApprovalRecordVo.builder()
+                    .approvalRecordId(current.getApprovalRecordId())
+                    .approver(current.getApprover())
+                    .approvalLevel(current.getApprovalLevel())
+                    .build();
+            if (current.getApprover() != null) {
+                SysUser user = sysUserMapper.selectById(current.getApprover());
+                if (user != null) {
+                    record.setApproverName(user.getRealName() != null ? user.getRealName() : user.getUsername());
+                }
+            }
+            fillCurrentApprovalInfo(vo, record);
+        }
+    }
+
+    private void fillCurrentApprovalInfo(InspectionFormListVo vo, ApprovalRecordVo record) {
+        if (vo == null || record == null) return;
+        vo.setCurrentRecordId(record.getApprovalRecordId());
+        vo.setCurrentApproverId(record.getApprover());
+        vo.setCurrentApproverName(record.getApproverName());
+    }
+
+    private void fillCurrentApprovalInfo(InspectionFormDetailVo vo, ApprovalRecordVo record) {
+        if (vo == null || record == null) return;
+        vo.setCurrentRecordId(record.getApprovalRecordId());
+        vo.setCurrentApproverId(record.getApprover());
+        vo.setCurrentApproverName(record.getApproverName());
     }
 
     /**

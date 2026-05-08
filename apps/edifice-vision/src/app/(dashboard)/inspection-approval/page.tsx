@@ -30,12 +30,13 @@ import { cn } from "@/lib/utils";
 import { isAbortError } from "@/lib/request";
 import { TablePageSkeleton, DialogSkeleton } from "@/components/ui/skeleton";
 import {
-  getMyInspectionList,
+  getMyPendingInspectionList,
   getInspectionDetail,
-  getInspectionOverview,
+  getMyPendingInspectionOverview,
   approvalInspection,
   getMyInspectionExportUrl,
 } from "@/services/inspection";
+import { getUserList } from "@/services/project";
 import { getAccessToken } from "@/lib/token";
 import { ResponseCode } from "@/types/api";
 import type {
@@ -43,6 +44,7 @@ import type {
   InspectionFormDetailVo,
   InspectionOverviewVo,
 } from "@/types/inspection";
+import type { UserListItem } from "@/types/project";
 import { INSPECTION_STATUS_MAP } from "@/types/inspection";
 
 type TabKey = "pending" | "passed" | "rejected" | "all";
@@ -95,6 +97,9 @@ export default function InspectionApprovalPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [approvalComment, setApprovalComment] = useState("");
   const [approving, setApproving] = useState(false);
+  const [users, setUsers] = useState<UserListItem[]>([]);
+  const [nextApproverId, setNextApproverId] = useState("");
+  const [terminateHere, setTerminateHere] = useState(false);
 
   // 搜索防抖
   useEffect(() => {
@@ -113,7 +118,7 @@ export default function InspectionApprovalPage() {
     setLoading(true);
     try {
       const filter = statusFilterMap[activeTab];
-      const res = await getMyInspectionList({
+      const res = await getMyPendingInspectionList({
         inspectionFormCode: debouncedSearch || undefined,
         inspectionFormStatus: filter.single,
         inspectionFormStatuses: filter.multi,
@@ -136,7 +141,7 @@ export default function InspectionApprovalPage() {
   // 加载统计
   const fetchStats = useCallback(async () => {
     try {
-      const res = await getInspectionOverview();
+      const res = await getMyPendingInspectionOverview();
       if (res.code === ResponseCode.SUCCESS && res.data) {
         setStatistics(res.data);
       }
@@ -160,10 +165,18 @@ export default function InspectionApprovalPage() {
     setDetailLoading(true);
     setDetail(null);
     setApprovalComment("");
+    setNextApproverId("");
+    setTerminateHere(false);
     try {
-      const res = await getInspectionDetail(id);
+      const [res, userRes] = await Promise.all([
+        getInspectionDetail(id),
+        getUserList(),
+      ]);
       if (res.code === ResponseCode.SUCCESS && res.data) {
         setDetail(res.data);
+      }
+      if (userRes.code === ResponseCode.SUCCESS && userRes.data) {
+        setUsers(userRes.data.records ?? []);
       }
     } catch {
       // 静默
@@ -175,12 +188,23 @@ export default function InspectionApprovalPage() {
   // 审批操作
   const handleApproval = async (result: number) => {
     if (!detail) return;
+    const pass = result === 1;
+    const currentRecord = (detail.approvalRecords ?? []).find((record) => record.inspectionFormStatus === 0);
+    const currentLevel = currentRecord?.approvalLevel ?? 1;
+    const defaultTerminate = currentLevel >= 3;
+    const shouldTerminate = pass ? terminateHere || defaultTerminate : true;
+    if (pass && !shouldTerminate && !nextApproverId) {
+      toast.error("请选择下一级审批人，或勾选终审通过");
+      return;
+    }
+
     setApproving(true);
     try {
       const res = await approvalInspection({
         inspectionFormId: detail.inspectionFormId,
         result,
         approvalDescription: approvalComment,
+        nextApproverId: pass && !shouldTerminate ? nextApproverId : undefined,
       });
       if (res.code === ResponseCode.SUCCESS) {
         toast.success(result === 1 ? "审批通过" : "已驳回");
@@ -199,6 +223,9 @@ export default function InspectionApprovalPage() {
     (statistics?.pendingApproval ?? 0) + (statistics?.pendingFirstReview ?? 0);
   const grandTotal =
     pendingTotal + (statistics?.approved ?? 0) + (statistics?.rejected ?? 0);
+  const detailCurrentRecord = detail?.approvalRecords?.find((record) => record.inspectionFormStatus === 0);
+  const detailCurrentLevel = detailCurrentRecord?.approvalLevel ?? 1;
+  const detailDefaultTerminate = detailCurrentLevel >= 3;
 
   const tabs: { key: TabKey; label: string; count: number }[] = [
     { key: "pending", label: "待审批", count: pendingTotal },
@@ -582,6 +609,41 @@ export default function InspectionApprovalPage() {
                 {(detail.inspectionFormStatus === 0 || detail.inspectionFormStatus === 1) && (
                   <div className="border-t border-slate-100 pt-5">
                     <p className="text-sm font-semibold text-slate-800 mb-3">审批操作</p>
+                    <div className="flex items-center gap-2 mb-3">
+                      <input
+                        id="inspection-terminate"
+                        type="checkbox"
+                        checked={terminateHere || detailDefaultTerminate}
+                        disabled={detailDefaultTerminate}
+                        onChange={(e) => setTerminateHere(e.target.checked)}
+                      />
+                      <label htmlFor="inspection-terminate" className="text-sm text-slate-600">
+                        终审（通过后直接完成验工；不再流转下一级）
+                        {detailDefaultTerminate && <span className="text-slate-400 ml-1">(L3 自动终审)</span>}
+                      </label>
+                    </div>
+                    {!(terminateHere || detailDefaultTerminate) && (
+                      <div className="mb-3">
+                        <label className="text-xs text-slate-500 mb-2 block">
+                          下一级审批人 <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          className="w-full p-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          value={nextApproverId}
+                          onChange={(e) => setNextApproverId(e.target.value)}
+                        >
+                          <option value="">请选择下一级审批人</option>
+                          {users.map((user) => (
+                            <option key={user.userId} value={user.userId}>
+                              {user.realName || user.username}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          L1 建议选专业主管 · L2 建议选总工；当前 L{detailCurrentLevel}
+                        </p>
+                      </div>
+                    )}
                     <div>
                       <label className="text-xs text-slate-500 mb-2 block">
                         审批意见 <span className="text-rose-500">*</span>

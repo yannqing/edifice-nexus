@@ -25,4 +25,7 @@ public class ApplyInspectionDto {
 
     @Schema(description = "附件id（json数组）")
     private String fileIds;
+
+    @Schema(description = "一级审批人id", requiredMode = Schema.RequiredMode.REQUIRED)
+    private Long firstApproverId;
 }

@@ -14,7 +14,7 @@ import {
 import { applyInspection } from "@/services/inspection";
 import { getMyProjects, getProjectDetail, uploadDocument } from "@/services/project";
 import { ResponseCode } from "@/types/api";
-import type { FilesVo, ProjectListVo, ProjectStageVo } from "@/types/project";
+import type { FilesVo, ProjectListVo, ProjectMemberVo, ProjectStageVo } from "@/types/project";
 
 type InitialInspectionProject = Pick<ProjectListVo, "projectId" | "projectName" | "projectCode">;
 
@@ -35,7 +35,9 @@ export function CreateInspectionDialog({
   const [projects, setProjects] = useState<InitialInspectionProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [stages, setStages] = useState<ProjectStageVo[]>([]);
+  const [members, setMembers] = useState<ProjectMemberVo[]>([]);
   const [selectedStageId, setSelectedStageId] = useState("");
+  const [firstApproverId, setFirstApproverId] = useState("");
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<FilesVo[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -48,6 +50,8 @@ export function CreateInspectionDialog({
       setDescription("");
       setFiles([]);
       setStages([]);
+      setMembers([]);
+      setFirstApproverId("");
       setProjects([]);
       return;
     }
@@ -75,19 +79,25 @@ export function CreateInspectionDialog({
   useEffect(() => {
     if (!selectedProjectId) {
       setStages([]);
+      setMembers([]);
       setSelectedStageId("");
+      setFirstApproverId("");
       return;
     }
 
     async function loadStages() {
       try {
         const res = await getProjectDetail(selectedProjectId);
-        if (res.code === ResponseCode.SUCCESS && res.data?.projectStages) {
-          const inProgressStages = res.data.projectStages.filter((stage) => stage.stageStatus === 1);
+        if (res.code === ResponseCode.SUCCESS && res.data) {
+          const inProgressStages = (res.data.projectStages ?? []).filter((stage) => stage.stageStatus === 1);
           setStages(inProgressStages);
+          setMembers(res.data.projectMemberList ?? []);
+          setFirstApproverId("");
         }
       } catch {
         setStages([]);
+        setMembers([]);
+        setFirstApproverId("");
       }
     }
 
@@ -117,6 +127,10 @@ export function CreateInspectionDialog({
       toast.error("请选择验工阶段");
       return;
     }
+    if (!firstApproverId) {
+      toast.error("请选择一级审批人");
+      return;
+    }
     if (!description.trim()) {
       toast.error("请填写验工说明");
       return;
@@ -131,6 +145,7 @@ export function CreateInspectionDialog({
         projectStageId: Number(selectedStageId),
         inspectionFormDescription: description,
         fileIds,
+        firstApproverId,
       });
 
       if (res.code === ResponseCode.SUCCESS) {
@@ -193,6 +208,28 @@ export function CreateInspectionDialog({
               <p className="text-xs text-amber-500 mt-1">
                 该项目暂无进行中的阶段，请先在项目详情中启动阶段
               </p>
+            )}
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+              一级审批人 <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={firstApproverId}
+              onChange={(event) => setFirstApproverId(event.target.value)}
+              className="form-input"
+              disabled={!selectedProjectId || members.length === 0}
+            >
+              <option value="">{selectedProjectId ? "请选择一级审批人" : "请先选择项目"}</option>
+              {members.map((member) => (
+                <option key={member.userId} value={member.userId}>
+                  {member.realName}
+                </option>
+              ))}
+            </select>
+            {selectedProjectId && members.length === 0 && (
+              <p className="text-xs text-amber-500 mt-1">该项目暂无成员，请先维护项目成员</p>
             )}
           </div>
 

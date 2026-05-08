@@ -71,6 +71,17 @@ public class InspectionFormDetailVo implements Serializable {
     @Schema(description = "验工单状态：0-待审核/1-审核中/2-已驳回/3-已通过/4-草稿")
     private Integer inspectionFormStatus;
 
+    @Schema(description = "当前审批记录id")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long currentRecordId;
+
+    @Schema(description = "当前审批人id")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long currentApproverId;
+
+    @Schema(description = "当前审批人姓名")
+    private String currentApproverName;
+
     @Schema(description = "附件id（json数组）")
     private String fileIds;
 

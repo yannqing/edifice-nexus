@@ -14,6 +14,9 @@ export interface InspectionFormListVo {
   applyUserId: string;
   applyUserName: string;
   inspectionFormStatus: number;
+  currentRecordId?: string | null;
+  currentApproverId?: string | null;
+  currentApproverName?: string | null;
   createdTime: string;
 }
 
@@ -27,6 +30,14 @@ export interface ApprovalRecordVo {
   /** 0-待审核/1-已通过/2-已拒绝 */
   inspectionFormStatus: number;
   createdTime: string;
+  bizType?: string | null;
+  bizTypeCode?: number | null;
+  bizId?: string | null;
+  approvalLevel?: number | null;
+  nextApproverId?: string | null;
+  nextApproverName?: string | null;
+  parentRecordId?: string | null;
+  updatedTime?: string | null;
 }
 
 // ==================== 验工单详情 VO ====================
@@ -66,6 +77,7 @@ export interface ApplyInspectionParams {
   projectStageId: number;
   inspectionFormDescription?: string;
   fileIds?: string;
+  firstApproverId: string;
 }
 
 // ==================== 审批参数 ====================
@@ -75,6 +87,7 @@ export interface ApprovalInspectionParams {
   /** 1-通过/2-驳回 */
   result: number;
   approvalDescription?: string;
+  nextApproverId?: string;
 }
 
 // ==================== 状态映射 ====================

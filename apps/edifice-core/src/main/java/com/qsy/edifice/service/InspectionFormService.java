@@ -25,6 +25,14 @@ public interface InspectionFormService {
     Page<InspectionFormListVo> getMyInspections(GetInspectionFormListDto dto, Long userId);
 
     /**
+     * 查询我的待审批验工单列表（按当前审批人过滤）
+     * @param dto 查询条件
+     * @param userId 当前用户id
+     * @return 分页结果
+     */
+    Page<InspectionFormListVo> getMyPendingInspections(GetInspectionFormListDto dto, Long userId);
+
+    /**
      * 查询全部验工单列表
      * @param dto 查询条件
      * @return 分页结果
@@ -44,6 +52,13 @@ public interface InspectionFormService {
      * @return 统计数据
      */
     InspectionOverviewVo getInspectionOverview(Long applyUserId);
+
+    /**
+     * 查询我的待审批验工统计
+     * @param approverId 当前审批人id
+     * @return 统计数据
+     */
+    InspectionOverviewVo getMyPendingInspectionOverview(Long approverId);
 
     /**
      * 提交验工单

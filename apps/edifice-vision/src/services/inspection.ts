@@ -40,6 +40,18 @@ export async function getMyInspectionList(
 }
 
 /**
+ * 查询我的待审批验工单列表（当前用户为当前审批人）
+ */
+export async function getMyPendingInspectionList(
+  params?: GetInspectionListParams,
+  signal?: AbortSignal
+): Promise<BaseResponse<PageResult<InspectionFormListVo>>> {
+  return get<PageResult<InspectionFormListVo>>("/inspections/my-pending", {
+    params: buildInspectionQuery(params), signal,
+  });
+}
+
+/**
  * 查询全部验工单列表
  */
 export async function getAllInspectionList(
@@ -72,6 +84,15 @@ export async function getInspectionOverview(): Promise<
   BaseResponse<InspectionOverviewVo>
 > {
   return get<InspectionOverviewVo>("/inspections/my-list/statistic");
+}
+
+/**
+ * 我的待审批验工单统计
+ */
+export async function getMyPendingInspectionOverview(): Promise<
+  BaseResponse<InspectionOverviewVo>
+> {
+  return get<InspectionOverviewVo>("/inspections/my-pending/statistic");
 }
 
 /**

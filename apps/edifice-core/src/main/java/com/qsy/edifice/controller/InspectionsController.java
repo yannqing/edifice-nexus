@@ -51,6 +51,15 @@ public class InspectionsController {
         return ResultUtils.success(Code.SUCCESS, result);
     }
 
+    @GetMapping("/my-pending")
+    @Operation(summary = "我的待审批验工单列表", description = "查询当前用户作为当前审批人的验工单")
+    public BaseResponse<Page<InspectionFormListVo>> getMyPendingInspections(GetInspectionFormListDto dto, HttpServletRequest request) throws JsonProcessingException {
+        String token = request.getHeader("token");
+        SysUser loginUser = jwtUtils.getUserFromToken(token);
+        Page<InspectionFormListVo> result = inspectionFormService.getMyPendingInspections(dto, loginUser.getUserId());
+        return ResultUtils.success(Code.SUCCESS, result);
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "根据id查看验工单详情")
     public BaseResponse<InspectionFormDetailVo> getInspectionById(@PathVariable Long id) {
@@ -66,6 +75,17 @@ public class InspectionsController {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);
         InspectionOverviewVo result = inspectionFormService.getInspectionOverview(loginUser.getUserId());
+        return ResultUtils.success(Code.SUCCESS, result);
+    }
+
+    @GetMapping("/my-pending/statistic")
+    @Operation(summary = "我的待审批验工单数据总览",
+            description = "仅统计当前登录用户作为当前审批人的验工单，与 my-pending 列表口径一致")
+    public BaseResponse<InspectionOverviewVo> getMyPendingInspectionOverview(HttpServletRequest request)
+            throws JsonProcessingException {
+        String token = request.getHeader("token");
+        SysUser loginUser = jwtUtils.getUserFromToken(token);
+        InspectionOverviewVo result = inspectionFormService.getMyPendingInspectionOverview(loginUser.getUserId());
         return ResultUtils.success(Code.SUCCESS, result);
     }
 
