@@ -60,6 +60,8 @@ public class OutputValueServiceImpl implements OutputValueService {
     private static final int DIST_TYPE_NORMAL = 0;
     private static final int DIST_TYPE_DOWNGRADE = 1;
     private static final int DIST_TYPE_OTHER = 4;
+    /** 可创建产值分配的阶段状态：3-已验收 / 6-已完成 */
+    private static final Set<Integer> OUTPUT_VALUE_ALLOWED_STAGE_STATUSES = Set.of(3, 6);
 
     @Resource
     private OutputValueMapper outputValueMapper;
@@ -261,6 +263,10 @@ public class OutputValueServiceImpl implements OutputValueService {
         ProjectStage stage = projectStageService.getProjectStageById(stageId);
         if (stage == null || !projectId.equals(stage.getProjectId())) {
             throw new BusinessException(ErrorType.STAGE_NOT_FOUND);
+        }
+        if (!OUTPUT_VALUE_ALLOWED_STAGE_STATUSES.contains(stage.getStageStatus())) {
+            throw new BusinessException(ErrorType.STAGE_STATUS_INVALID,
+                    "只有已完成阶段才能创建产值分配单，当前阶段[" + stage.getStageName() + "]状态不允许");
         }
         Contract contract = contractService.getContractByProjectId(projectId);
         if (contract == null) {

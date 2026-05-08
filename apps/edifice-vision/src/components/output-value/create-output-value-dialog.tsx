@@ -21,6 +21,7 @@ import type {
   ProjectStageVo,
   UserListItem,
 } from "@/types/project";
+import { STAGE_COMPLETED_STATUSES } from "@/types/project";
 import {
   currentQuarter,
   generateQuarterOptions,
@@ -45,6 +46,23 @@ const newRow = (userId = ""): DistRow => ({
   allocRatio: 0,
   completionRatio: 100,
 });
+
+function isCompletedStage(stage: ProjectStageVo): boolean {
+  return STAGE_COMPLETED_STATUSES.includes(stage.stageStatus);
+}
+
+function getStageStatusLabel(status: number): string {
+  const labels: Record<number, string> = {
+    0: "未开始",
+    1: "进行中",
+    2: "待验收",
+    3: "已验收",
+    4: "已驳回",
+    5: "待分配",
+    6: "已完成",
+  };
+  return labels[status] ?? "未知";
+}
 
 export function CreateOutputValueDialog({
   open,
@@ -115,7 +133,7 @@ export function CreateOutputValueDialog({
         if (cancelled) return;
         if (res.code === ResponseCode.SUCCESS && res.data) {
           setProjectDetail(res.data);
-          setStages(res.data.projectStages ?? []);
+          setStages((res.data.projectStages ?? []).filter(isCompletedStage));
           setStageId("");
         }
       } catch {
@@ -135,6 +153,12 @@ export function CreateOutputValueDialog({
     if (memberIds.size === 0) return users;
     return users.filter((u) => memberIds.has(u.userId));
   }, [users, projectDetail]);
+
+  const eligibleProjects = useMemo(() => {
+    return projects.filter((project) =>
+      (project.projectStages ?? []).some(isCompletedStage),
+    );
+  }, [projects]);
 
   // 当前选中阶段
   const selectedStage = useMemo(
@@ -221,6 +245,9 @@ export function CreateOutputValueDialog({
     setError("");
     if (!projectId) return setError("请选择项目");
     if (!stageId) return setError("请选择阶段");
+    if (!selectedStage || !isCompletedStage(selectedStage)) {
+      return setError("只能为已完成阶段创建产值分配单");
+    }
     if (!quarter) return setError("请选择季度");
     if (preview.currentCumulative <= 0) {
       return setError(
@@ -296,12 +323,17 @@ export function CreateOutputValueDialog({
                 onChange={(e) => setProjectId(e.target.value)}
               >
                 <option value="">请选择项目</option>
-                {projects.map((p) => (
+                {eligibleProjects.map((p) => (
                   <option key={p.projectId} value={p.projectId}>
                     {p.projectName} ({p.projectCode})
                   </option>
                 ))}
               </select>
+              {projects.length > 0 && eligibleProjects.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  暂无可分配产值的项目，请先完成项目阶段。
+                </p>
+              )}
             </div>
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">项目阶段</label>
@@ -311,10 +343,12 @@ export function CreateOutputValueDialog({
                 onChange={(e) => setStageId(e.target.value)}
                 disabled={!projectId || stages.length === 0}
               >
-                <option value="">请选择阶段</option>
+                <option value="">
+                  {projectId && stages.length === 0 ? "该项目暂无已完成阶段" : "请选择已完成阶段"}
+                </option>
                 {stages.map((s) => (
                   <option key={s.projectStageId} value={s.projectStageId}>
-                    {s.stageName} (产值比例 {s.stageOutput}%)
+                    {s.stageName} (产值比例 {s.stageOutput}% · {getStageStatusLabel(s.stageStatus)})
                   </option>
                 ))}
               </select>
@@ -423,7 +457,7 @@ export function CreateOutputValueDialog({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r, idx) => {
+                  {rows.map((r) => {
                     const alloc = Number(r.allocRatio) || 0;
                     const comp = Number(r.completionRatio) || 0;
                     const planned = Math.round(employeePool * (alloc / 100) * 100) / 100;
