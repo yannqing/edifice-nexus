@@ -740,8 +740,20 @@ function ContractBenefitSection({
   }, [contract.contractId]);
 
   useEffect(() => {
-    fetchHistory();
-  }, [fetchHistory]);
+    let cancelled = false;
+    async function loadHistory() {
+      if (!contract.contractId) return;
+      const res = await getBenefitHistory(contract.contractId);
+      if (!cancelled && res.code === ResponseCode.SUCCESS) {
+        setHistory(res.data ?? []);
+      }
+    }
+
+    void loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [contract.contractId]);
 
   const isFinal = contract.benefitStatus === 1;
 

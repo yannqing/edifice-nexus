@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ResponseCode } from "@/types/api";
-import { getAllProjects, getProjectDetail, uploadDocument } from "@/services/project";
+import { getAllProjects, getProjectDetail, uploadProjectAttachment } from "@/services/project";
 import { createProjectFile } from "@/services/project-file";
 import type {
   ProjectListVo,
@@ -22,6 +22,41 @@ import type {
   FilesVo,
 } from "@/types/project";
 import { FILE_CATEGORY_OPTIONS } from "@/types/project-file";
+
+const PROJECT_FILE_ACCEPT_TYPES = [
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".txt",
+  ".md",
+  ".csv",
+  ".rtf",
+  ".odt",
+  ".ods",
+  ".odp",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".gif",
+  ".bmp",
+  ".webp",
+  ".svg",
+  ".ico",
+  ".tiff",
+  ".tif",
+  ".mp3",
+  ".wav",
+  ".flac",
+  ".aac",
+  ".ogg",
+  ".wma",
+  ".m4a",
+  ".opus",
+].join(",");
 
 interface Props {
   open: boolean;
@@ -144,7 +179,7 @@ export function UploadProjectFileDialog({
       let fid = uploadedFile?.fileId;
       if (!fid) {
         setUploading(true);
-        const upRes = await uploadDocument(file);
+        const upRes = await uploadProjectAttachment(file);
         setUploading(false);
         if (upRes.code !== ResponseCode.SUCCESS || !upRes.data) {
           return setError(upRes.msg || "文件上传失败");
@@ -301,13 +336,13 @@ export function UploadProjectFileDialog({
               <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
                 <Upload className="w-6 h-6 text-slate-300" />
                 <p className="text-sm text-slate-600 font-medium">
-                  点击选择文件（pdf/doc/xls/ppt 等）
+                  点击选择文件（文档、图片、音频等）
                 </p>
                 <input
                   ref={fileInputRef}
                   type="file"
                   className="hidden"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.rtf"
+                  accept={PROJECT_FILE_ACCEPT_TYPES}
                   onChange={handleFileSelect}
                 />
               </label>

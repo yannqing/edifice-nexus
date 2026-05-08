@@ -183,6 +183,73 @@ export async function uploadDocument(
   });
 }
 
+export async function uploadImage(file: File): Promise<BaseResponse<FilesVo>> {
+  const formData = new FormData();
+  formData.append("image", file);
+
+  return post<FilesVo>("/file/upload/images", {
+    body: formData,
+    headers: {},
+  });
+}
+
+export async function uploadAudio(file: File): Promise<BaseResponse<FilesVo>> {
+  const formData = new FormData();
+  formData.append("audio", file);
+
+  return post<FilesVo>("/file/upload/audio", {
+    body: formData,
+    headers: {},
+  });
+}
+
+const imageExtensions = new Set([
+  "jpg",
+  "jpeg",
+  "png",
+  "gif",
+  "bmp",
+  "webp",
+  "svg",
+  "ico",
+  "tiff",
+  "tif",
+]);
+
+const audioExtensions = new Set([
+  "mp3",
+  "wav",
+  "flac",
+  "aac",
+  "ogg",
+  "wma",
+  "m4a",
+  "opus",
+]);
+
+function getFileExtension(file: File): string {
+  const name = file.name.toLowerCase();
+  const dotIndex = name.lastIndexOf(".");
+  return dotIndex >= 0 ? name.slice(dotIndex + 1) : "";
+}
+
+/**
+ * 上传项目文件附件。根据文件类型选择后端对应上传接口。
+ */
+export async function uploadProjectAttachment(file: File): Promise<BaseResponse<FilesVo>> {
+  const extension = getFileExtension(file);
+
+  if (file.type.startsWith("image/") || imageExtensions.has(extension)) {
+    return uploadImage(file);
+  }
+
+  if (file.type.startsWith("audio/") || audioExtensions.has(extension)) {
+    return uploadAudio(file);
+  }
+
+  return uploadDocument(file);
+}
+
 // ==================== 导入导出 ====================
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
