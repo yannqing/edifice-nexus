@@ -141,8 +141,8 @@ export function CreateInspectionDialog({
       const fileIds = files.length > 0 ? JSON.stringify(files.map((file) => file.fileId)) : undefined;
 
       const res = await applyInspection({
-        projectId: Number(selectedProjectId),
-        projectStageId: Number(selectedStageId),
+        projectId: selectedProjectId,
+        projectStageId: selectedStageId,
         inspectionFormDescription: description,
         fileIds,
         firstApproverId,

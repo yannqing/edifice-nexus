@@ -73,8 +73,8 @@ export interface GetInspectionListParams {
 // ==================== 提交验工单参数 ====================
 
 export interface ApplyInspectionParams {
-  projectId: number;
-  projectStageId: number;
+  projectId: string;
+  projectStageId: string;
   inspectionFormDescription?: string;
   fileIds?: string;
   firstApproverId: string;
