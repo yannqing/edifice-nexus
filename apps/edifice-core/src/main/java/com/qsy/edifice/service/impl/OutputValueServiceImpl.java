@@ -278,12 +278,13 @@ public class OutputValueServiceImpl implements OutputValueService {
                 ? contract.getBaseAmount()
                 : (contract.getContractAmount() != null
                     ? contract.getContractAmount() : BigDecimal.ZERO);
-        BigDecimal benefitAmt = contract.getBenefitAmount() != null
+        boolean hasBenefit = Objects.equals(contract.getContractType(), 1);
+        BigDecimal benefitAmt = hasBenefit && contract.getBenefitAmount() != null
                 ? contract.getBenefitAmount() : BigDecimal.ZERO;
 
         BigDecimal baseRatio = stage.getStageOutput() != null
                 ? stage.getStageOutput() : BigDecimal.ZERO;
-        BigDecimal benefitRatio = stage.getBenefitInclusionRatio() != null
+        BigDecimal benefitRatio = hasBenefit && stage.getBenefitInclusionRatio() != null
                 ? stage.getBenefitInclusionRatio() : BigDecimal.ZERO;
 
         BigDecimal basePart = baseAmt.multiply(baseRatio)

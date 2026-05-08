@@ -169,14 +169,18 @@ export function CreateOutputValueDialog({
   // v0.4 预览：基于 contract + stage 自动算累计与本期产值（不含历史累计校准，落库时由后端再算）
   const preview = useMemo(() => {
     const contract = projectDetail?.contract;
+    const contractType = contract?.contractType ?? 0;
+    const hasBenefit = contractType === 1;
     const baseAmt = contract?.baseAmount ?? contract?.contractAmount ?? 0;
-    const benefitAmt = contract?.benefitAmount ?? 0;
+    const benefitAmt = hasBenefit ? contract?.benefitAmount ?? 0 : 0;
     const baseRatio = selectedStage?.stageOutput ?? 0;
-    const benefitRatio = selectedStage?.benefitInclusionRatio ?? 0;
+    const benefitRatio = hasBenefit ? selectedStage?.benefitInclusionRatio ?? 0 : 0;
     const basePart = Math.round(baseAmt * (baseRatio / 100) * 100) / 100;
     const benefitPart = Math.round(benefitAmt * (benefitRatio / 100) * 100) / 100;
     const currentCumulative = basePart + benefitPart;
     return {
+      contractType,
+      hasBenefit,
       baseAmount: baseAmt,
       benefitAmount: benefitAmt,
       baseRatio,
@@ -184,7 +188,6 @@ export function CreateOutputValueDialog({
       basePart,
       benefitPart,
       currentCumulative,
-      contractType: contract?.contractType ?? 0,
     };
   }, [projectDetail, selectedStage]);
 
@@ -308,7 +311,7 @@ export function CreateOutputValueDialog({
         <DialogHeader>
           <DialogTitle>新建产值分配单（v0.4）</DialogTitle>
           <DialogDescription>
-            阶段产值由系统按合同（基本+效益）和阶段累计比例自动计算；员工池 40%、公司账 60%（含降档差额、离职兜底）。
+            阶段产值由系统按合同类型和阶段累计比例自动计算；员工池 40%、公司账 60%（含降档差额、离职兜底）。
           </DialogDescription>
         </DialogHeader>
 
@@ -388,22 +391,24 @@ export function CreateOutputValueDialog({
             <p className="text-sm font-semibold text-slate-700">
               本阶段累计应得（系统计算）
               <span className="ml-2 text-xs text-slate-400 font-normal">
-                本期产值 = 当前累计 − 历史累计（由后端落库时校准）
+                {preview.hasBenefit ? "基本+效益" : "基本收费"} · 本期产值 = 当前累计 − 历史累计（由后端落库时校准）
               </span>
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-600">
+            <div className={cn("grid grid-cols-1 gap-2 text-slate-600", preview.hasBenefit && "sm:grid-cols-2")}>
               <div>
                 基本部分：¥{preview.baseAmount.toLocaleString()} × {preview.baseRatio}%
                 <span className="font-semibold text-slate-800 ml-1">
                   = ¥{preview.basePart.toLocaleString()}
                 </span>
               </div>
-              <div>
-                效益部分：¥{preview.benefitAmount.toLocaleString()} × {preview.benefitRatio}%
-                <span className="font-semibold text-slate-800 ml-1">
-                  = ¥{preview.benefitPart.toLocaleString()}
-                </span>
-              </div>
+              {preview.hasBenefit && (
+                <div>
+                  效益部分：¥{preview.benefitAmount.toLocaleString()} × {preview.benefitRatio}%
+                  <span className="font-semibold text-slate-800 ml-1">
+                    = ¥{preview.benefitPart.toLocaleString()}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="pt-2 border-t border-blue-100 text-slate-700">
               当前阶段累计应得：
