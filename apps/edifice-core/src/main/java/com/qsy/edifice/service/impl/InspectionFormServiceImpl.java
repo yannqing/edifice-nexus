@@ -363,6 +363,9 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         if (dto.getFirstApproverId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "一级审批人不能为空");
         }
+        if (!StringUtils.hasText(dto.getFileIds()) || "[]".equals(dto.getFileIds().trim())) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请上传验收材料");
+        }
 
         // 校验阶段状态：必须是 1(进行中) 才能提交验工
         ProjectStage stage = projectStageService.getProjectStageById(dto.getProjectStageId());

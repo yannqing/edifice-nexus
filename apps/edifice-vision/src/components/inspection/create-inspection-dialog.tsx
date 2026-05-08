@@ -135,6 +135,10 @@ export function CreateInspectionDialog({
       toast.error("请填写验工说明");
       return;
     }
+    if (files.length === 0) {
+      toast.error("请上传验收材料");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -247,7 +251,9 @@ export function CreateInspectionDialog({
           </div>
 
           <div>
-            <label className="text-sm font-medium text-slate-700 mb-1.5 block">验收材料</label>
+            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+              验收材料 <span className="text-rose-500">*</span>
+            </label>
             {files.length > 0 && (
               <div className="space-y-2 mb-2">
                 {files.map((file) => (
