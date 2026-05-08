@@ -69,6 +69,31 @@ function getStatusLabel(status: number): string {
   return INSPECTION_STATUS_MAP[status] ?? "未知";
 }
 
+function getApprovalRecordLabel(status: number): string {
+  if (status === 0) return "待审核";
+  if (status === 1) return "通过";
+  if (status === 2) return "驳回";
+  return "未知";
+}
+
+function getApprovalRecordMarker(status: number) {
+  if (status === 1) return <Check className="w-4 h-4" />;
+  if (status === 2) return <X className="w-4 h-4" />;
+  return <Clock className="w-4 h-4" />;
+}
+
+function getApprovalRecordDotStyle(status: number): string {
+  if (status === 1) return "bg-emerald-500";
+  if (status === 2) return "bg-rose-500";
+  return "bg-amber-500";
+}
+
+function getApprovalRecordBadgeStyle(status: number): string {
+  if (status === 1) return "bg-emerald-100 text-emerald-600";
+  if (status === 2) return "bg-rose-100 text-rose-600";
+  return "bg-amber-100 text-amber-600";
+}
+
 function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "-";
   return dateStr.replace("T", " ").slice(0, 16);
@@ -583,15 +608,15 @@ export default function InspectionApprovalPage() {
                         <div key={record.approvalRecordId} className="flex gap-4 p-4 bg-slate-50 rounded-xl">
                           <div className={cn(
                             "w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium shrink-0",
-                            record.inspectionFormStatus === 1 ? "bg-emerald-500" : record.inspectionFormStatus === 2 ? "bg-rose-500" : "bg-slate-400"
+                            getApprovalRecordDotStyle(record.inspectionFormStatus)
                           )}>
-                            {record.inspectionFormStatus === 1 ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                            {getApprovalRecordMarker(record.inspectionFormStatus)}
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="text-sm font-medium text-slate-800">{record.approverName || "审批人"}</span>
-                              <Badge variant="secondary" className={cn("text-xs", record.inspectionFormStatus === 1 ? "bg-emerald-100 text-emerald-600" : "bg-rose-100 text-rose-600")}>
-                                {record.inspectionFormStatus === 1 ? "通过" : "驳回"}
+                              <Badge variant="secondary" className={cn("text-xs", getApprovalRecordBadgeStyle(record.inspectionFormStatus))}>
+                                {getApprovalRecordLabel(record.inspectionFormStatus)}
                               </Badge>
                             </div>
                             {record.approvalDescription && (
