@@ -73,6 +73,7 @@ const browserPreviewableExtensions = new Set([
   "md",
   "csv",
 ]);
+const unsupportedPreviewMessage = "暂不支持预览该格式，请点击下载后查看";
 
 function getProjectFileDisplayName(file: ProjectFileVo): string {
   const name = file.fileName?.trim() || "项目文件";
@@ -357,22 +358,27 @@ function ProjectFileRow({ file }: { file: ProjectFileVo }) {
       return;
     }
     if (!isBrowserPreviewable(file)) {
-      toast.info("该格式浏览器可能不支持直接预览，将尝试打开文件");
+      toast.info(unsupportedPreviewMessage);
+      return;
     }
 
+    const previewWindow = window.open("about:blank", "_blank");
+    if (!previewWindow) {
+      toast.error("浏览器拦截了预览窗口，请允许弹窗后重试");
+      return;
+    }
+    previewWindow.opener = null;
+    previewWindow.document.title = fileName;
+    previewWindow.document.body.textContent = "文件加载中...";
+
     setAction("preview");
-    const previewWindow = window.open("", "_blank", "noopener,noreferrer");
     try {
       const blob = await fetchProjectFileBlob(file.fileId);
       const url = URL.createObjectURL(blob);
-      if (previewWindow) {
-        previewWindow.location.href = url;
-      } else {
-        window.open(url, "_blank", "noopener,noreferrer");
-      }
+      previewWindow.location.href = url;
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
-      previewWindow?.close();
+      previewWindow.close();
       toast.error(err instanceof Error ? err.message : "文件预览失败");
     } finally {
       setAction(null);
