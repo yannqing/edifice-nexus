@@ -280,8 +280,9 @@ public class OutputValueServiceImpl implements OutputValueService {
 
         BigDecimal baseRatio = stage.getStageOutput() != null
                 ? stage.getStageOutput() : BigDecimal.ZERO;
-        BigDecimal benefitRatio = hasBenefit && stage.getBenefitInclusionRatio() != null
-                ? stage.getBenefitInclusionRatio() : BigDecimal.ZERO;
+        BigDecimal benefitRatio = hasBenefit
+                ? resolveBenefitRatio(stage.getBenefitInclusionRatio(), baseRatio)
+                : BigDecimal.ZERO;
 
         BigDecimal basePart = baseAmt.multiply(baseRatio)
                 .divide(BD_100, 2, RoundingMode.HALF_UP);
@@ -319,6 +320,10 @@ public class OutputValueServiceImpl implements OutputValueService {
             return contractAmount.signum() > 0 ? contractAmount : baseAmount;
         }
         return baseAmount.signum() > 0 ? baseAmount : contractAmount;
+    }
+
+    private BigDecimal resolveBenefitRatio(BigDecimal benefitRatio, BigDecimal baseRatio) {
+        return benefitRatio != null && benefitRatio.signum() > 0 ? benefitRatio : baseRatio;
     }
 
     /** 阶段累计计算结果 */

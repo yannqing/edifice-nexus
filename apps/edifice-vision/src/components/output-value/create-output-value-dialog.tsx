@@ -185,7 +185,8 @@ export function CreateOutputValueDialog({
     const baseAmt = resolveBaseAmount(contract);
     const benefitAmt = hasBenefit ? contract?.benefitAmount ?? 0 : 0;
     const baseRatio = selectedStage?.stageOutput ?? 0;
-    const benefitRatio = hasBenefit ? selectedStage?.benefitInclusionRatio ?? 0 : 0;
+    const rawBenefitRatio = selectedStage?.benefitInclusionRatio ?? 0;
+    const benefitRatio = !hasBenefit ? 0 : rawBenefitRatio > 0 ? rawBenefitRatio : baseRatio;
     const basePart = Math.round(baseAmt * (baseRatio / 100) * 100) / 100;
     const benefitPart = Math.round(benefitAmt * (benefitRatio / 100) * 100) / 100;
     const currentCumulative = basePart + benefitPart;

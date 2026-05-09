@@ -40,7 +40,7 @@ export function CreateAcceptanceDialog({
   const [detail, setDetail] = useState<ProjectDetailVo | null>(null);
   const [stages, setStages] = useState<ProjectStageVo[]>([]);
   const [members, setMembers] = useState<ProjectMemberVo[]>([]);
-  const [acceptanceType, setAcceptanceType] = useState<number>(defaultType ?? 2);
+  const [acceptanceType, setAcceptanceType] = useState<number>(defaultType ?? 0);
   const [stageId, setStageId] = useState<string>("");
   const [title, setTitle] = useState<string>("");
   const [content, setContent] = useState<string>("");
@@ -53,7 +53,7 @@ export function CreateAcceptanceDialog({
     setDetail(null);
     setStages([]);
     setMembers([]);
-    setAcceptanceType(defaultType ?? 2);
+    setAcceptanceType(defaultType ?? 0);
     setStageId("");
     setTitle("");
     setContent("");
@@ -105,13 +105,10 @@ export function CreateAcceptanceDialog({
     [members],
   );
 
-  const isStageType = acceptanceType === 2;
-
   const handleSubmit = async () => {
     setError("");
     if (!projectId) return setError("请选择项目");
     if (!title.trim()) return setError("请填写标题");
-    if (isStageType && !stageId) return setError("阶段性验收必须选择阶段");
 
     setSubmitting(true);
     try {
@@ -149,7 +146,7 @@ export function CreateAcceptanceDialog({
         <DialogHeader>
           <DialogTitle>新建验收单</DialogTitle>
           <DialogDescription>
-            成果 / 过程 / 阶段性验收走统一审批流，一级默认项目负责人。
+            过程验收 / 成果验收走统一审批流，一级默认项目负责人。
           </DialogDescription>
         </DialogHeader>
 
@@ -186,7 +183,7 @@ export function CreateAcceptanceDialog({
             </div>
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">
-                项目阶段{isStageType ? " *" : "（可选）"}
+                项目阶段（可选）
               </label>
               <select
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
@@ -194,7 +191,7 @@ export function CreateAcceptanceDialog({
                 onChange={(e) => setStageId(e.target.value)}
                 disabled={!projectId || stages.length === 0}
               >
-                <option value="">{isStageType ? "请选择阶段" : "整体验收"}</option>
+                <option value="">整体验收</option>
                 {stages.map((s) => (
                   <option key={s.projectStageId} value={s.projectStageId}>
                     {s.stageName}

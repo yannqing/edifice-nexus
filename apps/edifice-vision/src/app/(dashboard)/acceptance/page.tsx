@@ -26,7 +26,7 @@ import {
 import { CreateAcceptanceDialog } from "@/components/acceptance/create-acceptance-dialog";
 import { ApproveAcceptanceDialog } from "@/components/acceptance/approve-acceptance-dialog";
 
-type TypeTab = "all" | 0 | 1 | 2;
+type TypeTab = "all" | 0 | 1;
 type Panel = "list" | "my-pending";
 
 function formatDate(d: string | null | undefined): string {
@@ -100,7 +100,7 @@ export default function AcceptancePage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">验收管理</h1>
           <p className="text-slate-500 text-sm mt-1">
-            过程验收 / 成果验收 / 阶段性验收三合一，共用审批链。
+            过程验收 / 成果验收共用审批链。
           </p>
         </div>
         <Button
@@ -148,7 +148,7 @@ export default function AcceptancePage() {
                 [
                   { key: "all" as const, label: "全部类型" },
                   ...ACCEPTANCE_TYPE_OPTIONS.map((o) => ({
-                    key: o.value as 0 | 1 | 2,
+                    key: o.value as 0 | 1,
                     label: o.label,
                   })),
                 ]

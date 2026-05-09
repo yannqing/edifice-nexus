@@ -44,9 +44,13 @@ public class ProjectStageVo implements Serializable {
     private Integer stageStatus;
 
     /**
-     * 阶段产值比例
+     * 基本部分累计计入比例
      */
     private BigDecimal stageOutput;
 
+    /**
+     * 效益部分累计计入比例；为空时按 stageOutput 兜底
+     */
+    private BigDecimal benefitInclusionRatio;
 
 }

@@ -372,8 +372,9 @@ public class CollectionServiceImpl implements CollectionService {
 
         BigDecimal maxCompletedBenefitRatio = stages.stream()
                 .filter(s -> STAGE_COMPLETED_STATUSES.contains(s.getStageStatus()))
-                .map(s -> s.getBenefitInclusionRatio() != null
-                        ? s.getBenefitInclusionRatio() : BigDecimal.ZERO)
+                .map(s -> resolveBenefitRatio(
+                        s.getBenefitInclusionRatio(),
+                        s.getStageOutput() != null ? s.getStageOutput() : BigDecimal.ZERO))
                 .max(BigDecimal::compareTo)
                 .orElse(BigDecimal.ZERO);
 
@@ -383,6 +384,10 @@ public class CollectionServiceImpl implements CollectionService {
                 .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
 
         return baseExpected.add(benefitExpected);
+    }
+
+    private BigDecimal resolveBenefitRatio(BigDecimal benefitRatio, BigDecimal baseRatio) {
+        return benefitRatio != null && benefitRatio.signum() > 0 ? benefitRatio : baseRatio;
     }
 
     private BigDecimal calcExpectedAmount(Long projectId, Contract contract) {

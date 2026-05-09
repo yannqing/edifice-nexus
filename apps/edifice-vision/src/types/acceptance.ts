@@ -45,7 +45,6 @@ export interface ApproveAcceptanceParams {
 export const ACCEPTANCE_TYPE_OPTIONS = [
   { value: 0, label: "过程验收" },
   { value: 1, label: "成果验收" },
-  { value: 2, label: "阶段性验收" },
 ] as const;
 
 export const ACCEPTANCE_STATUS_MAP: Record<number, string> = {
