@@ -21,6 +21,12 @@ export async function approveProjectFile(
   return post<boolean>("/project-files/approve", { body: params });
 }
 
+export async function cancelProjectFile(
+  id: string,
+): Promise<BaseResponse<boolean>> {
+  return post<boolean>(`/project-files/${id}/cancel`);
+}
+
 export async function getProjectFileList(params?: {
   projectId?: string;
   approvalStatus?: number;

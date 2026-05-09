@@ -21,6 +21,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -37,6 +38,7 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
     private static final int APPROVAL_IN_PROGRESS = 1;
     private static final int APPROVAL_APPROVED = 2;
     private static final int APPROVAL_REJECTED = 3;
+    private static final int RECORD_REJECTED = 2;
 
     @Resource
     private ProjectFilesMapper projectFilesMapper;
@@ -55,6 +57,9 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
 
     @Resource
     private ApprovalFlowService approvalFlowService;
+
+    @Resource
+    private ApprovalRecordsMapper approvalRecordsMapper;
 
     @Resource
     private ProjectMemberService projectMemberService;
@@ -175,6 +180,38 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
             entity.setCurrentRecordId(result.nextRecordId);
         }
         projectFilesMapper.updateById(entity);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void cancel(Long projectFileId, Long operatorId) {
+        if (projectFileId == null || operatorId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目文件 / 操作人不能为空");
+        }
+
+        ProjectFiles entity = projectFilesMapper.selectById(projectFileId);
+        if (entity == null) {
+            throw new BusinessException(ErrorType.FILE_NOT_FOUND, "项目文件不存在");
+        }
+        if (!operatorId.equals(entity.getUploadUserId())) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只有上传人可以撤销该文件");
+        }
+        if (!Objects.equals(entity.getApprovalStatus(), APPROVAL_IN_PROGRESS)) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "只有审批中的项目文件可以撤销");
+        }
+
+        ApprovalRecords pending = approvalFlowService.getCurrentPending(ApprovalBizType.FILE, projectFileId);
+        if (pending != null) {
+            pending.setInspectionFormStatus(RECORD_REJECTED);
+            pending.setApprovalDescription("上传人撤销");
+            pending.setUpdatedTime(LocalDateTime.now());
+            approvalRecordsMapper.updateById(pending);
+        }
+
+        entity.setApprovalStatus(APPROVAL_REJECTED);
+        entity.setCurrentRecordId(null);
+        projectFilesMapper.updateById(entity);
+        projectFilesMapper.deleteById(projectFileId);
     }
 
     @Override

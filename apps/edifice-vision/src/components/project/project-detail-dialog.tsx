@@ -16,6 +16,7 @@ import {
   Pencil,
   Eye,
   Download,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DialogSkeleton } from "@/components/ui/skeleton";
@@ -31,6 +32,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getProjectDetail, startStages, restartStage } from "@/services/project";
 import {
+  cancelProjectFile,
   fetchFileBlobWithMeta,
   fetchProjectFileBlob,
   getProjectFileList,
@@ -48,6 +50,7 @@ import type { ProjectFileVo } from "@/types/project-file";
 import { PROJECT_FILE_STATUS_MAP } from "@/types/project-file";
 import type { ProjectStatus, ProjectCategory } from "@/types";
 import { UploadProjectFileDialog } from "@/components/project-file/upload-project-file-dialog";
+import { useAuth } from "@/store/auth-context";
 
 const statusStyles: Record<ProjectStatus, string> = {
   进行中: "bg-blue-100 text-blue-600",
@@ -313,6 +316,7 @@ function ProjectFilesSection({
   const [items, setItems] = useState<ProjectFileVo[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const { user } = useAuth();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -356,7 +360,12 @@ function ProjectFilesSection({
       ) : (
         <div className="space-y-1.5 max-h-64 overflow-y-auto">
           {items.map((f) => (
-            <ProjectFileRow key={f.projectFileId} file={f} />
+            <ProjectFileRow
+              key={f.projectFileId}
+              file={f}
+              currentUserId={user?.userId}
+              onCancelled={fetchData}
+            />
           ))}
         </div>
       )}
@@ -372,8 +381,16 @@ function ProjectFilesSection({
   );
 }
 
-function ProjectFileRow({ file }: { file: ProjectFileVo }) {
-  const [action, setAction] = useState<"preview" | "download" | null>(null);
+function ProjectFileRow({
+  file,
+  currentUserId,
+  onCancelled,
+}: {
+  file: ProjectFileVo;
+  currentUserId?: string | number | null;
+  onCancelled: () => void;
+}) {
+  const [action, setAction] = useState<"preview" | "download" | "cancel" | null>(null);
   const statusStyle =
     file.approvalStatus === 2
       ? "bg-emerald-100 text-emerald-600"
@@ -383,6 +400,11 @@ function ProjectFileRow({ file }: { file: ProjectFileVo }) {
           ? "bg-amber-100 text-amber-600"
           : "bg-slate-100 text-slate-500";
   const fileName = getProjectFileDisplayName(file);
+  const canCancel =
+    file.approvalStatus === 1 &&
+    currentUserId != null &&
+    file.uploadUserId != null &&
+    String(file.uploadUserId) === String(currentUserId);
 
   const handlePreview = async () => {
     if (!file.fileId) {
@@ -441,6 +463,27 @@ function ProjectFileRow({ file }: { file: ProjectFileVo }) {
     }
   };
 
+  const handleCancel = async () => {
+    if (!window.confirm("确定撤销这个项目文件吗？撤销后该文件将从项目文件列表中移除。")) {
+      return;
+    }
+
+    setAction("cancel");
+    try {
+      const res = await cancelProjectFile(file.projectFileId);
+      if (res.code === ResponseCode.SUCCESS) {
+        toast.success("已撤销");
+        onCancelled();
+      } else {
+        toast.error(res.msg || "撤销失败");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "撤销失败");
+    } finally {
+      setAction(null);
+    }
+  };
+
   return (
     <div className="flex items-center gap-3 py-2 px-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
       <FileText className="w-4 h-4 text-blue-500 shrink-0" />
@@ -493,6 +536,19 @@ function ProjectFileRow({ file }: { file: ProjectFileVo }) {
         >
           {action === "download" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
         </Button>
+        {canCancel && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-slate-400 hover:text-rose-600"
+            title="撤销上传"
+            onClick={handleCancel}
+            disabled={action !== null}
+          >
+            {action === "cancel" ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+          </Button>
+        )}
       </div>
     </div>
   );

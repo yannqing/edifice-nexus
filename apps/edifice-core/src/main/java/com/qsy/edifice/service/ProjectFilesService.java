@@ -50,6 +50,11 @@ public interface ProjectFilesService {
     void approve(ApproveDto dto, Long operatorId);
 
     /**
+     * 上传人撤销审批中的项目文件。
+     */
+    void cancel(Long projectFileId, Long operatorId);
+
+    /**
      * 按条件查询项目文件列表。
      *
      * @param projectId      可空

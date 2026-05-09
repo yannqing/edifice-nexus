@@ -62,6 +62,16 @@ public class ProjectFilesController {
         return ResultUtils.success(Code.SUCCESS, true, "审批完成");
     }
 
+    @PostMapping("/{id}/cancel")
+    @Operation(summary = "撤销项目文件", description = "上传人可撤销审批中的项目文件")
+    public BaseResponse<Boolean> cancel(@PathVariable("id") Long id,
+                                        HttpServletRequest request) throws JsonProcessingException {
+        String token = request.getHeader("token");
+        SysUser loginUser = jwtUtils.getUserFromToken(token);
+        projectFilesService.cancel(id, loginUser.getUserId());
+        return ResultUtils.success(Code.SUCCESS, true, "撤销成功");
+    }
+
     @GetMapping("/list")
     @Operation(summary = "项目文件列表", description = "支持按 projectId / approvalStatus / keyword 过滤")
     public BaseResponse<List<ProjectFileVo>> list(
