@@ -30,7 +30,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getProjectDetail, startStages, restartStage } from "@/services/project";
-import { fetchProjectFileBlob, getProjectFileList } from "@/services/project-file";
+import {
+  fetchFileBlobWithMeta,
+  fetchProjectFileBlob,
+  getProjectFileList,
+} from "@/services/project-file";
 import { getBenefitHistory } from "@/services/contract-benefit";
 import type { ContractBenefitRevisionVo } from "@/types/contract-benefit";
 import { ReviseBenefitDialog } from "@/components/contract-benefit/revise-benefit-dialog";
@@ -88,6 +92,46 @@ function getProjectFileDisplayName(file: ProjectFileVo): string {
 function isBrowserPreviewable(file: ProjectFileVo): boolean {
   const extension = file.fileExtension?.replace(/^\./, "").toLowerCase();
   return !!extension && browserPreviewableExtensions.has(extension);
+}
+
+function getFileExtensionFromName(fileName: string | null | undefined): string {
+  const name = fileName?.toLowerCase() ?? "";
+  const dotIndex = name.lastIndexOf(".");
+  return dotIndex >= 0 ? name.slice(dotIndex + 1) : "";
+}
+
+function isBlobBrowserPreviewable(blob: Blob, fileName?: string | null): boolean {
+  const extension = getFileExtensionFromName(fileName);
+  if (extension && browserPreviewableExtensions.has(extension)) return true;
+
+  const type = blob.type.toLowerCase();
+  return (
+    type.startsWith("image/") ||
+    type.startsWith("text/") ||
+    type === "application/pdf"
+  );
+}
+
+function parseContractFileIds(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  const text = String(raw).trim();
+  if (!text) return [];
+
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((value) => String(value).trim())
+        .filter(Boolean);
+    }
+  } catch {
+    // 兼容逗号分隔的历史数据
+  }
+
+  return text
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
 }
 
 const stageStatusLabels: Record<number, string> = {
@@ -466,6 +510,107 @@ function ProjectFileRow({ file }: { file: ProjectFileVo }) {
   );
 }
 
+function ContractAttachmentRow({
+  fileId,
+  label,
+}: {
+  fileId: string;
+  label: string;
+}) {
+  const [action, setAction] = useState<"preview" | "download" | null>(null);
+  const fallbackName = `${label}-${fileId}`;
+
+  const handlePreview = async () => {
+    const previewWindow = window.open("about:blank", "_blank");
+    if (!previewWindow) {
+      toast.error("浏览器拦截了预览窗口，请允许弹窗后重试");
+      return;
+    }
+    previewWindow.opener = null;
+    previewWindow.document.title = fallbackName;
+    previewWindow.document.body.textContent = "文件加载中...";
+
+    setAction("preview");
+    try {
+      const { blob, fileName } = await fetchFileBlobWithMeta(fileId);
+      const displayName = fileName || fallbackName;
+      if (!isBlobBrowserPreviewable(blob, displayName)) {
+        previewWindow.close();
+        toast.info(unsupportedPreviewMessage);
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      previewWindow.document.title = displayName;
+      previewWindow.location.href = url;
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) {
+      previewWindow.close();
+      toast.error(err instanceof Error ? err.message : "文件预览失败");
+    } finally {
+      setAction(null);
+    }
+  };
+
+  const handleDownload = async () => {
+    setAction("download");
+    try {
+      const { blob, fileName } = await fetchFileBlobWithMeta(fileId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName || fallbackName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "文件下载失败");
+    } finally {
+      setAction(null);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-3 py-2 px-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
+      <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+      <button
+        type="button"
+        className="flex-1 min-w-0 text-left"
+        onClick={handlePreview}
+        title="预览合同附件"
+        disabled={action !== null}
+      >
+        <p className="text-sm text-slate-700 font-medium truncate">{label}</p>
+        <p className="text-xs text-slate-400 truncate">附件 ID: {fileId}</p>
+      </button>
+      <div className="flex items-center gap-1 shrink-0">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-slate-400 hover:text-blue-600"
+          title="预览合同附件"
+          onClick={handlePreview}
+          disabled={action !== null}
+        >
+          {action === "preview" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-slate-400 hover:text-blue-600"
+          title="下载合同附件"
+          onClick={handleDownload}
+          disabled={action !== null}
+        >
+          {action === "download" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** 详情内容 */
 function ProjectDetailContent({
   detail,
@@ -487,6 +632,18 @@ function ProjectDetailContent({
   ).length;
   const members = (detail.projectMemberList ?? []).filter((m) => m.realName);
   const contract = detail.contract;
+  const contractAttachments = [
+    ...(contract?.contractFile
+      ? [{ fileId: String(contract.contractFile), label: "合同主文件" }]
+      : []),
+    ...parseContractFileIds(contract?.contractOtherFiles).map((fileId, index) => ({
+      fileId,
+      label: `合同附件 ${index + 1}`,
+    })),
+  ].filter(
+    (item, index, list) =>
+      item.fileId && list.findIndex((next) => next.fileId === item.fileId) === index,
+  );
   const startDate = contract?.preStartDate ?? detail.preStartTime;
   const endDate = contract?.preEndDate ?? detail.preEndTime;
 
@@ -701,14 +858,20 @@ function ProjectDetailContent({
         )}
 
         {/* 合同附件 */}
-        {contract?.contractFile && (
+        {contractAttachments.length > 0 && (
           <section>
             <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 mb-3">
               <FileText className="w-4 h-4 text-slate-400" /> 合同附件
             </h4>
-            <p className="text-xs text-slate-400">
-              附件 ID: {contract.contractFile}
-            </p>
+            <div className="space-y-1.5">
+              {contractAttachments.map((file) => (
+                <ContractAttachmentRow
+                  key={file.fileId}
+                  fileId={file.fileId}
+                  label={file.label}
+                />
+              ))}
+            </div>
           </section>
         )}
 

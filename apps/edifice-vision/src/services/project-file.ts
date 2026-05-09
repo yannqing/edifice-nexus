@@ -66,3 +66,38 @@ export async function fetchProjectFileBlob(fileId: string): Promise<Blob> {
 
   return response.blob();
 }
+
+function resolveFileName(disposition: string | null): string | null {
+  if (!disposition) return null;
+
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) return decodeURIComponent(encoded.replace(/^"|"$/g, ""));
+
+  const raw = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+  return raw ? decodeURIComponent(raw) : null;
+}
+
+export async function fetchFileBlobWithMeta(
+  fileId: string,
+): Promise<{ blob: Blob; fileName: string | null; contentType: string }> {
+  const token = getAccessToken();
+  const response = await fetch(getProjectFileDownloadUrl(fileId), {
+    headers: token ? { token } : {},
+  });
+
+  if (!response.ok) {
+    throw new Error(response.status >= 500 ? "服务器异常，请稍后重试" : "文件获取失败");
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const data = (await response.json().catch(() => null)) as BaseResponse<unknown> | null;
+    throw new Error(data?.msg || "文件获取失败");
+  }
+
+  return {
+    blob: await response.blob(),
+    fileName: resolveFileName(response.headers.get("Content-Disposition")),
+    contentType,
+  };
+}
