@@ -8,6 +8,7 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  Download,
   Loader2,
   Plus,
 } from "lucide-react";
@@ -22,6 +23,7 @@ import {
   confirmOutputValue,
   approveOutputValue,
   payOutputValue,
+  exportOutputValueExcel,
 } from "@/services/output-value";
 import { ResponseCode } from "@/types/api";
 import type { OutputValueVo, OutputValueStats } from "@/types/output-value";
@@ -73,6 +75,7 @@ export default function OutputValuePage() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
@@ -116,6 +119,18 @@ export default function OutputValuePage() {
     finally { setActionLoading(null); }
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await exportOutputValueExcel(statusFilterMap[activeTab], searchText);
+      toast.success("导出成功");
+    } catch {
+      toast.error("导出失败，请稍后重试");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const tabs: { key: TabKey; label: string; count: number }[] = [
     { key: "all", label: "全部", count: items.length },
     { key: "pending", label: "待确认", count: items.filter((i) => i.status === 0).length },
@@ -134,12 +149,27 @@ export default function OutputValuePage() {
             按季度维度分配阶段产值：公司留存 40% + 个人池 60%（分配比例 × 完成比例）。
           </p>
         </div>
-        <Button
-          className="bg-blue-600 hover:bg-blue-700 text-white"
-          onClick={() => setCreateOpen(true)}
-        >
-          <Plus className="w-4 h-4 mr-1" /> 新建分配单
-        </Button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Button
+            variant="outline"
+            className="bg-white"
+            onClick={handleExport}
+            disabled={exporting}
+          >
+            {exporting ? (
+              <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-1" />
+            )}
+            导出 Excel
+          </Button>
+          <Button
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus className="w-4 h-4 mr-1" /> 新建分配单
+          </Button>
+        </div>
       </div>
 
       <CreateOutputValueDialog

@@ -1,8 +1,10 @@
 package com.qsy.edifice.service.impl;
 
+import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.qsy.edifice.domain.dto.CreateOutputValueDto;
 import com.qsy.edifice.domain.entity.*;
+import com.qsy.edifice.domain.excel.OutputValueExcelData;
 import com.qsy.edifice.domain.vo.OutputValueVo;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
@@ -11,14 +13,19 @@ import com.qsy.edifice.mapper.OutputValueMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
 import com.qsy.edifice.service.*;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -62,6 +69,16 @@ public class OutputValueServiceImpl implements OutputValueService {
     private static final int DIST_TYPE_OTHER = 4;
     /** 可创建产值分配的阶段状态：3-已验收 / 6-已完成 */
     private static final Set<Integer> OUTPUT_VALUE_ALLOWED_STAGE_STATUSES = Set.of(3, 6);
+    private static final DateTimeFormatter EXPORT_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final Map<Integer, String> STATUS_LABELS = Map.of(
+            0, "待确认", 1, "待审核", 2, "已审批", 3, "已发放"
+    );
+    private static final Map<Integer, String> WORK_TYPE_LABELS = Map.of(
+            0, "管理工作", 1, "基础工作", 2, "智励工作"
+    );
+    private static final Map<Integer, String> DIST_TYPE_LABELS = Map.of(
+            0, "员工正常", 1, "员工降档", 2, "领导兜底", 3, "公司留存", 4, "其他金额"
+    );
 
     @Resource
     private OutputValueMapper outputValueMapper;
@@ -401,6 +418,92 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add));
         return stats;
+    }
+
+    // ==================== 导出 Excel ====================
+
+    @Override
+    public void exportOutputValues(Integer status, String keyword, HttpServletResponse response) throws IOException {
+        List<OutputValueVo> list = getOutputValueList(status);
+        if (StringUtils.hasText(keyword)) {
+            String k = keyword.trim();
+            list = list.stream()
+                    .filter(item -> contains(item.getProjectName(), k) || contains(item.getProjectCode(), k))
+                    .collect(Collectors.toList());
+        }
+
+        List<OutputValueExcelData> data = new ArrayList<>();
+        for (OutputValueVo item : list) {
+            List<OutputValueVo.DistributionItemVo> distributions = item.getDistributions();
+            if (distributions == null || distributions.isEmpty()) {
+                data.add(toExcelData(item, null));
+                continue;
+            }
+            for (OutputValueVo.DistributionItemVo distribution : distributions) {
+                data.add(toExcelData(item, distribution));
+            }
+        }
+
+        String fileName = "产值分配数据_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        setExcelResponseHeader(response, fileName);
+        EasyExcel.write(response.getOutputStream(), OutputValueExcelData.class)
+                .sheet("产值分配")
+                .doWrite(data);
+    }
+
+    private OutputValueExcelData toExcelData(OutputValueVo item, OutputValueVo.DistributionItemVo distribution) {
+        return OutputValueExcelData.builder()
+                .projectName(item.getProjectName())
+                .projectCode(item.getProjectCode())
+                .projectTypeName(item.getProjectTypeName())
+                .stageName(item.getStageName())
+                .quarter(item.getQuarter())
+                .status(labelOf(STATUS_LABELS, item.getStatus()))
+                .totalAmount(item.getTotalAmount())
+                .stageCumulativeAmount(item.getStageCumulativeAmount())
+                .previousCumulativeAmount(item.getPreviousCumulativeAmount())
+                .baseAmountPart(item.getBaseAmountPart())
+                .benefitAmountPart(item.getBenefitAmountPart())
+                .companyReserve(item.getCompanyReserve())
+                .otherAmount(item.getOtherAmount())
+                .subsidyAmount(item.getSubsidyAmount())
+                .submitUserName(item.getSubmitUserName())
+                .submitTime(formatTime(item.getSubmitTime()))
+                .approvedTime(formatTime(item.getApprovedTime()))
+                .paidTime(formatTime(item.getPaidTime()))
+                .userName(distribution == null ? null : distribution.getUserName())
+                .userRole(distribution == null ? null : distribution.getUserRole())
+                .workType(distribution == null ? null : labelOf(WORK_TYPE_LABELS, distribution.getWorkType()))
+                .allocRatio(distribution == null ? null : defaultIfNull(distribution.getAllocRatio(), distribution.getRatio()))
+                .completionRatio(distribution == null ? null : distribution.getCompletionRatio())
+                .distType(distribution == null ? null : labelOf(DIST_TYPE_LABELS, distribution.getDistType()))
+                .activeStatus(distribution == null ? null : Objects.equals(distribution.getIsActive(), 0) ? "离职" : "在职")
+                .actualAmount(distribution == null ? null : distribution.getAmount())
+                .build();
+    }
+
+    private boolean contains(String raw, String keyword) {
+        return raw != null && raw.contains(keyword);
+    }
+
+    private String labelOf(Map<Integer, String> labels, Integer value) {
+        return value == null ? "未知" : labels.getOrDefault(value, "未知");
+    }
+
+    private BigDecimal defaultIfNull(BigDecimal value, BigDecimal fallback) {
+        return value != null ? value : fallback;
+    }
+
+    private String formatTime(LocalDateTime time) {
+        return time == null ? null : time.format(EXPORT_TIME_FMT);
+    }
+
+    private void setExcelResponseHeader(HttpServletResponse response, String fileName) {
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+        response.setHeader("Content-Disposition", "attachment;filename=" + encodedFileName + ".xlsx");
+        response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
     }
 
     // ==================== VO 转换 ====================

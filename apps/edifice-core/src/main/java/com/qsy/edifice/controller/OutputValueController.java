@@ -13,9 +13,11 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -42,6 +44,14 @@ public class OutputValueController {
     public BaseResponse<Map<String, Object>> getStatistics() {
         Map<String, Object> result = outputValueService.getStatistics();
         return ResultUtils.success(Code.SUCCESS, result);
+    }
+
+    @GetMapping("/export")
+    @Operation(summary = "导出产值分配单", description = "按状态和关键字导出 Excel")
+    public void export(@RequestParam(required = false) Integer status,
+                       @RequestParam(required = false) String keyword,
+                       HttpServletResponse response) throws IOException {
+        outputValueService.exportOutputValues(status, keyword, response);
     }
 
     @PostMapping("/create")

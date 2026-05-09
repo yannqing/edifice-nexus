@@ -2,7 +2,9 @@ package com.qsy.edifice.service;
 
 import com.qsy.edifice.domain.dto.CreateOutputValueDto;
 import com.qsy.edifice.domain.vo.OutputValueVo;
+import jakarta.servlet.http.HttpServletResponse;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -47,4 +49,12 @@ public interface OutputValueService {
      * @return 各状态数量 + 已发放总额
      */
     Map<String, Object> getStatistics();
+
+    /**
+     * 导出产值分配单
+     * @param status 状态过滤（null=全部）
+     * @param keyword 项目名称/编码关键字
+     * @param response HTTP 响应
+     */
+    void exportOutputValues(Integer status, String keyword, HttpServletResponse response) throws IOException;
 }
