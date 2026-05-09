@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Eye, FileText, Loader2 } from "lucide-react";
+import { Download, Eye, FileText, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { fetchFileBlobWithMeta } from "@/services/project-file";
@@ -72,12 +72,40 @@ export function AttachmentFileList({
   );
 }
 
+export function EditableAttachmentFileList({
+  files,
+  onRemove,
+}: {
+  files: Array<{
+    fileId: string;
+    displayName?: string | null;
+  }>;
+  onRemove: (fileId: string) => void;
+}) {
+  if (files.length === 0) return null;
+
+  return (
+    <div className="space-y-1.5">
+      {files.map((file, index) => (
+        <AttachmentFileRow
+          key={file.fileId}
+          fileId={file.fileId}
+          fallbackName={file.displayName || `附件${index + 1}`}
+          onRemove={() => onRemove(file.fileId)}
+        />
+      ))}
+    </div>
+  );
+}
+
 function AttachmentFileRow({
   fileId,
   fallbackName,
+  onRemove,
 }: {
   fileId: string;
   fallbackName: string;
+  onRemove?: () => void;
 }) {
   const [action, setAction] = useState<"preview" | "download" | null>(null);
   const [displayName, setDisplayName] = useState(fallbackName);
@@ -171,6 +199,19 @@ function AttachmentFileRow({
         >
           {action === "download" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
         </Button>
+        {onRemove && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-slate-400 hover:text-rose-600"
+            title="删除文件"
+            onClick={onRemove}
+            disabled={action !== null}
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        )}
       </div>
     </div>
   );

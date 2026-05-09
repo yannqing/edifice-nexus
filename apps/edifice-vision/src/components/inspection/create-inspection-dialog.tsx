@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FileText, Loader2, Upload, X } from "lucide-react";
+import { Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +15,7 @@ import { applyInspection } from "@/services/inspection";
 import { getMyProjects, getProjectDetail, uploadDocument } from "@/services/project";
 import { ResponseCode } from "@/types/api";
 import type { FilesVo, ProjectListVo, ProjectMemberVo, ProjectStageVo } from "@/types/project";
+import { EditableAttachmentFileList } from "@/components/file/attachment-file-list";
 
 type InitialInspectionProject = Pick<ProjectListVo, "projectId" | "projectName" | "projectCode">;
 
@@ -255,20 +256,11 @@ export function CreateInspectionDialog({
               验收材料 <span className="text-rose-500">*</span>
             </label>
             {files.length > 0 && (
-              <div className="space-y-2 mb-2">
-                {files.map((file) => (
-                  <div key={file.fileId} className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg">
-                    <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                    <span className="text-xs text-slate-600 truncate flex-1">{file.displayName}</span>
-                    <button
-                      type="button"
-                      onClick={() => setFiles((prev) => prev.filter((item) => item.fileId !== file.fileId))}
-                      className="p-0.5 text-slate-400 hover:text-rose-500 transition-colors"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
+              <div className="mb-2">
+                <EditableAttachmentFileList
+                  files={files}
+                  onRemove={(fileId) => setFiles((prev) => prev.filter((item) => item.fileId !== fileId))}
+                />
               </div>
             )}
             <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
