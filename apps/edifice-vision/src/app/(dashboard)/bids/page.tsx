@@ -5,10 +5,9 @@ import { toast } from "sonner";
 import {
   Briefcase,
   Clipboard,
+  Eye,
   LayoutGrid,
   List,
-  Loader2,
-  MoreHorizontal,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -16,6 +15,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { TablePageSkeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ResponseCode } from "@/types/api";
 import {
   deleteBid,
@@ -30,6 +36,7 @@ import {
 } from "@/types/bid";
 import { BidFormDialog } from "@/components/bid/bid-form-dialog";
 import { BidApprovalDialog } from "@/components/bid/bid-approval-dialog";
+import { AttachmentFileActions } from "@/components/file/attachment-file-list";
 
 type ViewMode = "list" | "board";
 
@@ -67,6 +74,7 @@ export default function BidsPage() {
   const [approvalFilter, setApprovalFilter] = useState<number | "">("");
   const [formOpen, setFormOpen] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [current, setCurrent] = useState<BidVo | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -91,6 +99,14 @@ export default function BidsPage() {
     if (res.code === ResponseCode.SUCCESS && res.data) {
       setCurrent(res.data);
       setFormOpen(true);
+    }
+  };
+
+  const handleDetail = async (id: string) => {
+    const res = await getBidDetail(id);
+    if (res.code === ResponseCode.SUCCESS && res.data) {
+      setCurrent(res.data);
+      setDetailOpen(true);
     }
   };
 
@@ -222,6 +238,7 @@ export default function BidsPage() {
       ) : view === "list" ? (
         <ListView
           items={items}
+          onDetail={handleDetail}
           onEdit={handleEdit}
           onApproval={handleApproval}
           onDelete={handleDelete}
@@ -230,6 +247,7 @@ export default function BidsPage() {
       ) : (
         <BoardView
           items={items}
+          onDetail={handleDetail}
           onEdit={handleEdit}
           onApproval={handleApproval}
           onStatus={handleStatus}
@@ -248,6 +266,11 @@ export default function BidsPage() {
         bid={current}
         onSuccess={fetchData}
       />
+      <BidDetailDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        bid={current}
+      />
     </div>
   );
 }
@@ -256,12 +279,14 @@ export default function BidsPage() {
 
 function ListView({
   items,
+  onDetail,
   onEdit,
   onApproval,
   onDelete,
   onStatus,
 }: {
   items: BidVo[];
+  onDetail: (id: string) => void;
   onEdit: (id: string) => void;
   onApproval: (id: string) => void;
   onDelete: (b: BidVo) => void;
@@ -280,7 +305,7 @@ function ListView({
   }
 
   return (
-    <div className="glass-card rounded-2xl overflow-x-auto">
+    <div className="glass-card rounded-2xl overflow-x-auto overflow-y-visible">
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-xs text-slate-500 uppercase">
           <tr>
@@ -313,7 +338,7 @@ function ListView({
                 <p>果：{formatDate(b.resultDate)}</p>
               </td>
               <td className="py-3 px-4 text-center">
-                <StatusMenu bid={b} onStatus={onStatus} />
+                <StatusSelect bid={b} onStatus={onStatus} />
               </td>
               <td className="py-3 px-4 text-center">
                 <Badge
@@ -333,6 +358,9 @@ function ListView({
               </td>
               <td className="py-3 px-4 text-right">
                 <div className="flex justify-end gap-2">
+                  <Button size="sm" variant="outline" onClick={() => onDetail(b.bidId)}>
+                    <Eye className="w-3.5 h-3.5 mr-1" /> 详情
+                  </Button>
                   <Button size="sm" variant="outline" onClick={() => onApproval(b.bidId)}>
                     审批
                   </Button>
@@ -357,54 +385,47 @@ function ListView({
   );
 }
 
-function StatusMenu({
+function StatusSelect({
   bid,
   onStatus,
 }: {
   bid: BidVo;
   onStatus: (b: BidVo, target: number) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const options = BID_STATUS_OPTIONS.filter((o) => o.value !== bid.bidStatus);
 
   const handle = async (target: number) => {
+    if (target === bid.bidStatus) return;
     setLoading(true);
     try {
       await onStatus(bid, target);
     } finally {
       setLoading(false);
-      setOpen(false);
     }
   };
 
   return (
-    <div className="relative inline-block">
-      <button
-        onClick={() => setOpen((v) => !v)}
+    <div className="inline-flex items-center gap-2">
+      <span
         className={cn(
-          "text-xs px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1",
+          "text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap",
           bidStatusColorMap[bid.bidStatus] ?? "bg-slate-100 text-slate-600",
         )}
       >
         {bid.bidStatusLabel}
-        <MoreHorizontal className="w-3 h-3" />
-      </button>
-      {open && (
-        <div className="absolute z-10 right-0 mt-1 w-28 bg-white rounded-lg shadow-lg border border-slate-100 p-1">
-          {options.map((o) => (
-            <button
-              key={o.value}
-              disabled={loading}
-              onClick={() => handle(o.value)}
-              className="w-full text-left px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 rounded flex items-center gap-2"
-            >
-              {loading && <Loader2 className="w-3 h-3 animate-spin" />}
-              → {o.label}
-            </button>
-          ))}
-        </div>
-      )}
+      </span>
+      <select
+        value={bid.bidStatus}
+        disabled={loading}
+        onChange={(e) => handle(Number(e.target.value))}
+        className="h-7 w-24 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        {BID_STATUS_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -413,11 +434,13 @@ function StatusMenu({
 
 function BoardView({
   items,
+  onDetail,
   onEdit,
   onApproval,
   onStatus,
 }: {
   items: BidVo[];
+  onDetail: (id: string) => void;
   onEdit: (id: string) => void;
   onApproval: (id: string) => void;
   onStatus: (b: BidVo, target: number) => void;
@@ -452,6 +475,7 @@ function BoardView({
                   <BoardCard
                     key={b.bidId}
                     bid={b}
+                    onDetail={onDetail}
                     onEdit={onEdit}
                     onApproval={onApproval}
                     onStatus={onStatus}
@@ -468,11 +492,13 @@ function BoardView({
 
 function BoardCard({
   bid,
+  onDetail,
   onEdit,
   onApproval,
   onStatus,
 }: {
   bid: BidVo;
+  onDetail: (id: string) => void;
   onEdit: (id: string) => void;
   onApproval: (id: string) => void;
   onStatus: (b: BidVo, target: number) => void;
@@ -482,7 +508,7 @@ function BoardCard({
       <div className="flex justify-between items-start gap-2">
         <p
           className="text-sm font-medium text-slate-700 truncate cursor-pointer hover:text-blue-600"
-          onClick={() => onEdit(bid.bidId)}
+          onClick={() => onDetail(bid.bidId)}
           title={bid.bidName}
         >
           {bid.bidName}
@@ -501,8 +527,14 @@ function BoardCard({
         <span>{bid.ownerUserName ?? "-"}</span>
         <span className="font-semibold text-slate-700">{formatAmount(bid.tenderAmount)}</span>
       </div>
-      <div className="flex items-center gap-2 pt-1 border-t border-slate-50">
-        <StatusMenu bid={bid} onStatus={onStatus} />
+      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-50">
+        <StatusSelect bid={bid} onStatus={onStatus} />
+        <button
+          className="text-xs text-slate-500 hover:text-blue-600"
+          onClick={() => onDetail(bid.bidId)}
+        >
+          详情
+        </button>
         <button
           className="text-xs text-slate-500 hover:text-blue-600"
           onClick={() => onApproval(bid.bidId)}
@@ -510,6 +542,135 @@ function BoardCard({
           审批
         </button>
       </div>
+    </div>
+  );
+}
+
+function BidDetailDialog({
+  open,
+  onOpenChange,
+  bid,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  bid: BidVo | null;
+}) {
+  if (!bid) return null;
+  const files = bid.files ?? [];
+  const records = bid.approvalChain ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex flex-wrap items-center gap-2">
+            <DialogTitle>投标详情</DialogTitle>
+            <Badge
+              variant="secondary"
+              className={cn("text-xs", bidStatusColorMap[bid.bidStatus] ?? "")}
+            >
+              {bid.bidStatusLabel}
+            </Badge>
+            <Badge
+              variant="secondary"
+              className={cn("text-xs", approvalStatusColorMap[bid.approvalStatus] ?? "")}
+            >
+              {bid.approvalStatusLabel}
+            </Badge>
+          </div>
+          <DialogDescription>{bid.bidCode || bid.bidName}</DialogDescription>
+        </DialogHeader>
+
+        <div className="mt-4 space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <DetailItem label="投标名称" value={bid.bidName} />
+            <DetailItem label="甲方" value={bid.clientName || "-"} />
+            <DetailItem label="负责人" value={bid.ownerUserName || "-"} />
+            <DetailItem label="标的金额" value={formatAmount(bid.tenderAmount)} />
+            <DetailItem label="投标日期" value={formatDate(bid.bidDate)} />
+            <DetailItem label="结果日期" value={formatDate(bid.resultDate)} />
+          </div>
+
+          {bid.description && (
+            <section>
+              <p className="text-xs text-slate-400 mb-2">说明</p>
+              <div className="p-4 bg-slate-50 rounded-xl text-sm text-slate-600 leading-relaxed">
+                {bid.description}
+              </div>
+            </section>
+          )}
+
+          {files.length > 0 && (
+            <section>
+              <p className="text-xs text-slate-400 mb-2">附件</p>
+              <div className="space-y-1.5">
+                {files.map((file, index) => (
+                  <div
+                    key={file.bidFileId}
+                    className="flex items-center gap-3 py-2 px-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
+                  >
+                    <Clipboard className="w-4 h-4 text-blue-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-700 font-medium truncate">
+                        {file.fileName || `附件${index + 1}`}
+                      </p>
+                      <p className="text-xs text-slate-400 truncate">
+                        {file.fileCategory || "未分类"}
+                        {file.fileSize && ` · ${file.fileSize} bytes`}
+                      </p>
+                    </div>
+                    <AttachmentFileActions
+                      fileId={file.fileId}
+                      fileName={file.fileName || `附件${index + 1}`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {records.length > 0 && (
+            <section>
+              <p className="text-xs text-slate-400 mb-2">审批记录</p>
+              <div className="space-y-2">
+                {records.map((record) => (
+                  <div key={record.approvalRecordId} className="p-3 bg-slate-50 rounded-xl">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium text-slate-700">
+                        L{record.approvalLevel ?? "-"} · {record.approverName || "审批人"}
+                      </span>
+                      <Badge variant="secondary" className="text-xs">
+                        {record.inspectionFormStatus === 0
+                          ? "待审核"
+                          : record.inspectionFormStatus === 1
+                            ? "通过"
+                            : "驳回"}
+                      </Badge>
+                    </div>
+                    {record.approvalDescription && (
+                      <p className="text-sm text-slate-600 mt-1">
+                        {record.approvalDescription}
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-400 mt-1">
+                      {formatDate(record.createdTime)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="py-2 px-3 bg-slate-50 rounded-lg">
+      <p className="text-xs text-slate-400 mb-0.5">{label}</p>
+      <p className="text-sm font-medium text-slate-800">{value}</p>
     </div>
   );
 }
