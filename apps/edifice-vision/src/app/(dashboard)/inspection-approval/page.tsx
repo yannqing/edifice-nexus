@@ -13,7 +13,6 @@ import {
   ClipboardCheck,
   X,
   Check,
-  FileText,
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -46,6 +45,7 @@ import type {
 } from "@/types/inspection";
 import type { UserListItem } from "@/types/project";
 import { INSPECTION_STATUS_MAP } from "@/types/inspection";
+import { AttachmentFileList, parseFileIdList } from "@/components/file/attachment-file-list";
 
 type TabKey = "pending" | "passed" | "rejected" | "all";
 
@@ -589,13 +589,10 @@ export default function InspectionApprovalPage() {
                 )}
 
                 {/* 附件 */}
-                {detail.fileIds && detail.fileIds !== "null" && (
+                {parseFileIdList(detail.fileIds).length > 0 && (
                   <div>
                     <p className="text-xs text-slate-400 mb-2">验收材料</p>
-                    <div className="p-3 bg-slate-50 rounded-xl flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-blue-500" />
-                      <span className="text-sm text-slate-600">附件数据: {detail.fileIds}</span>
-                    </div>
+                    <AttachmentFileList fileIds={parseFileIdList(detail.fileIds)} labelPrefix="验收材料" />
                   </div>
                 )}
 

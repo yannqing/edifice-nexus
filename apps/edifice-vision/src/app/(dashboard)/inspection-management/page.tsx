@@ -40,6 +40,7 @@ import type {
   InspectionOverviewVo,
 } from "@/types/inspection";
 import { INSPECTION_STATUS_MAP } from "@/types/inspection";
+import { AttachmentFileList, parseFileIdList } from "@/components/file/attachment-file-list";
 
 type TabKey = "all" | "pending" | "passed" | "rejected";
 
@@ -469,6 +470,12 @@ function InspectionDetailDialog({ open, onOpenChange, detail, loading }: {
                   <div className="p-4 bg-slate-50 rounded-xl text-sm text-slate-600 leading-relaxed">
                     {detail.inspectionFormDescription}
                   </div>
+                </div>
+              )}
+              {parseFileIdList(detail.fileIds).length > 0 && (
+                <div>
+                  <p className="text-xs text-slate-400 mb-2">验收材料</p>
+                  <AttachmentFileList fileIds={parseFileIdList(detail.fileIds)} labelPrefix="验收材料" />
                 </div>
               )}
               {detail.approvalRecords && detail.approvalRecords.length > 0 && (
