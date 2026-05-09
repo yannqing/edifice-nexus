@@ -17,6 +17,7 @@ import { createBid, updateBid } from "@/services/bid";
 import type { UserListItem, FilesVo } from "@/types/project";
 import type { BidFileVo, BidVo } from "@/types/bid";
 import { BID_FILE_CATEGORIES } from "@/types/bid";
+import { AttachmentFileActions } from "@/components/file/attachment-file-list";
 
 interface Props {
   open: boolean;
@@ -358,15 +359,25 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
                         </option>
                       ))}
                     </select>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setAttachments((prev) => prev.filter((x) => x._key !== a._key))
-                      }
-                      className="text-slate-400 hover:text-rose-500"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {a.fileId && !a.uploading ? (
+                      <AttachmentFileActions
+                        fileId={a.fileId}
+                        fileName={a.fileName}
+                        onRemove={() =>
+                          setAttachments((prev) => prev.filter((x) => x._key !== a._key))
+                        }
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAttachments((prev) => prev.filter((x) => x._key !== a._key))
+                        }
+                        className="text-slate-400 hover:text-rose-500"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -400,4 +411,3 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
     </Dialog>
   );
 }
-

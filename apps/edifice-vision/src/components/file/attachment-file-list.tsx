@@ -50,6 +50,15 @@ function isBlobBrowserPreviewable(blob: Blob, fileName?: string | null): boolean
   );
 }
 
+export function isFileNameBrowserPreviewable(fileName: string | null | undefined): boolean {
+  const extension = getFileExtension(fileName);
+  return !!extension && browserPreviewableExtensions.has(extension);
+}
+
+export function showUnsupportedPreviewToast() {
+  toast.info(unsupportedPreviewMessage);
+}
+
 export function AttachmentFileList({
   fileIds,
   labelPrefix = "附件",
@@ -110,6 +119,45 @@ function AttachmentFileRow({
   const [action, setAction] = useState<"preview" | "download" | null>(null);
   const [displayName, setDisplayName] = useState(fallbackName);
 
+  return (
+    <div className="flex items-center gap-3 py-2 px-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
+      <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+      <div className="flex-1 min-w-0 text-left">
+        <p className="text-sm text-slate-700 font-medium truncate">{displayName}</p>
+        <p className="text-xs text-slate-400 truncate">文件 ID：{fileId}</p>
+      </div>
+      <AttachmentFileActions
+        fileId={fileId}
+        fileName={displayName}
+        onDisplayNameChange={setDisplayName}
+        onActionChange={setAction}
+        action={action}
+        onRemove={onRemove}
+      />
+    </div>
+  );
+}
+
+export function AttachmentFileActions({
+  fileId,
+  fileName,
+  onDisplayNameChange,
+  action,
+  onActionChange,
+  onRemove,
+}: {
+  fileId: string;
+  fileName?: string | null;
+  onDisplayNameChange?: (fileName: string) => void;
+  action?: "preview" | "download" | null;
+  onActionChange?: (action: "preview" | "download" | null) => void;
+  onRemove?: () => void;
+}) {
+  const [internalAction, setInternalAction] = useState<"preview" | "download" | null>(null);
+  const currentAction = action ?? internalAction;
+  const setCurrentAction = onActionChange ?? setInternalAction;
+  const displayName = fileName || "附件";
+
   const handlePreview = async () => {
     const previewWindow = window.open("about:blank", "_blank");
     if (!previewWindow) {
@@ -120,11 +168,11 @@ function AttachmentFileRow({
     previewWindow.document.title = displayName;
     previewWindow.document.body.textContent = "文件加载中...";
 
-    setAction("preview");
+    setCurrentAction("preview");
     try {
       const { blob, fileName } = await fetchFileBlobWithMeta(fileId);
       const nextName = fileName || displayName;
-      setDisplayName(nextName);
+      onDisplayNameChange?.(nextName);
       if (!isBlobBrowserPreviewable(blob, nextName)) {
         previewWindow.close();
         toast.info(unsupportedPreviewMessage);
@@ -138,16 +186,16 @@ function AttachmentFileRow({
       previewWindow.close();
       toast.error(err instanceof Error ? err.message : "文件预览失败");
     } finally {
-      setAction(null);
+      setCurrentAction(null);
     }
   };
 
   const handleDownload = async () => {
-    setAction("download");
+    setCurrentAction("download");
     try {
       const { blob, fileName } = await fetchFileBlobWithMeta(fileId);
       const nextName = fileName || displayName;
-      setDisplayName(nextName);
+      onDisplayNameChange?.(nextName);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -159,60 +207,47 @@ function AttachmentFileRow({
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "文件下载失败");
     } finally {
-      setAction(null);
+      setCurrentAction(null);
     }
   };
 
   return (
-    <div className="flex items-center gap-3 py-2 px-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
-      <FileText className="w-4 h-4 text-blue-500 shrink-0" />
-      <button
+    <div className="flex items-center gap-1 shrink-0">
+      <Button
         type="button"
-        className="flex-1 min-w-0 text-left"
-        onClick={handlePreview}
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 text-slate-400 hover:text-blue-600"
         title="预览文件"
-        disabled={action !== null}
+        onClick={handlePreview}
+        disabled={currentAction !== null}
       >
-        <p className="text-sm text-slate-700 font-medium truncate">{displayName}</p>
-        <p className="text-xs text-slate-400 truncate">文件 ID：{fileId}</p>
-      </button>
-      <div className="flex items-center gap-1 shrink-0">
+        {currentAction === "preview" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 text-slate-400 hover:text-blue-600"
+        title="下载文件"
+        onClick={handleDownload}
+        disabled={currentAction !== null}
+      >
+        {currentAction === "download" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+      </Button>
+      {onRemove && (
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="h-7 w-7 text-slate-400 hover:text-blue-600"
-          title="预览文件"
-          onClick={handlePreview}
-          disabled={action !== null}
+          className="h-7 w-7 text-slate-400 hover:text-rose-600"
+          title="删除文件"
+          onClick={onRemove}
+          disabled={currentAction !== null}
         >
-          {action === "preview" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+          <X className="w-4 h-4" />
         </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-slate-400 hover:text-blue-600"
-          title="下载文件"
-          onClick={handleDownload}
-          disabled={action !== null}
-        >
-          {action === "download" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-        </Button>
-        {onRemove && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-slate-400 hover:text-rose-600"
-            title="删除文件"
-            onClick={onRemove}
-            disabled={action !== null}
-          >
-            <X className="w-4 h-4" />
-          </Button>
-        )}
-      </div>
+      )}
     </div>
   );
 }

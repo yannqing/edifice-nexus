@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { Loader2, Upload, X, FileText } from "lucide-react";
+import { Loader2, Upload } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +26,7 @@ import type {
   UserListItem,
   FilesVo,
 } from "@/types/project";
+import { EditableAttachmentFileList } from "@/components/file/attachment-file-list";
 
 interface CreateProjectDialogProps {
   open: boolean;
@@ -425,22 +426,13 @@ export function CreateProjectDialog({
             {/* 合同主文件 */}
             <FormField label="合同文件">
               {contractMainFile ? (
-                <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl">
-                  <FileText className="w-4 h-4 text-blue-500 shrink-0" />
-                  <span className="text-sm text-slate-700 truncate flex-1">
-                    {contractMainFile.displayName}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
+                <EditableAttachmentFileList
+                  files={[contractMainFile]}
+                  onRemove={() => {
                       setContractMainFile(null);
                       updateField("contractFile", undefined);
-                    }}
-                    className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                  }}
+                />
               ) : (
                 <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
                   {uploading ? (
@@ -469,25 +461,11 @@ export function CreateProjectDialog({
             {/* 合同附件 */}
             <FormField label="其他附件">
               {contractAttachments.length > 0 && (
-                <div className="space-y-2 mb-2">
-                  {contractAttachments.map((f) => (
-                    <div
-                      key={f.fileId}
-                      className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg"
-                    >
-                      <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="text-xs text-slate-600 truncate flex-1">
-                        {f.displayName}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => removeAttachment(f.fileId)}
-                        className="p-0.5 text-slate-400 hover:text-rose-500 transition-colors"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
+                <div className="mb-2">
+                  <EditableAttachmentFileList
+                    files={contractAttachments}
+                    onRemove={removeAttachment}
+                  />
                 </div>
               )}
               <label className="flex items-center justify-center gap-2 p-3 border border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">

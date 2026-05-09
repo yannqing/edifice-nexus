@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { FileText, Loader2, Upload, X } from "lucide-react";
+import { Eye, FileText, Loader2, Upload, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +22,10 @@ import type {
   FilesVo,
 } from "@/types/project";
 import { FILE_CATEGORY_OPTIONS } from "@/types/project-file";
+import {
+  isFileNameBrowserPreviewable,
+  showUnsupportedPreviewToast,
+} from "@/components/file/attachment-file-list";
 
 const PROJECT_FILE_ACCEPT_TYPES = [
   ".pdf",
@@ -165,6 +169,28 @@ export function UploadProjectFileDialog({
       }
     }
     e.target.value = "";
+  };
+
+  const handleLocalPreview = () => {
+    if (!file) return;
+    const browserCanPreview =
+      isFileNameBrowserPreviewable(file.name) ||
+      file.type.startsWith("image/") ||
+      file.type.startsWith("text/") ||
+      file.type === "application/pdf";
+    if (!browserCanPreview) {
+      showUnsupportedPreviewToast();
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    const previewWindow = window.open(url, "_blank");
+    if (!previewWindow) {
+      URL.revokeObjectURL(url);
+      toast.error("浏览器拦截了预览窗口，请允许弹窗后重试");
+      return;
+    }
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
   const handleSubmit = async () => {
@@ -356,6 +382,14 @@ export function UploadProjectFileDialog({
                     {uploadedFile ? " · 已上传" : ""}
                   </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleLocalPreview}
+                  className="p-1.5 text-slate-400 hover:text-blue-600"
+                  title="预览文件"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
                 <button
                   type="button"
                   onClick={() => {
