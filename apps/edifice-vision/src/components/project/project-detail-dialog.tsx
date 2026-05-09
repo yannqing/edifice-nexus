@@ -117,19 +117,7 @@ function parseContractFileIds(raw: string | null | undefined): string[] {
   const text = String(raw).trim();
   if (!text) return [];
 
-  try {
-    const parsed = JSON.parse(text) as unknown;
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map((value) => String(value).trim())
-        .filter(Boolean);
-    }
-  } catch {
-    // 兼容逗号分隔的历史数据
-  }
-
-  return text
-    .split(",")
+  return (text.match(/\d+/g) ?? [])
     .map((value) => value.trim())
     .filter(Boolean);
 }

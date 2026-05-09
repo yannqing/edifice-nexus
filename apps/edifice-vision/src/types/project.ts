@@ -159,8 +159,8 @@ export interface CreateProjectParams {
   benefitRule?: string;
   /** 预计效益金额（v0.4，仅 contractType=1） */
   benefitAmount?: number;
-  contractFile?: number;
-  contractOtherFiles?: number[];
+  contractFile?: string;
+  contractOtherFiles?: string[];
   projectCharges: string[];
   projectMembers?: string[];
   signingTime?: string;

@@ -151,12 +151,12 @@ export function CreateProjectDialog({
       if (res.code === ResponseCode.SUCCESS && res.data) {
         if (type === "main") {
           setContractMainFile(res.data);
-          updateField("contractFile", Number(res.data.fileId));
+          updateField("contractFile", res.data.fileId);
         } else {
           setContractAttachments((prev) => [...prev, res.data]);
           updateField("contractOtherFiles", [
             ...(form.contractOtherFiles ?? []),
-            Number(res.data.fileId),
+            res.data.fileId,
           ]);
         }
       } else {
@@ -173,7 +173,7 @@ export function CreateProjectDialog({
     setContractAttachments((prev) => prev.filter((f) => f.fileId !== fileId));
     updateField(
       "contractOtherFiles",
-      (form.contractOtherFiles ?? []).filter((id) => id !== Number(fileId))
+      (form.contractOtherFiles ?? []).filter((id) => id !== fileId)
     );
   };
 
