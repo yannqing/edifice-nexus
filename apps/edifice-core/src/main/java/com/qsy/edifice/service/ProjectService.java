@@ -106,10 +106,9 @@ public interface ProjectService {
     /**
      * 根据项目id查询项目详情
      * @param projectId 项目id
-     * @param userId 当前用户id
      * @return 项目详情
      */
-    ProjectDetailVo getProjectDetailById(Long projectId, Long userId);
+    ProjectDetailVo getProjectDetailById(Long projectId);
 
     /**
      * 检查项目是否存在

@@ -499,20 +499,15 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public ProjectDetailVo getProjectDetailById(Long projectId, Long userId) {
+    public ProjectDetailVo getProjectDetailById(Long projectId) {
         //1.参数校验
-        if (userId == null||projectId == null) {
+        if (projectId == null) {
            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
         }
         // 2. 查询项目基本信息
         Project project = projectMapper.selectById(projectId);
         if (project == null) {
             throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
-        }
-        // 3. 验证用户是否参与此项目
-        List<Long> projectIds = projectMapper.selectProjectIdsByUserId(userId);
-        if (projectIds == null || !projectIds.contains(projectId)) {
-            throw new BusinessException(ErrorType.NO_AUTH_ERROR);
         }
         return convertToDetailVo(project);
     }

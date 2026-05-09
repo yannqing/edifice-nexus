@@ -119,19 +119,16 @@ public class ProjectController {
     }
 
     @GetMapping("/details/{id}")
-    @Operation(summary = "根据id查询项目详情", description = "查看项目详情信息（查看自己参与的项目）")
+    @Operation(summary = "根据id查询项目详情", description = "查看项目详情信息")
     public BaseResponse<ProjectDetailVo> getProjectDetailById(@PathVariable("id") Long projectId, HttpServletRequest request) throws JsonProcessingException {
-
-        String token = request.getHeader("token");
-        SysUser loginUser = jwtUtils.getUserFromToken(token);
-        ProjectDetailVo result = projectService.getProjectDetailById(projectId, loginUser.getUserId());
+        ProjectDetailVo result = projectService.getProjectDetailById(projectId);
 
         if (result == null) {
             boolean projectExists = projectService.checkProjectExists(projectId);
             if (!projectExists) {
                 return ResultUtils.failure(Code.FAILURE, null, "项目不存在");
             }
-            return ResultUtils.failure(Code.FAILURE, null, "您无权限查看该项目");
+            return ResultUtils.failure(Code.FAILURE, null, "获取项目详情失败");
         }
         return ResultUtils.success(Code.SUCCESS, result);
     }
