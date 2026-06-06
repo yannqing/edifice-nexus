@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -82,6 +83,7 @@ public class ReportController {
 
     @GetMapping("/overview")
     @Operation(summary = "统计总览", description = "项目总数、合同总额、已完成产值、回款率")
+    @PreAuthorize("hasAuthority('menu:statistics') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Map<String, Object>> getOverview() {
         List<Project> projects = projectMapper.selectList(null);
         int totalProjects = projects.size();
@@ -118,6 +120,7 @@ public class ReportController {
 
     @GetMapping("/project-stats")
     @Operation(summary = "项目产值统计", description = "每个项目的合同额、已完成产值、待处理产值")
+    @PreAuthorize("hasAuthority('menu:statistics') or hasRole('SUPER_ADMIN')")
     public BaseResponse<List<Map<String, Object>>> getProjectStats() {
         List<Project> projects = projectMapper.selectList(null);
         if (projects.isEmpty()) return ResultUtils.success(Code.SUCCESS, Collections.emptyList());
@@ -166,6 +169,7 @@ public class ReportController {
 
     @GetMapping("/category-stats")
     @Operation(summary = "项目分类统计")
+    @PreAuthorize("hasAuthority('menu:statistics') or hasRole('SUPER_ADMIN')")
     public BaseResponse<List<Map<String, Object>>> getCategoryStats() {
         List<ProjectType> types = projectTypeService.getAllEnabledProjectTypes();
         List<Project> allProjects = projectMapper.selectList(null);
@@ -214,6 +218,7 @@ public class ReportController {
 
     @GetMapping("/personnel-ranking")
     @Operation(summary = "人员产值排名")
+    @PreAuthorize("hasAuthority('menu:statistics') or hasRole('SUPER_ADMIN')")
     public BaseResponse<List<Map<String, Object>>> getPersonnelRanking() {
         // 按用户汇总已发放产值
         LambdaQueryWrapper<OutputValueDistribution> distWrapper = new LambdaQueryWrapper<>();
@@ -265,6 +270,7 @@ public class ReportController {
 
     @GetMapping("/my-performance")
     @Operation(summary = "个人绩效总览")
+    @PreAuthorize("hasAuthority('menu:performance') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Map<String, Object>> getMyPerformance(HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);
@@ -326,6 +332,7 @@ public class ReportController {
 
     @GetMapping("/my-project-details")
     @Operation(summary = "个人参与项目明细")
+    @PreAuthorize("hasAuthority('menu:performance') or hasRole('SUPER_ADMIN')")
     public BaseResponse<List<Map<String, Object>>> getMyProjectDetails(HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);
@@ -393,6 +400,7 @@ public class ReportController {
 
     @GetMapping("/my-payments")
     @Operation(summary = "个人产值发放记录")
+    @PreAuthorize("hasAuthority('menu:performance') or hasRole('SUPER_ADMIN')")
     public BaseResponse<List<Map<String, Object>>> getMyPayments(HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);
@@ -432,6 +440,7 @@ public class ReportController {
     @GetMapping("/personnel-quarter-summary")
     @Operation(summary = "人员季度分配汇总表",
             description = "按季度聚合所有已确认（status>=2）产值分配单，按用户维度汇总应得/实得金额")
+    @PreAuthorize("hasAuthority('menu:personnel-quarter') or hasRole('SUPER_ADMIN')")
     public BaseResponse<List<PersonnelQuarterSummaryVo>> getPersonnelQuarterSummary(
             @RequestParam(value = "quarter", required = false) String quarter) {
 
@@ -515,6 +524,7 @@ public class ReportController {
 
     @GetMapping("/dashboard")
     @Operation(summary = "仪表盘数据", description = "首页全局数据仪表盘")
+    @PreAuthorize("hasAuthority('menu:workbench') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Map<String, Object>> getDashboard(HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);
@@ -522,24 +532,48 @@ public class ReportController {
 
         Map<String, Object> result = new LinkedHashMap<>();
 
-        // 1. 统计卡片
-        List<Project> allProjects = projectMapper.selectList(null);
-        int projectCount = allProjects.size();
+        List<Long> myProjectIds = projectMapper.selectProjectIdsByUserId(userId);
+        if (myProjectIds == null) {
+            myProjectIds = Collections.emptyList();
+        }
+        Set<Long> myProjectIdSet = new LinkedHashSet<>(myProjectIds);
+        Set<String> myProjectIdStringSet = myProjectIdSet.stream()
+                .map(String::valueOf)
+                .collect(Collectors.toSet());
+
+        List<Project> scopedProjects = myProjectIdSet.isEmpty()
+                ? Collections.emptyList()
+                : projectMapper.selectBatchIds(myProjectIdSet);
+
+        // 1. 统计卡片：仅统计当前用户参与的项目
+        int projectCount = (int) scopedProjects.stream()
+                .filter(p -> !Objects.equals(p.getProjectStatus(), 4))
+                .count();
 
         // 产值总额
-        List<OutputValue> allOv = outputValueMapper.selectList(null);
-        BigDecimal totalOutputValue = allOv.stream()
+        List<OutputValue> scopedOv = Collections.emptyList();
+        if (!myProjectIdSet.isEmpty()) {
+            LambdaQueryWrapper<OutputValue> ovW = new LambdaQueryWrapper<>();
+            ovW.in(OutputValue::getProjectId, myProjectIdSet);
+            scopedOv = outputValueMapper.selectList(ovW);
+        }
+        BigDecimal totalOutputValue = scopedOv.stream()
                 .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        // 已确认产值 = status >= 2（已审批 + 已发放）
-        BigDecimal paidOutputValue = allOv.stream()
-                .filter(o -> o.getStatus() != null && o.getStatus() >= 2)
+        // 已发放产值 = status = 3
+        BigDecimal paidOutputValue = scopedOv.stream()
+                .filter(o -> Objects.equals(o.getStatus(), 3))
                 .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 待审批验工单数
-        long pendingInspections = inspectionFormMapper.selectCount(
-                new LambdaQueryWrapper<InspectionForm>().eq(InspectionForm::getInspectionFormStatus, 0));
+        long pendingInspections = 0L;
+        if (!myProjectIdStringSet.isEmpty()) {
+            pendingInspections = inspectionFormMapper.selectCount(
+                    new LambdaQueryWrapper<InspectionForm>()
+                            .in(InspectionForm::getProjectId, myProjectIdStringSet)
+                            .eq(InspectionForm::getInspectionFormStatus, 0));
+        }
 
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("projectCount", projectCount);
@@ -548,23 +582,21 @@ public class ReportController {
         stats.put("pendingInspections", pendingInspections);
         result.put("stats", stats);
 
-        // 2. 关键项目（合同金额最大的前5个）
-        // 批量预取：全部项目的合同 / 类型 / 产值
-        Set<Long> allProjectIds = allProjects.stream().map(Project::getProjectId).collect(Collectors.toSet());
-        Map<Long, Contract> contractMap = loadContractsByProjectIds(allProjectIds);
-        Map<Long, List<OutputValue>> ovByProject = loadOutputValuesByProjectIds(allProjectIds);
-        Set<Long> allTypeIds = allProjects.stream().map(Project::getProjectType)
+        // 2. 关键项目（当前用户参与项目中，合同金额最大的前5个）
+        Map<Long, Contract> contractMap = loadContractsByProjectIds(myProjectIdSet);
+        Map<Long, List<OutputValue>> ovByProject = loadOutputValuesByProjectIds(myProjectIdSet);
+        Set<Long> allTypeIds = scopedProjects.stream().map(Project::getProjectType)
                 .filter(Objects::nonNull).collect(Collectors.toSet());
         Map<Long, ProjectType> typeMap = loadTypesByIds(allTypeIds);
 
         Map<Long, BigDecimal> contractAmounts = new HashMap<>();
-        for (Project p : allProjects) {
+        for (Project p : scopedProjects) {
             Contract c = contractMap.get(p.getProjectId());
             contractAmounts.put(p.getProjectId(),
                     c != null && c.getContractAmount() != null ? c.getContractAmount() : BigDecimal.ZERO);
         }
 
-        List<Project> sorted = new ArrayList<>(allProjects);
+        List<Project> sorted = new ArrayList<>(scopedProjects);
         sorted.sort((a, b) -> contractAmounts.getOrDefault(b.getProjectId(), BigDecimal.ZERO)
                 .compareTo(contractAmounts.getOrDefault(a.getProjectId(), BigDecimal.ZERO)));
 
@@ -597,13 +629,19 @@ public class ReportController {
         }
         result.put("topProjects", topProjects);
 
-        // 3. 待办事项（当前用户的待审批验工单 + 待确认产值）
+        // 3. 待办事项（当前用户参与项目内的待审批验工单 + 待确认产值）
         List<Map<String, Object>> todos = new ArrayList<>();
 
         // 待审批验工单（批量查申请人姓名）
-        LambdaQueryWrapper<InspectionForm> insW = new LambdaQueryWrapper<>();
-        insW.eq(InspectionForm::getInspectionFormStatus, 0).orderByDesc(InspectionForm::getCreatedTime).last("LIMIT 5");
-        List<InspectionForm> pendingIns = inspectionFormMapper.selectList(insW);
+        List<InspectionForm> pendingIns = Collections.emptyList();
+        if (!myProjectIdStringSet.isEmpty()) {
+            LambdaQueryWrapper<InspectionForm> insW = new LambdaQueryWrapper<>();
+            insW.in(InspectionForm::getProjectId, myProjectIdStringSet)
+                    .eq(InspectionForm::getInspectionFormStatus, 0)
+                    .orderByDesc(InspectionForm::getCreatedTime)
+                    .last("LIMIT 5");
+            pendingIns = inspectionFormMapper.selectList(insW);
+        }
         Set<Long> applyUserIds = pendingIns.stream()
                 .map(InspectionForm::getApplyUserId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<Long, SysUser> applyUserMap = applyUserIds.isEmpty() ? Collections.emptyMap()
@@ -623,9 +661,15 @@ public class ReportController {
         }
 
         // 待确认产值分配（批量查项目名）
-        LambdaQueryWrapper<OutputValue> ovPendingW = new LambdaQueryWrapper<>();
-        ovPendingW.eq(OutputValue::getStatus, 0).orderByDesc(OutputValue::getCreatedTime).last("LIMIT 3");
-        List<OutputValue> pendingOv = outputValueMapper.selectList(ovPendingW);
+        List<OutputValue> pendingOv = Collections.emptyList();
+        if (!myProjectIdSet.isEmpty()) {
+            LambdaQueryWrapper<OutputValue> ovPendingW = new LambdaQueryWrapper<>();
+            ovPendingW.in(OutputValue::getProjectId, myProjectIdSet)
+                    .eq(OutputValue::getStatus, 0)
+                    .orderByDesc(OutputValue::getCreatedTime)
+                    .last("LIMIT 3");
+            pendingOv = outputValueMapper.selectList(ovPendingW);
+        }
         Set<Long> pendingOvProjectIds = pendingOv.stream()
                 .map(OutputValue::getProjectId).filter(Objects::nonNull).collect(Collectors.toSet());
         Map<Long, Project> pendingOvProjectMap = pendingOvProjectIds.isEmpty() ? Collections.emptyMap()
@@ -644,9 +688,8 @@ public class ReportController {
         result.put("todos", todos);
 
         // 4. 我的项目进度（当前用户参与的项目）
-        List<Long> myProjectIds = projectMapper.selectProjectIdsByUserId(userId);
         List<Map<String, Object>> myProjects = new ArrayList<>();
-        if (myProjectIds != null && !myProjectIds.isEmpty()) {
+        if (!myProjectIds.isEmpty()) {
             List<Long> limited = myProjectIds.stream().limit(4).toList();
 
             // 批量取项目
@@ -681,11 +724,11 @@ public class ReportController {
         }
         result.put("myProjects", myProjects);
 
-        // 5. 项目分类分布
+        // 5. 项目分类分布（当前用户参与项目）
         List<ProjectType> types = projectTypeService.getAllEnabledProjectTypes();
         List<Map<String, Object>> categoryDist = new ArrayList<>();
         for (ProjectType type : types) {
-            long count = allProjects.stream().filter(p -> type.getProjectTypeId().equals(p.getProjectType())).count();
+            long count = scopedProjects.stream().filter(p -> type.getProjectTypeId().equals(p.getProjectType())).count();
             Map<String, Object> cat = new LinkedHashMap<>();
             cat.put("category", type.getProjectTypeCode() + "类");
             cat.put("name", type.getProjectTypeName());

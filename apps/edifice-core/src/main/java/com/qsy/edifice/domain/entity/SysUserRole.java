@@ -40,6 +40,25 @@ public class SysUserRole implements Serializable {
     private Long roleId;
 
     /**
+     * 项目id，0 表示全局系统角色
+     */
+    @Builder.Default
+    @TableField("project_id")
+    private Long projectId = 0L;
+
+    /**
+     * 来源：MANUAL 手动配置 / OA_SYNC OA同步映射
+     */
+    @TableField("source")
+    private String source;
+
+    /**
+     * 来源标识，如 OA_POSITION:1 / OA_ADMIN_GROUP:2
+     */
+    @TableField("source_ref")
+    private String sourceRef;
+
+    /**
      * 创建时间
      */
     @TableField(value = "created_time", fill = FieldFill.INSERT)

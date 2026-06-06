@@ -2,6 +2,7 @@ const ACCESS_TOKEN_KEY = "access_token";
 const REFRESH_TOKEN_KEY = "refresh_token";
 const USER_INFO_KEY = "user_info";
 const USER_ROLES_KEY = "user_roles";
+const USER_PERMISSIONS_KEY = "user_permissions";
 
 // ==================== Token ====================
 
@@ -61,10 +62,27 @@ export function setUserRoles<T>(roles: T): void {
   localStorage.setItem(USER_ROLES_KEY, JSON.stringify(roles));
 }
 
+export function getUserPermissions(): string[] {
+  if (typeof window === "undefined") return [];
+  const raw = localStorage.getItem(USER_PERMISSIONS_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function setUserPermissions(permissions: string[]): void {
+  localStorage.setItem(USER_PERMISSIONS_KEY, JSON.stringify(permissions));
+}
+
 // ==================== 清除所有认证数据 ====================
 
 export function clearAuth(): void {
   clearTokens();
   localStorage.removeItem(USER_INFO_KEY);
   localStorage.removeItem(USER_ROLES_KEY);
+  localStorage.removeItem(USER_PERMISSIONS_KEY);
 }

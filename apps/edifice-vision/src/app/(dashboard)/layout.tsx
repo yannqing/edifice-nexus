@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Menu } from "lucide-react";
 import { Sidebar } from "@/components/layout/sidebar";
+import { PermissionRouteGuard } from "@/components/layout/permission-route-guard";
 
 export default function DashboardLayout({
   children,
@@ -28,7 +29,9 @@ export default function DashboardLayout({
             然而信工程管理
           </span>
         </header>
-        <main className="flex-1 overflow-y-auto min-w-0">{children}</main>
+        <main className="flex-1 overflow-y-auto min-w-0">
+          <PermissionRouteGuard>{children}</PermissionRouteGuard>
+        </main>
       </div>
     </div>
   );

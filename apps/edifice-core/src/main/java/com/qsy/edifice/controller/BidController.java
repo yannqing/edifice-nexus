@@ -17,6 +17,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,6 +32,7 @@ import java.util.List;
 @Tag(name = "投标管理")
 @RestController
 @RequestMapping("/bids")
+@PreAuthorize("hasAuthority('menu:bids') or hasRole('SUPER_ADMIN')")
 public class BidController {
 
     @Resource

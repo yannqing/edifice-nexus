@@ -6,6 +6,7 @@ import com.qsy.edifice.common.Code;
 import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.entity.SysRole;
 import com.qsy.edifice.domain.entity.SysUser;
+import com.qsy.edifice.mapper.SysRoleMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
 import com.qsy.edifice.utils.JwtUtils;
 import com.qsy.edifice.utils.RedisCache;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Date;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -50,6 +52,9 @@ public class AuthController {
 
     @Resource
     private SysUserMapper sysUserMapper;
+
+    @Resource
+    private SysRoleMapper sysRoleMapper;
 
     @GetMapping("/oa-sso-token")
     @Operation(summary = "获取 OA 单点登录 Token", description = "为当前登录用户签发 5 分钟有效的 OA SSO Token")
@@ -97,6 +102,43 @@ public class AuthController {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("token", token);
         data.put("oaUrl", oaUrl);
+        return ResultUtils.success(Code.SUCCESS, data, "success");
+    }
+
+    @GetMapping("/current-permissions")
+    @Operation(summary = "获取当前用户权限快照", description = "用于前端检测 OA 权限变更后提示用户重新登录")
+    public BaseResponse<Map<String, Object>> getCurrentPermissions(HttpServletRequest request) {
+        String accessToken = request.getHeader("token");
+        if (accessToken == null || accessToken.isBlank()) {
+            return ResultUtils.failure(Code.TOKEN_ERROR, null, "请先登录");
+        }
+        if (redisCache.getCacheObject("access_token:" + accessToken) == null) {
+            return ResultUtils.failure(Code.ACCESS_TOKEN_EXPIRE, null, "登录已过期，请重新登录");
+        }
+
+        Long userId;
+        try {
+            jwtUtils.tokenVerify(accessToken);
+            if (!"access".equals(JwtUtils.getTokenType(accessToken))) {
+                return ResultUtils.failure(Code.TOKEN_AUTHENTICATE_FAILURE, null, "无效的 Token 类型");
+            }
+            userId = jwtUtils.getUserFromToken(accessToken).getUserId();
+        } catch (Exception e) {
+            return ResultUtils.failure(Code.TOKEN_AUTHENTICATE_FAILURE, null, "非法 Access Token");
+        }
+
+        SysUser user = sysUserMapper.selectById(userId);
+        if (user == null
+                || (user.getIsDelete() != null && user.getIsDelete() == 1)
+                || (user.getStatus() != null && user.getStatus() != 1)) {
+            return ResultUtils.failure(Code.TOKEN_AUTHENTICATE_FAILURE, null, "用户不存在");
+        }
+
+        List<SysRole> roles = sysRoleMapper.selectRolesByUserId(userId);
+        List<String> permissions = sysUserMapper.selectPermissionCodesByUserId(userId);
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("roles", roles);
+        data.put("permissions", permissions);
         return ResultUtils.success(Code.SUCCESS, data, "success");
     }
 
@@ -154,8 +196,9 @@ public class AuthController {
             return ResultUtils.failure(Code.FAILURE, null, "生成 Access Token 失败");
         }
 
-        // 角色信息（当前简单实现：空数组；后续接入 sys_user_role 后填充）
-        String rolesJson = JSON.toJSONString(new java.util.ArrayList<SysRole>());
+        List<SysRole> roles = sysRoleMapper.selectRolesByUserId(userId);
+        List<String> permissions = sysUserMapper.selectPermissionCodesByUserId(userId);
+        String rolesJson = JSON.toJSONString(roles);
 
         String newAccessToken = jwtUtils.generateAccessToken(userInfoJson, rolesJson);
 
@@ -178,6 +221,8 @@ public class AuthController {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("accessToken", newAccessToken);
         data.put("expiresIn", JwtUtils.ACCESS_TOKEN_TTL_MS / 1000);
+        data.put("roles", roles);
+        data.put("permissions", permissions);
 
         log.info("用户 {} 刷新 Access Token 成功", user.getUsername());
         return ResultUtils.success(Code.SUCCESS, data, "刷新成功");

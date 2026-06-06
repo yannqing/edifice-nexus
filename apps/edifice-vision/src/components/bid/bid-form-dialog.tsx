@@ -213,7 +213,7 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">
-                投标项目名称 *
+                投标项目名称 <span className="text-rose-500">*</span>
               </label>
               <input
                 type="text"
@@ -233,7 +233,7 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
             </div>
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">
-                负责人 *
+                负责人 <span className="text-rose-500">*</span>
               </label>
               <select
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"

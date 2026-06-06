@@ -27,6 +27,7 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -55,6 +56,7 @@ public class ProjectController {
 
     @PostMapping("/create")
     @Operation(summary = "新建项目", description = "新建项目，以及初始化合同、阶段、成员等数据")
+    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Long> createProject(@RequestBody CreateProjectDto dto, HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);
@@ -64,6 +66,7 @@ public class ProjectController {
 
     @PutMapping("/update")
     @Operation(summary = "更新项目", description = "更新项目基本信息、合同信息及成员")
+    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> updateProjectFull(@RequestBody UpdateProjectDto dto) {
         projectService.updateProjectFull(dto);
         return ResultUtils.success(Code.SUCCESS, true, "更新成功");
@@ -71,6 +74,7 @@ public class ProjectController {
 
     @PutMapping("/stage/start")
     @Operation(summary = "启动阶段", description = "批量启动项目阶段（未开始→进行中），支持多个阶段同时启动")
+    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> startStages(@RequestBody List<Long> stageIds) {
         projectStageService.startStages(new HashSet<>(stageIds));
         return ResultUtils.success(Code.SUCCESS, true, "阶段启动成功");
@@ -78,6 +82,7 @@ public class ProjectController {
 
     @PutMapping("/stage/restart/{id}")
     @Operation(summary = "重启阶段", description = "重新启动已驳回的阶段（已驳回→进行中）")
+    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> restartStage(@PathVariable("id") Long stageId) {
         projectStageService.restartStage(stageId);
         return ResultUtils.success(Code.SUCCESS, true, "阶段已重新启动");
@@ -85,6 +90,7 @@ public class ProjectController {
 
     @DeleteMapping("/delete/{id}")
     @Operation(summary = "删除项目", description = "逻辑删除项目")
+    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> deleteProject(@PathVariable("id") Long projectId) {
         boolean result = projectService.deleteProject(projectId);
         if (result) {
@@ -95,6 +101,7 @@ public class ProjectController {
 
     @GetMapping("/all")
     @Operation(summary = "查询全部项目", description = "分页 + 条件查询所有项目，支持按名称、状态、分类筛选")
+    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Page<ProjectListVo>> getAllProjects(GetAllProjectListDto dto) {
         Page<ProjectListVo> result = projectService.getAllProjectPage(dto);
         return ResultUtils.success(Code.SUCCESS, result);
@@ -135,6 +142,7 @@ public class ProjectController {
 
     @GetMapping("/all/statistics")
     @Operation(summary = "项目信息统计总览", description = "对项目进行统计，用于全部项目页")
+    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
     public BaseResponse<ProjectStatisticsVo> getProjectStatistics() {
         ProjectStatisticsVo result = projectService.getProjectStatistics();
         return ResultUtils.success(Code.SUCCESS, result);
@@ -162,6 +170,7 @@ public class ProjectController {
 
     @GetMapping("/export")
     @Operation(summary = "导出项目", description = "导出全部或指定项目为 Excel 文件")
+    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
     public void exportProjects(
             @RequestParam(value = "ids", required = false) List<Long> ids,
             HttpServletResponse response) throws IOException {
@@ -176,6 +185,7 @@ public class ProjectController {
 
     @PostMapping("/import")
     @Operation(summary = "导入项目", description = "通过 Excel 文件批量导入项目")
+    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
     public BaseResponse<String> importProjects(
             @RequestParam("file") MultipartFile file,
             HttpServletRequest request) throws Exception {

@@ -57,8 +57,8 @@ export default function LoginPage() {
       });
 
       if (isLoginSuccess(response)) {
-        const { accessToken, refreshToken, userInfo, roles } = response.data;
-        setAuth(accessToken, refreshToken, userInfo, roles);
+        const { accessToken, refreshToken, userInfo, roles, permissions } = response.data;
+        setAuth(accessToken, refreshToken, userInfo, roles, permissions ?? []);
         toast.success("登录成功");
         router.push("/");
       } else {
@@ -224,8 +224,8 @@ export default function LoginPage() {
               )}
             </div>
 
-            {/* Remember Me & Forgot Password */}
-            <div className="flex items-center justify-between">
+            {/* Remember Me */}
+            <div className="flex items-center">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -237,12 +237,6 @@ export default function LoginPage() {
                 />
                 <span className="text-sm text-slate-600">记住我</span>
               </label>
-              <button
-                type="button"
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
-              >
-                忘记密码？
-              </button>
             </div>
 
             {/* Submit Button */}
@@ -264,48 +258,6 @@ export default function LoginPage() {
               )}
             </Button>
           </form>
-
-          {/* Divider */}
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-200" />
-            </div>
-            <div className="relative flex justify-center">
-              <span className="px-4 bg-slate-50 text-sm text-slate-400">
-                或使用其他方式登录
-              </span>
-            </div>
-          </div>
-
-          {/* Social Login */}
-          <div className="grid grid-cols-2 gap-4">
-            <button className="flex items-center justify-center gap-2 py-2.5 px-4 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors">
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path
-                  fill="currentColor"
-                  d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.17 6.839 9.49.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0112 6.836c.85.004 1.705.114 2.504.336 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.167 22 16.418 22 12c0-5.523-4.477-10-10-10z"
-                />
-              </svg>
-              GitHub
-            </button>
-            <button className="flex items-center justify-center gap-2 py-2.5 px-4 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors">
-              <svg className="w-5 h-5" viewBox="0 0 24 24">
-                <path
-                  fill="#07C160"
-                  d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 01.213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 00.167-.054l1.903-1.114a.864.864 0 01.717-.098 10.16 10.16 0 002.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178A1.17 1.17 0 014.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 01-1.162 1.178 1.17 1.17 0 01-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 01.598.082l1.584.926a.272.272 0 00.14.046c.134 0 .24-.111.24-.245 0-.06-.024-.119-.04-.178l-.324-1.232a.492.492 0 01.177-.554c1.523-1.121 2.49-2.779 2.49-4.617 0-3.37-3.247-6.127-7.05-6.127zm-2.095 3.123c.535 0 .969.44.969.982a.976.976 0 01-.969.982.976.976 0 01-.969-.982c0-.542.434-.982.97-.982zm4.842 0c.535 0 .969.44.969.982a.976.976 0 01-.969.982.976.976 0 01-.969-.982c0-.542.434-.982.969-.982z"
-                />
-              </svg>
-              微信
-            </button>
-          </div>
-
-          {/* Register Link */}
-          <p className="text-center text-sm text-slate-500 mt-8">
-            还没有账户？{" "}
-            <button className="text-blue-600 hover:text-blue-700 font-medium transition-colors">
-              立即注册
-            </button>
-          </p>
         </div>
       </div>
     </div>

@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ResponseCode } from "@/types/api";
 import { getAllProjects, getProjectDetail, getUserList } from "@/services/project";
-import { createOutputValue } from "@/services/output-value";
+import { createOutputValue, getOutputValueList } from "@/services/output-value";
 import type {
   ProjectListVo,
   ProjectDetailVo,
@@ -27,6 +27,7 @@ import {
   generateQuarterOptions,
   WORK_TYPE_LABELS,
   type CreateDistributionItem,
+  type OutputValueVo,
 } from "@/types/output-value";
 
 interface CreateOutputValueDialogProps {
@@ -82,13 +83,14 @@ export function CreateOutputValueDialog({
 }: CreateOutputValueDialogProps) {
   const [projects, setProjects] = useState<ProjectListVo[]>([]);
   const [users, setUsers] = useState<UserListItem[]>([]);
+  const [outputValues, setOutputValues] = useState<OutputValueVo[]>([]);
   const [projectId, setProjectId] = useState<string>("");
   const [projectDetail, setProjectDetail] = useState<ProjectDetailVo | null>(null);
   const [stages, setStages] = useState<ProjectStageVo[]>([]);
   const [stageId, setStageId] = useState<string>("");
   const [quarter, setQuarter] = useState<string>(currentQuarter());
+  const [confirmUserId, setConfirmUserId] = useState<string>("");
   const [subsidyAmount, setSubsidyAmount] = useState<string>("");
-  const [allowNegative, setAllowNegative] = useState<boolean>(false);
   const [rows, setRows] = useState<DistRow[]>([newRow()]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -99,17 +101,18 @@ export function CreateOutputValueDialog({
     setStages([]);
     setStageId("");
     setQuarter(currentQuarter());
+    setConfirmUserId("");
     setSubsidyAmount("");
-    setAllowNegative(false);
     setRows([newRow()]);
     setError("");
   }, []);
 
   const fetchOptions = useCallback(async () => {
     try {
-      const [projectsRes, usersRes] = await Promise.all([
+      const [projectsRes, usersRes, outputValuesRes] = await Promise.all([
         getAllProjects({ pageSize: 200 }),
         getUserList(),
+        getOutputValueList(),
       ]);
       if (projectsRes.code === ResponseCode.SUCCESS && projectsRes.data) {
         setProjects(projectsRes.data.records ?? []);
@@ -117,10 +120,27 @@ export function CreateOutputValueDialog({
       if (usersRes.code === ResponseCode.SUCCESS && usersRes.data) {
         setUsers(usersRes.data.records ?? []);
       }
+      if (outputValuesRes.code === ResponseCode.SUCCESS && outputValuesRes.data) {
+        setOutputValues(outputValuesRes.data ?? []);
+      }
     } catch {
       /* 静默 */
     }
   }, []);
+
+  const confirmedStageIds = useMemo(() => {
+    return new Set(
+      outputValues
+        .filter((item) => item.status >= 1)
+        .map((item) => item.projectStageId),
+    );
+  }, [outputValues]);
+
+  const isStageAvailable = useCallback(
+    (stage: ProjectStageVo) =>
+      isCompletedStage(stage) && !confirmedStageIds.has(stage.projectStageId),
+    [confirmedStageIds],
+  );
 
   useEffect(() => {
     if (open) {
@@ -144,7 +164,7 @@ export function CreateOutputValueDialog({
         if (cancelled) return;
         if (res.code === ResponseCode.SUCCESS && res.data) {
           setProjectDetail(res.data);
-          setStages((res.data.projectStages ?? []).filter(isCompletedStage));
+          setStages((res.data.projectStages ?? []).filter(isStageAvailable));
           setStageId("");
         }
       } catch {
@@ -154,7 +174,7 @@ export function CreateOutputValueDialog({
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, isStageAvailable]);
 
   // 候选分配人员：优先项目成员，否则全量
   const memberOptions = useMemo(() => {
@@ -167,9 +187,9 @@ export function CreateOutputValueDialog({
 
   const eligibleProjects = useMemo(() => {
     return projects.filter((project) =>
-      (project.projectStages ?? []).some(isCompletedStage),
+      (project.projectStages ?? []).some(isStageAvailable),
     );
-  }, [projects]);
+  }, [projects, isStageAvailable]);
 
   // 当前选中阶段
   const selectedStage = useMemo(
@@ -177,7 +197,7 @@ export function CreateOutputValueDialog({
     [stages, stageId],
   );
 
-  // v0.4 预览：基于 contract + stage 自动算累计与本期产值（不含历史累计校准，落库时由后端再算）
+  // v0.4 预览：阶段比例是单阶段比例，不是项目累计比例。
   const preview = useMemo(() => {
     const contract = projectDetail?.contract;
     const contractType = contract?.contractType ?? 0;
@@ -205,8 +225,6 @@ export function CreateOutputValueDialog({
 
   // 派生数据（员工池 / 公司账 / 实得汇总等）
   const { totalNum, subsidyNum, companyMain, employeePool, sumAlloc, sumActual, downgradeDelta, otherAmount } = useMemo(() => {
-    // 注意：前端预览不知道历史累计，先按当前累计估算"本期产值上限"。
-    //       真实本期 = current - previous（由后端落库时算）；如果上次累计不为 0 则前端预览偏大
     const t = preview.currentCumulative;
     const s = Number(subsidyAmount) || 0;
     const cmpMain = Math.round(t * 0.6 * 100) / 100;
@@ -264,9 +282,10 @@ export function CreateOutputValueDialog({
       return setError("只能为已完成阶段创建产值分配单");
     }
     if (!quarter) return setError("请选择季度");
+    if (!confirmUserId) return setError("请选择确认人");
     if (preview.currentCumulative <= 0) {
       return setError(
-        "本阶段累计应得为 0：请先在合同里录入预计效益金额、或在阶段编辑里设置基本/效益累计计入比例",
+        "本阶段产值为 0：请先检查合同金额、预计效益金额或阶段产值比例",
       );
     }
     if (Math.abs(sumAlloc - 100) > 0.01)
@@ -286,9 +305,9 @@ export function CreateOutputValueDialog({
         projectId,
         projectStageId: stageId,
         quarter,
+        confirmUserId,
         // totalAmount 由后端计算，不传
         subsidyAmount: subsidyNum || undefined,
-        allowNegative: allowNegative || undefined,
         distributions: rows.map((r) => ({
           userId: r.userId,
           workType: r.workType,
@@ -346,7 +365,7 @@ export function CreateOutputValueDialog({
               </select>
               {projects.length > 0 && eligibleProjects.length === 0 && (
                 <p className="text-xs text-amber-600 mt-1">
-                  暂无可分配产值的项目，请先完成项目阶段。
+                  暂无可分配产值的项目，请先完成项目阶段；已确认产值的阶段不会重复显示。
                 </p>
               )}
             </div>
@@ -359,7 +378,7 @@ export function CreateOutputValueDialog({
                 disabled={!projectId || stages.length === 0}
               >
                 <option value="">
-                  {projectId && stages.length === 0 ? "该项目暂无已完成阶段" : "请选择已完成阶段"}
+                  {projectId && stages.length === 0 ? "该项目暂无可创建产值的阶段" : "请选择已完成阶段"}
                 </option>
                 {stages.map((s) => (
                   <option key={s.projectStageId} value={s.projectStageId}>
@@ -384,6 +403,23 @@ export function CreateOutputValueDialog({
             </div>
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">
+                确认人 <span className="text-rose-500">*</span>
+              </label>
+              <select
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
+                value={confirmUserId}
+                onChange={(e) => setConfirmUserId(e.target.value)}
+              >
+                <option value="">请选择确认人</option>
+                {users.map((u) => (
+                  <option key={u.userId} value={u.userId}>
+                    {u.realName || u.username}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">
                 公司补贴（元，只记录不计入产值）
               </label>
               <input
@@ -398,12 +434,14 @@ export function CreateOutputValueDialog({
             </div>
           </div>
 
-          {/* v0.4 累计预览：系统按合同 + 阶段比例自动算 */}
+          {/* v0.4 阶段产值预览：系统按合同 + 阶段比例自动算 */}
           <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 space-y-2 text-xs">
             <p className="text-sm font-semibold text-slate-700">
-              本阶段累计应得（系统计算）
+              本阶段产值（系统计算）
               <span className="ml-2 text-xs text-slate-400 font-normal">
-                {preview.hasBenefit ? "基本+效益" : "基本收费"} · 本期产值 = 当前累计 − 历史累计（由后端落库时校准）
+                {preview.hasBenefit
+                  ? "基本+效益 · 本阶段产值 = 基本部分 + 效益部分"
+                  : "基本收费 · 本阶段产值 = 合同金额 × 阶段比例"}
               </span>
             </p>
             <div className={cn("grid grid-cols-1 gap-2 text-slate-600", preview.hasBenefit && "sm:grid-cols-2")}>
@@ -423,12 +461,9 @@ export function CreateOutputValueDialog({
               )}
             </div>
             <div className="pt-2 border-t border-blue-100 text-slate-700">
-              当前阶段累计应得：
+              当前阶段应得：
               <span className="text-base font-bold text-blue-700 ml-2">
                 ¥{preview.currentCumulative.toLocaleString()}
-              </span>
-              <span className="ml-3 text-xs text-slate-400">
-                如本阶段为首单则等于本期产值；否则后端会减去历史累计
               </span>
             </div>
           </div>
@@ -440,17 +475,6 @@ export function CreateOutputValueDialog({
             <MetricBox label="降档归公司" value={downgradeDelta} tone="amber" />
             <MetricBox label="离职归公司" value={otherAmount} tone="rose" />
           </div>
-
-          {totalNum < 0 && (
-            <label className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={allowNegative}
-                onChange={(e) => setAllowNegative(e.target.checked)}
-              />
-              <span>本期产值为负（效益值下调），勾选确认后允许创建</span>
-            </label>
-          )}
 
           {/* 分配明细 */}
           <div>

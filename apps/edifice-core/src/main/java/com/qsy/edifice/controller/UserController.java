@@ -21,6 +21,7 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -65,6 +66,7 @@ public class UserController {
 
     @GetMapping("/all")
     @Operation(summary = "查询所有用户", description = "条件 + 分页查询所有用户")
+    @PreAuthorize("hasAuthority('menu:user-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Page<SysUserListVo>> getAllUsers( GetUserListDto getUserListDto) {
         Page<SysUserListVo> userListVoList = sysUserService.getAllUsers(getUserListDto);
 
@@ -73,6 +75,7 @@ public class UserController {
 
     @GetMapping("/{id}")
     @Operation(summary = "根据id查询单个用户")
+    @PreAuthorize("hasAuthority('menu:user-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<SysUserDetailVo> getUserById(@PathVariable Integer id) {
         SysUserDetailVo userDetailVo = sysUserService.getUserById(id);
 
@@ -81,6 +84,7 @@ public class UserController {
 
     @PostMapping("/create")
     @Operation(summary = "新增用户")
+    @PreAuthorize("hasAuthority('menu:user-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> createUser(@RequestBody SysUserCreateDto sysUserCreateDto) {
         boolean result = sysUserService.createUser(sysUserCreateDto);
 
@@ -93,6 +97,7 @@ public class UserController {
 
     @PutMapping("/update")
     @Operation(summary = "更新用户")
+    @PreAuthorize("hasAuthority('menu:user-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> updateUser(@RequestBody SysUserUpdateDto sysUserUpdateDto) {
         boolean result = sysUserService.updateUser(sysUserUpdateDto);
 
@@ -105,6 +110,7 @@ public class UserController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "根据id删除用户")
+    @PreAuthorize("hasAuthority('menu:user-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> deleteUser(@PathVariable Integer id) {
         boolean result = sysUserService.deleteUser(id);
 
@@ -117,6 +123,7 @@ public class UserController {
 
     @DeleteMapping("/batch")
     @Operation(summary = "批量删除用户")
+    @PreAuthorize("hasAuthority('menu:user-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> deleteUsers(@RequestParam("ids") List<Long> ids) {
         boolean result = sysUserService.deleteUserBath(ids);
 
@@ -131,12 +138,14 @@ public class UserController {
 
     @GetMapping("/export/template")
     @Operation(summary = "下载用户导入模板")
+    @PreAuthorize("hasAuthority('menu:user-management') or hasRole('SUPER_ADMIN')")
     public void downloadTemplate(HttpServletResponse response) throws IOException {
         userExcelService.downloadTemplate(response);
     }
 
     @PostMapping("/import")
     @Operation(summary = "批量导入用户", description = "按花名册 Excel 批量导入；用户名自动生成（手机号/邮箱本地部分/员工编号），初始密码 12345678")
+    @PreAuthorize("hasAuthority('menu:user-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<String> importUsers(@RequestParam("file") MultipartFile file) throws IOException {
         String result = userExcelService.importUsers(file);
         return ResultUtils.success(Code.SUCCESS, result);

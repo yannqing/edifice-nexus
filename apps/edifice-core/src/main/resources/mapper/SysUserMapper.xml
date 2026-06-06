@@ -103,9 +103,12 @@
         FROM sys_permission sp
                  INNER JOIN sys_role_permission srp ON sp.permission_id = srp.permission_id
                  INNER JOIN sys_user_role sur ON srp.role_id = sur.role_id
+                 INNER JOIN sys_role sr ON srp.role_id = sr.role_id
         WHERE sur.user_id = #{userId}
           AND sp.is_delete = 0
           AND srp.is_delete = 0
           AND sur.is_delete = 0
+          AND sr.is_delete = 0
+          AND sr.status = 1
     </select>
 </mapper>

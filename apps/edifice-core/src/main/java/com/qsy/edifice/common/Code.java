@@ -12,6 +12,7 @@ public class Code {
     public static final Integer TOKEN_EXPIRE = 10000;       //token过期（旧版，已废弃）
     public static final Integer TOKEN_AUTHENTICATE_FAILURE = 10001;       //token认证失败
     public static final Integer TOKEN_ERROR = 10002;       //token错误（无效或为空）
+    public static final Integer PERMISSION_DENIED = 40300; //权限不足
 
     // 双 Token 策略专用状态码
     public static final Integer ACCESS_TOKEN_EXPIRE = 10003;       //Access Token 过期（需重新登录）

@@ -17,6 +17,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -34,6 +35,7 @@ public class AnnouncementController {
 
     @GetMapping("/list")
     @Operation(summary = "公告列表", description = "管理端：分页 + 关键字 / 状态 / 优先级筛选")
+    @PreAuthorize("hasAuthority('menu:announcement-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Page<AnnouncementVo>> getList(GetAnnouncementListDto dto) {
         Page<AnnouncementVo> result = announcementService.getAnnouncementList(dto);
         return ResultUtils.success(Code.SUCCESS, result);
@@ -56,6 +58,7 @@ public class AnnouncementController {
 
     @PostMapping("/create")
     @Operation(summary = "创建公告", description = "status=1 时立即发布；否则保存为草稿")
+    @PreAuthorize("hasAuthority('menu:announcement-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Long> create(@RequestBody CreateAnnouncementDto dto,
                                      HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
@@ -66,6 +69,7 @@ public class AnnouncementController {
 
     @PutMapping("/update")
     @Operation(summary = "更新公告")
+    @PreAuthorize("hasAuthority('menu:announcement-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> update(@RequestBody UpdateAnnouncementDto dto) {
         announcementService.updateAnnouncement(dto);
         return ResultUtils.success(Code.SUCCESS, true, "更新成功");
@@ -73,6 +77,7 @@ public class AnnouncementController {
 
     @PutMapping("/publish/{id}")
     @Operation(summary = "发布公告", description = "草稿或已下线 → 已发布")
+    @PreAuthorize("hasAuthority('menu:announcement-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> publish(@PathVariable("id") Long id,
                                          HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
@@ -83,6 +88,7 @@ public class AnnouncementController {
 
     @PutMapping("/unpublish/{id}")
     @Operation(summary = "下线公告", description = "已发布 → 已下线")
+    @PreAuthorize("hasAuthority('menu:announcement-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> unpublish(@PathVariable("id") Long id) {
         announcementService.unpublishAnnouncement(id);
         return ResultUtils.success(Code.SUCCESS, true, "下线成功");
@@ -90,6 +96,7 @@ public class AnnouncementController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "删除公告")
+    @PreAuthorize("hasAuthority('menu:announcement-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> delete(@PathVariable("id") Long id) {
         announcementService.deleteAnnouncement(id);
         return ResultUtils.success(Code.SUCCESS, true, "删除成功");

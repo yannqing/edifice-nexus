@@ -37,6 +37,7 @@ import {
 } from "@/services/inspection";
 import { getUserList } from "@/services/project";
 import { getAccessToken } from "@/lib/token";
+import { useAuth } from "@/store/auth-context";
 import { ResponseCode } from "@/types/api";
 import type {
   InspectionFormListVo,
@@ -107,6 +108,7 @@ function formatAmount(amount: number | null | undefined): string {
 const PAGE_SIZE = 10;
 
 export default function InspectionApprovalPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabKey>("pending");
   const [searchText, setSearchText] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -213,6 +215,11 @@ export default function InspectionApprovalPage() {
   // 审批操作
   const handleApproval = async (result: number) => {
     if (!detail) return;
+    const comment = approvalComment.trim();
+    if (!comment) {
+      toast.error("请输入审批意见");
+      return;
+    }
     const pass = result === 1;
     const currentRecord = (detail.approvalRecords ?? []).find((record) => record.inspectionFormStatus === 0);
     const currentLevel = currentRecord?.approvalLevel ?? 1;
@@ -228,7 +235,7 @@ export default function InspectionApprovalPage() {
       const res = await approvalInspection({
         inspectionFormId: detail.inspectionFormId,
         result,
-        approvalDescription: approvalComment,
+        approvalDescription: comment,
         nextApproverId: pass && !shouldTerminate ? nextApproverId : undefined,
       });
       if (res.code === ResponseCode.SUCCESS) {
@@ -251,6 +258,17 @@ export default function InspectionApprovalPage() {
   const detailCurrentRecord = detail?.approvalRecords?.find((record) => record.inspectionFormStatus === 0);
   const detailCurrentLevel = detailCurrentRecord?.approvalLevel ?? 1;
   const detailDefaultTerminate = detailCurrentLevel >= 3;
+  const currentUserId = user?.userId == null ? "" : String(user.userId);
+  const canApproveDetail =
+    !!detailCurrentRecord &&
+    !!currentUserId &&
+    String(detailCurrentRecord.approver) === currentUserId &&
+    (detail?.inspectionFormStatus === 0 || detail?.inspectionFormStatus === 1);
+
+  const canApproveItem = (item: InspectionFormListVo) =>
+    !!currentUserId &&
+    String(item.currentApproverId ?? "") === currentUserId &&
+    (item.inspectionFormStatus === 0 || item.inspectionFormStatus === 1);
 
   const tabs: { key: TabKey; label: string; count: number }[] = [
     { key: "pending", label: "待审批", count: pendingTotal },
@@ -401,7 +419,7 @@ export default function InspectionApprovalPage() {
                     {item.applyUserName || "-"} · {formatDate(item.createdTime)}
                   </p>
                 </div>
-                {(item.inspectionFormStatus === 0 || item.inspectionFormStatus === 1) && (
+                {canApproveItem(item) && (
                   <div className="flex justify-end pt-2 border-t border-slate-100">
                     <span className="px-3 py-1.5 text-xs text-white font-medium bg-blue-600 rounded-lg">
                       审批
@@ -479,7 +497,7 @@ export default function InspectionApprovalPage() {
                         >
                           查看详情
                         </button>
-                        {(item.inspectionFormStatus === 0 || item.inspectionFormStatus === 1) && (
+                        {canApproveItem(item) && (
                           <button
                             onClick={() => openDetail(item.inspectionFormId)}
                             className="px-3 py-1.5 text-xs text-white font-medium bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
@@ -628,7 +646,7 @@ export default function InspectionApprovalPage() {
                 )}
 
                 {/* 审批操作 */}
-                {(detail.inspectionFormStatus === 0 || detail.inspectionFormStatus === 1) && (
+                {canApproveDetail && (
                   <div className="border-t border-slate-100 pt-5">
                     <p className="text-sm font-semibold text-slate-800 mb-3">审批操作</p>
                     <div className="flex items-center gap-2 mb-3">

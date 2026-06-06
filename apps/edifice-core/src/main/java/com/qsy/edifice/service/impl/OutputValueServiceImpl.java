@@ -33,9 +33,9 @@ import java.util.stream.Collectors;
  * 产值分配服务实现（v0.4）
  *
  * 核心公式（v0.4 修订）：
- *   阶段累计应得 = contract.base_amount × stage.stage_output / 100
- *               + contract.benefit_amount × stage.benefit_inclusion_ratio / 100
- *   本期 totalAmount = 当前阶段累计 - 历史最大累计（自动多退少补）
+ *   基本收费：本期 totalAmount = contract.contract_amount × stage.stage_output / 100
+ *   基本+效益：本期 totalAmount = contract.base_amount × stage.stage_output / 100
+ *                              + contract.benefit_amount × stage.benefit_inclusion_ratio / 100
  *
  *   employeePool   = totalAmount × 40%      （员工池）
  *   companyAccount = totalAmount × 60%      （公司账主体）
@@ -123,6 +123,9 @@ public class OutputValueServiceImpl implements OutputValueService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createOutputValue(CreateOutputValueDto dto, Long userId) {
+        if (dto == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "创建参数不能为空");
+        }
         if (dto.getProjectId() == null || dto.getProjectStageId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择项目和阶段");
         }
@@ -132,21 +135,23 @@ public class OutputValueServiceImpl implements OutputValueService {
         if (!StringUtils.hasText(dto.getQuarter())) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择所属季度");
         }
+        if (dto.getConfirmUserId() == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择确认人");
+        }
+        List<OutputValue> stageOutputValues = outputValueMapper.selectByProjectStageIdForUpdate(dto.getProjectStageId());
+        if (hasConfirmedStageOutputValue(stageOutputValues, null)) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "该阶段产值已通过分配单确认，无法重复提交");
+        }
 
-        // 1. 系统自动算 totalAmount（合同 + 阶段比例 + 历史最大累计）
+        // 1. 系统自动算 totalAmount
         StageCumulativeResult cumulative = calcStageCumulative(dto.getProjectId(), dto.getProjectStageId());
-        BigDecimal total = cumulative.current.subtract(cumulative.previous)
-                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal total = cumulative.current.setScale(2, RoundingMode.HALF_UP);
 
         if (total.signum() == 0) {
-            throw new BusinessException(ErrorType.OPERATION_FAILED,
-                    "本阶段累计应得（" + cumulative.current + "）等于上一次累计（"
-                            + cumulative.previous + "），无新增产值");
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "本阶段产值为 0，请检查合同金额和阶段产值比例");
         }
-        if (total.signum() < 0 && !Boolean.TRUE.equals(dto.getAllowNegative())) {
-            throw new BusinessException(ErrorType.OPERATION_FAILED,
-                    "效益值下调导致本期产值为负 " + total + "（当前累计 " + cumulative.current
-                            + "，历史累计 " + cumulative.previous + "），如确认请勾选'允许负产值'");
+        if (total.signum() < 0) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "本阶段产值不能为负，请检查合同金额和阶段产值比例");
         }
 
         // 2. v0.4 比例：员工 40% / 公司 60%
@@ -255,6 +260,8 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .benefitSnapshot(cumulative.benefitAmountUsed)
                 .status(0)
                 .submitUserId(userId)
+                .confirmUserId(dto.getConfirmUserId())
+                .currentHandlerId(dto.getConfirmUserId())
                 .submitTime(LocalDateTime.now())
                 .build();
         outputValueMapper.insert(ov);
@@ -264,17 +271,16 @@ public class OutputValueServiceImpl implements OutputValueService {
             distributionMapper.insert(d);
         }
 
-        log.info("[v0.4] 创建产值分配单 id={} 季度={} total={}（基本{} + 效益{}） 累计 {}→{} 公司账={} 员工实得={}",
+        log.info("[v0.4] 创建产值分配单 id={} 季度={} total={}（基本{} + 效益{}） 公司账={} 员工实得={}",
                 ov.getOutputValueId(), ov.getQuarter(), total,
                 cumulative.basePart, cumulative.benefitPart,
-                cumulative.previous, cumulative.current,
                 companyReserve, sumActual);
 
         return ov.getOutputValueId();
     }
 
     /**
-     * 计算指定阶段的累计应得（基本+效益）和历史最大累计。
+     * 计算指定阶段产值。阶段比例是单阶段比例，不是项目累计比例。
      */
     private StageCumulativeResult calcStageCumulative(Long projectId, Long stageId) {
         ProjectStage stage = projectStageService.getProjectStageById(stageId);
@@ -307,19 +313,7 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .divide(BD_100, 2, RoundingMode.HALF_UP);
         BigDecimal currentCumulative = basePart.add(benefitPart);
 
-        // 历史最大累计：取该项目所有 status>=0 的产值分配单的最大 stage_cumulative_amount
-        // （包括草稿/审核中，避免重复计入）
-        LambdaQueryWrapper<OutputValue> w = new LambdaQueryWrapper<>();
-        w.eq(OutputValue::getProjectId, projectId)
-                .isNotNull(OutputValue::getStageCumulativeAmount);
-        List<OutputValue> historicalOvs = outputValueMapper.selectList(w);
-        BigDecimal previousCumulative = historicalOvs.stream()
-                .map(OutputValue::getStageCumulativeAmount)
-                .filter(Objects::nonNull)
-                .max(BigDecimal::compareTo)
-                .orElse(BigDecimal.ZERO);
-
-        return new StageCumulativeResult(currentCumulative, previousCumulative,
+        return new StageCumulativeResult(currentCumulative, BigDecimal.ZERO,
                 basePart, benefitPart, benefitAmt);
     }
 
@@ -366,37 +360,80 @@ public class OutputValueServiceImpl implements OutputValueService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void confirmOutputValue(Long outputValueId) {
-        OutputValue ov = outputValueMapper.selectById(outputValueId);
-        if (ov == null) throw new BusinessException(ErrorType.OUTPUT_VALUE_NOT_FOUND);
+    public void confirmOutputValue(Long outputValueId, Long operatorId, Long approveUserId) {
+        OutputValue existing = outputValueMapper.selectById(outputValueId);
+        if (existing == null) throw new BusinessException(ErrorType.OUTPUT_VALUE_NOT_FOUND);
+
+        List<OutputValue> stageOutputValues = outputValueMapper.selectByProjectStageIdForUpdate(existing.getProjectStageId());
+        OutputValue ov = stageOutputValues.stream()
+                .filter(item -> Objects.equals(item.getOutputValueId(), outputValueId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(ErrorType.OUTPUT_VALUE_NOT_FOUND));
         if (ov.getStatus() != 0) throw new BusinessException(ErrorType.OUTPUT_VALUE_STATUS_INVALID, "当前状态无法确认");
+        if (hasConfirmedStageOutputValue(stageOutputValues, outputValueId)) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED,
+                    "您的这个产值已经通过其他分配单确定，无法进行二次确认");
+        }
+        assertCurrentHandler(ov, operatorId, "您不是当前确认人");
+        if (approveUserId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择审批人");
+        }
 
         ov.setStatus(1); // 待审核
+        ov.setApproveUserId(approveUserId);
+        ov.setCurrentHandlerId(approveUserId);
         outputValueMapper.updateById(ov);
+    }
+
+    private boolean hasConfirmedStageOutputValue(List<OutputValue> outputValues, Long excludeOutputValueId) {
+        if (outputValues == null || outputValues.isEmpty()) {
+            return false;
+        }
+        return outputValues.stream()
+                .filter(item -> excludeOutputValueId == null
+                        || !Objects.equals(item.getOutputValueId(), excludeOutputValueId))
+                .anyMatch(item -> item.getStatus() != null && item.getStatus() >= 1);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void approveOutputValue(Long outputValueId, Long userId) {
+    public void approveOutputValue(Long outputValueId, Long operatorId, Long payUserId) {
         OutputValue ov = outputValueMapper.selectById(outputValueId);
         if (ov == null) throw new BusinessException(ErrorType.OUTPUT_VALUE_NOT_FOUND);
         if (ov.getStatus() != 1) throw new BusinessException(ErrorType.OUTPUT_VALUE_STATUS_INVALID, "当前状态无法审批");
+        assertCurrentHandler(ov, operatorId, "您不是当前审批人");
+        if (payUserId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择发放人");
+        }
 
         ov.setStatus(2); // 已审批
         ov.setApprovedTime(LocalDateTime.now());
+        ov.setPayUserId(payUserId);
+        ov.setCurrentHandlerId(payUserId);
         outputValueMapper.updateById(ov);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void payOutputValue(Long outputValueId) {
+    public void payOutputValue(Long outputValueId, Long operatorId) {
         OutputValue ov = outputValueMapper.selectById(outputValueId);
         if (ov == null) throw new BusinessException(ErrorType.OUTPUT_VALUE_NOT_FOUND);
         if (ov.getStatus() != 2) throw new BusinessException(ErrorType.OUTPUT_VALUE_STATUS_INVALID, "当前状态无法发放");
+        assertCurrentHandler(ov, operatorId, "您不是当前发放人");
 
         ov.setStatus(3); // 已发放
         ov.setPaidTime(LocalDateTime.now());
+        ov.setCurrentHandlerId(null);
         outputValueMapper.updateById(ov);
+    }
+
+    private void assertCurrentHandler(OutputValue ov, Long operatorId, String message) {
+        if (ov.getCurrentHandlerId() == null) {
+            return;
+        }
+        if (!Objects.equals(ov.getCurrentHandlerId(), operatorId)) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, message);
+        }
     }
 
     // ==================== 统计 ====================
@@ -525,6 +562,10 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setBenefitAmountPart(ov.getBenefitAmountPart());
         vo.setBenefitSnapshot(ov.getBenefitSnapshot());
         vo.setStatus(ov.getStatus());
+        vo.setConfirmUserId(ov.getConfirmUserId());
+        vo.setApproveUserId(ov.getApproveUserId());
+        vo.setPayUserId(ov.getPayUserId());
+        vo.setCurrentHandlerId(ov.getCurrentHandlerId());
         vo.setSubmitTime(ov.getSubmitTime());
         vo.setApprovedTime(ov.getApprovedTime());
         vo.setPaidTime(ov.getPaidTime());
@@ -553,6 +594,10 @@ public class OutputValueServiceImpl implements OutputValueService {
             SysUser user = sysUserMapper.selectById(ov.getSubmitUserId());
             if (user != null) vo.setSubmitUserName(user.getRealName());
         }
+        vo.setConfirmUserName(resolveUserName(ov.getConfirmUserId()));
+        vo.setApproveUserName(resolveUserName(ov.getApproveUserId()));
+        vo.setPayUserName(resolveUserName(ov.getPayUserId()));
+        vo.setCurrentHandlerName(resolveUserName(ov.getCurrentHandlerId()));
 
         // 分配明细
         LambdaQueryWrapper<OutputValueDistribution> distWrapper = new LambdaQueryWrapper<>();
@@ -591,5 +636,12 @@ public class OutputValueServiceImpl implements OutputValueService {
 
         vo.setDistributions(distVos);
         return vo;
+    }
+
+    private String resolveUserName(Long userId) {
+        if (userId == null) return null;
+        SysUser user = sysUserMapper.selectById(userId);
+        if (user == null) return null;
+        return StringUtils.hasText(user.getRealName()) ? user.getRealName() : user.getUsername();
     }
 }

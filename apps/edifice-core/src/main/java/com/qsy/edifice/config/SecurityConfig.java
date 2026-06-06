@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -24,6 +25,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Slf4j
 @EnableWebSecurity
+@EnableMethodSecurity
 @Configuration
 public class SecurityConfig {
 
@@ -72,6 +74,8 @@ public class SecurityConfig {
 
         //csrf
         http.csrf(AbstractHttpConfigurer::disable);
+        http.exceptionHandling((exceptionHandling) ->
+                exceptionHandling.accessDeniedHandler(accessDeniedHandler()));
 
         //登录可以选择form表单登录，也可选择发送请求，写到controller中
         //form表单登录
@@ -108,8 +112,8 @@ public class SecurityConfig {
         return (request, response, accessDeniedException) -> {
             log.warn("Access Denied: {}", accessDeniedException.getMessage());
             response.setContentType("application/json;charset=UTF-8");
-            response.setStatus(403);
-            response.getWriter().write("{\"message\": \"Access Denied\"}");
+            response.setStatus(200);
+            response.getWriter().write("{\"code\":40300,\"data\":null,\"msg\":\"暂无权限访问该功能\"}");
         };
     }
 }

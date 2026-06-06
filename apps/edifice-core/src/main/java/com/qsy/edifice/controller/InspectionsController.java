@@ -20,6 +20,7 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -37,6 +38,7 @@ public class InspectionsController {
 
     @GetMapping("/all")
     @Operation(summary = "全部验工单列表", description = "分页+条件查询所有验工单")
+    @PreAuthorize("hasAuthority('menu:inspection-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Page<InspectionFormListVo>> getAllInspections(GetInspectionFormListDto dto) {
         Page<InspectionFormListVo> result = inspectionFormService.getAllInspections(dto);
         return ResultUtils.success(Code.SUCCESS, result);
@@ -53,6 +55,7 @@ public class InspectionsController {
 
     @GetMapping("/my-pending")
     @Operation(summary = "我的待审批验工单列表", description = "查询当前用户作为当前审批人的验工单")
+    @PreAuthorize("hasAuthority('menu:inspection-approval') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Page<InspectionFormListVo>> getMyPendingInspections(GetInspectionFormListDto dto, HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);
@@ -81,6 +84,7 @@ public class InspectionsController {
     @GetMapping("/my-pending/statistic")
     @Operation(summary = "我的待审批验工单数据总览",
             description = "仅统计当前登录用户作为当前审批人的验工单，与 my-pending 列表口径一致")
+    @PreAuthorize("hasAuthority('menu:inspection-approval') or hasRole('SUPER_ADMIN')")
     public BaseResponse<InspectionOverviewVo> getMyPendingInspectionOverview(HttpServletRequest request)
             throws JsonProcessingException {
         String token = request.getHeader("token");
@@ -91,6 +95,7 @@ public class InspectionsController {
 
     @GetMapping("/statistic")
     @Operation(summary = "全局验工单数据总览", description = "全量统计，不按用户过滤")
+    @PreAuthorize("hasAuthority('menu:inspection-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<InspectionOverviewVo> getInspectionOverview() {
         InspectionOverviewVo result = inspectionFormService.getInspectionOverview(null);
         return ResultUtils.success(Code.SUCCESS, result);
@@ -116,6 +121,7 @@ public class InspectionsController {
 
     @GetMapping("/export")
     @Operation(summary = "导出全部验工单", description = "按当前筛选条件导出所有验工单为 Excel，不分页")
+    @PreAuthorize("hasAuthority('menu:inspection-management') or hasRole('SUPER_ADMIN')")
     public void exportAllInspections(GetInspectionFormListDto dto, HttpServletResponse response) throws IOException {
         // 不带 applyUserId 约束 = 全部
         if (dto != null) dto.setApplyUserId(null);

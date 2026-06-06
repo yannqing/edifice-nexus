@@ -34,6 +34,7 @@ import { useAuth } from "@/store/auth-context";
 import { post } from "@/lib/request";
 import { getMyPendingCounts } from "@/services/approval-flow";
 import { ResponseCode } from "@/types/api";
+import { hasPermission } from "@/lib/permissions";
 
 /**
  * 侧边栏 item.id -> 业务类型 ext 的映射。
@@ -79,7 +80,7 @@ interface SidebarProps {
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, roles, permissions, isAuthenticated, isHydrated, logout } = useAuth();
 
   const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
 
@@ -96,10 +97,11 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
 
   // 挂载 + 路由切换时刷新（路由切换往往意味着刚完成了一次审批 / 上传）
   useEffect(() => {
+    if (!isHydrated || !isAuthenticated) return;
     const controller = new AbortController();
     fetchPendingCounts(controller.signal);
     return () => controller.abort();
-  }, [fetchPendingCounts, pathname]);
+  }, [fetchPendingCounts, isAuthenticated, isHydrated, pathname]);
 
   // 路由切换时自动关闭移动抽屉
   useEffect(() => {
@@ -151,14 +153,20 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
       {/* Navigation */}
       <ScrollArea className="flex-1 min-h-0">
         <nav className="px-4 space-y-1 pb-4">
-          {navigationConfig.map((section) => (
+          {navigationConfig.map((section) => {
+            const visibleItems = section.items.filter((item) =>
+              hasPermission(permissions, item.permissionCode, roles)
+            );
+            if (visibleItems.length === 0) return null;
+
+            return (
             <div key={section.id}>
               {section.title && (
                 <div className="text-xs text-slate-400 px-4 pt-4 pb-2 uppercase tracking-wider font-semibold">
                   {section.title}
                 </div>
               )}
-              {section.items.map((item) => {
+              {visibleItems.map((item) => {
                 const Icon = iconMap[item.icon];
                 const isActive = pathname === item.href;
 
@@ -207,7 +215,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
                 );
               })}
             </div>
-          ))}
+            );
+          })}
         </nav>
       </ScrollArea>
 

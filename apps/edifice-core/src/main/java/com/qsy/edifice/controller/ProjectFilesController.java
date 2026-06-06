@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -54,6 +55,7 @@ public class ProjectFilesController {
     @PostMapping("/approve")
     @Operation(summary = "审批（通过 / 驳回）",
             description = "通过 + nextApproverId 非空时流转下一级；不传 nextApproverId 视为终审")
+    @PreAuthorize("hasAuthority('menu:project-files-approval') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> approve(@RequestBody ApproveDto dto,
                                          HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
@@ -90,6 +92,7 @@ public class ProjectFilesController {
 
     @GetMapping("/my-pending")
     @Operation(summary = "我的待审批文件")
+    @PreAuthorize("hasAuthority('menu:project-files-approval') or hasRole('SUPER_ADMIN')")
     public BaseResponse<List<ProjectFileVo>> myPending(HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);

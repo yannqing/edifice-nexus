@@ -16,6 +16,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -30,6 +32,9 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
 
     @Resource
     private JwtUtils jwtUtils;
+
+    @Resource
+    private UserDetailsService userDetailsService;
 
     public JwtAuthenticationTokenFilter(RedisCache redisCache) {
         this.redisCache = redisCache;
@@ -82,9 +87,10 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
 
             // 从token中获取用户信息
             SysUser user = jwtUtils.getUserFromToken(token);
+            UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
 
             UsernamePasswordAuthenticationToken authToken =
-                    new UsernamePasswordAuthenticationToken(user, null, null);
+                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
             SecurityContextHolder.getContext().setAuthentication(authToken);
             log.debug("JWT 验证成功，用户: {}", user.getUsername());
         } catch (com.auth0.jwt.exceptions.TokenExpiredException e) {

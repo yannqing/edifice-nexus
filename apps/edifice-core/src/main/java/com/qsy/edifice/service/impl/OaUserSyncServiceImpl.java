@@ -3,13 +3,21 @@ package com.qsy.edifice.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.qsy.edifice.config.OaUserSyncProperties;
 import com.qsy.edifice.domain.entity.SysDepartment;
+import com.qsy.edifice.domain.entity.SysPermission;
 import com.qsy.edifice.domain.entity.SysPosition;
+import com.qsy.edifice.domain.entity.SysRole;
+import com.qsy.edifice.domain.entity.SysRolePermission;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.domain.entity.SysUserDepartment;
+import com.qsy.edifice.domain.entity.SysUserRole;
 import com.qsy.edifice.mapper.SysDepartmentMapper;
+import com.qsy.edifice.mapper.SysPermissionMapper;
 import com.qsy.edifice.mapper.SysPositionMapper;
+import com.qsy.edifice.mapper.SysRoleMapper;
+import com.qsy.edifice.mapper.SysRolePermissionMapper;
 import com.qsy.edifice.mapper.SysUserDepartmentMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
+import com.qsy.edifice.mapper.SysUserRoleMapper;
 import com.qsy.edifice.service.OaUserSyncService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +46,11 @@ import java.util.Set;
 public class OaUserSyncServiceImpl implements OaUserSyncService {
 
     private static final String SYNC_SOURCE = "OA";
+    private static final Set<String> DEFAULT_EDIFICE_PERMISSION_CODES = Set.of(
+            "menu:workbench",
+            "menu:my-projects",
+            "menu:performance"
+    );
 
     @Resource
     private OaUserSyncProperties properties;
@@ -56,6 +69,18 @@ public class OaUserSyncServiceImpl implements OaUserSyncService {
 
     @Resource
     private SysUserMapper sysUserMapper;
+
+    @Resource
+    private SysRoleMapper sysRoleMapper;
+
+    @Resource
+    private SysUserRoleMapper sysUserRoleMapper;
+
+    @Resource
+    private SysPermissionMapper sysPermissionMapper;
+
+    @Resource
+    private SysRolePermissionMapper sysRolePermissionMapper;
 
     @Resource
     private PasswordEncoder passwordEncoder;
@@ -102,10 +127,40 @@ public class OaUserSyncServiceImpl implements OaUserSyncService {
 
         int departments = syncDepartments(db, now);
         int positions = syncPositions(db, now);
+        int roles = syncOaAdminGroupsAsRoles(db);
         int users = syncUsers(db, now);
 
-        log.info("OA 主数据同步完成 departments={}, positions={}, users={}", departments, positions, users);
-        return departments + positions + users;
+        log.info("OA 主数据同步完成 departments={}, positions={}, roles={}, users={}", departments, positions, roles, users);
+        return departments + positions + roles + users;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int syncOneFromOa(Integer oaAdminId) {
+        if (!properties.isEnabled() || oaAdminId == null || oaAdminId <= 0) {
+            return 0;
+        }
+
+        String db = quoteDatabase(properties.getOfficeDatabase());
+        LocalDateTime now = LocalDateTime.now();
+        syncDepartments(db, now);
+        syncPositions(db, now);
+        syncOaAdminGroupsAsRoles(db);
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+                SELECT id, userid, username, name, nickname, email, mobile, sex, did,
+                       position_id, position_name, job_number, birthday, nation,
+                       education, speciality, idcard, entry_time, resident_place,
+                       current_address, home_address, status, delete_time
+                FROM %s.oa_admin
+                WHERE id = ?
+                """.formatted(db), oaAdminId);
+
+        int count = 0;
+        for (Map<String, Object> row : rows) {
+            count += syncUserRow(db, now, row);
+        }
+        return count;
     }
 
     @Scheduled(
@@ -216,64 +271,247 @@ public class OaUserSyncServiceImpl implements OaUserSyncService {
 
         int count = 0;
         for (Map<String, Object> row : rows) {
-            Integer oaAdminId = intValue(row.get("id"));
-            if (oaAdminId == null) continue;
+            count += syncUserRow(db, now, row);
+        }
+        return count;
+    }
 
-            SysUser user = findUserForOaRow(row);
-            boolean isNew = user == null;
-            if (isNew) {
-                user = new SysUser();
-                user.setUsername(resolveUniqueUsername(row));
-                user.setPassword(passwordEncoder.encode(properties.getDefaultPassword()));
-                user.setIsDelete(0);
+    private int syncUserRow(String db, LocalDateTime now, Map<String, Object> row) {
+        Integer oaAdminId = intValue(row.get("id"));
+        if (oaAdminId == null) return 0;
+
+        SysUser user = findUserForOaRow(row);
+        boolean isNew = user == null;
+        if (isNew) {
+            user = new SysUser();
+            user.setUsername(resolveUniqueUsername(row));
+            user.setPassword(passwordEncoder.encode(properties.getDefaultPassword()));
+            user.setIsDelete(0);
+        }
+
+        Integer oaDepartmentId = intValue(row.get("did"));
+        Integer oaPositionId = intValue(row.get("position_id"));
+        Long departmentId = resolveDepartmentId(oaDepartmentId);
+        SysPosition localPosition = findPositionByOaId(oaPositionId);
+        Long positionId = localPosition == null ? null : localPosition.getPositionId();
+        String positionName = localPosition == null ? str(row.get("position_name")) : localPosition.getName();
+        Integer oaStatus = intValue(row.get("status"));
+        boolean deleted = longValue(row.get("delete_time")) != null && longValue(row.get("delete_time")) > 0;
+
+        user.setOaAdminId(oaAdminId);
+        user.setOaUserid(str(row.get("userid")));
+        user.setEmployeeNo(str(row.get("job_number")));
+        user.setRealName(StringUtils.defaultIfBlank(str(row.get("name")), str(row.get("nickname"))));
+        user.setGender(mapGender(intValue(row.get("sex"))));
+        user.setEthnicity(str(row.get("nation")));
+        user.setBirthDate(toLocalDate(row.get("birthday")));
+        user.setIdCard(str(row.get("idcard")));
+        user.setEmail(str(row.get("email")));
+        user.setPhone(str(row.get("mobile")));
+        user.setEducation(str(row.get("education")));
+        user.setMajor(str(row.get("speciality")));
+        user.setPosition(StringUtils.defaultIfBlank(positionName, user.getPosition()));
+        user.setDepartmentId(departmentId);
+        user.setOaDepartmentId(oaDepartmentId);
+        user.setPositionId(positionId);
+        user.setOaPositionId(oaPositionId);
+        user.setEntryDate(toLocalDate(row.get("entry_time")));
+        user.setDomicile(str(row.get("resident_place")));
+        user.setAddress(StringUtils.defaultIfBlank(str(row.get("current_address")), str(row.get("home_address"))));
+        user.setStatus(deleted ? 0 : toUserLoginStatus(oaStatus));
+        user.setEmploymentStatus(deleted ? 0 : toEmploymentStatus(oaStatus));
+        user.setSyncSource(SYNC_SOURCE);
+        user.setSyncedAt(now);
+
+        if (user.getStatus() == null) user.setStatus(1);
+        if (user.getEmploymentStatus() == null) user.setEmploymentStatus(1);
+
+        if (isNew) {
+            sysUserMapper.insert(user);
+        } else {
+            sysUserMapper.updateById(user);
+        }
+        syncUserRolesFromOa(db, user, oaPositionId);
+        syncUserDepartments(db, user.getUserId(), oaAdminId, oaDepartmentId, departmentId);
+        return 1;
+    }
+
+    private int syncOaAdminGroupsAsRoles(String db) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+                SELECT id, title, status, rules
+                FROM %s.oa_admin_group
+                WHERE status >= 0
+                ORDER BY id ASC
+                """.formatted(db));
+
+        int count = 0;
+        for (Map<String, Object> row : rows) {
+            Integer groupId = intValue(row.get("id"));
+            if (groupId == null) continue;
+
+            String roleCode = oaGroupRoleCode(groupId);
+            SysRole role = selectRole(roleCode);
+            if (role == null) {
+                role = new SysRole();
+                role.setRoleCode(roleCode);
+                role.setIsDelete(0);
             }
+            role.setRoleName("OA-" + StringUtils.defaultIfBlank(str(row.get("title")), "权限组" + groupId));
+            role.setRoleDesc("由 OA 权限组同步生成，请在 OA 的角色权限中维护 edifice 权限");
+            role.setStatus(toEnabledStatus(intValue(row.get("status"))));
 
-            Integer oaDepartmentId = intValue(row.get("did"));
-            Integer oaPositionId = intValue(row.get("position_id"));
-            Long departmentId = resolveDepartmentId(oaDepartmentId);
-            SysPosition localPosition = findPositionByOaId(oaPositionId);
-            Long positionId = localPosition == null ? null : localPosition.getPositionId();
-            String positionName = localPosition == null ? str(row.get("position_name")) : localPosition.getName();
-            Integer oaStatus = intValue(row.get("status"));
-            boolean deleted = longValue(row.get("delete_time")) != null && longValue(row.get("delete_time")) > 0;
-
-            user.setOaAdminId(oaAdminId);
-            user.setOaUserid(str(row.get("userid")));
-            user.setEmployeeNo(str(row.get("job_number")));
-            user.setRealName(StringUtils.defaultIfBlank(str(row.get("name")), str(row.get("nickname"))));
-            user.setGender(mapGender(intValue(row.get("sex"))));
-            user.setEthnicity(str(row.get("nation")));
-            user.setBirthDate(toLocalDate(row.get("birthday")));
-            user.setIdCard(str(row.get("idcard")));
-            user.setEmail(str(row.get("email")));
-            user.setPhone(str(row.get("mobile")));
-            user.setEducation(str(row.get("education")));
-            user.setMajor(str(row.get("speciality")));
-            user.setPosition(StringUtils.defaultIfBlank(positionName, user.getPosition()));
-            user.setDepartmentId(departmentId);
-            user.setOaDepartmentId(oaDepartmentId);
-            user.setPositionId(positionId);
-            user.setOaPositionId(oaPositionId);
-            user.setEntryDate(toLocalDate(row.get("entry_time")));
-            user.setDomicile(str(row.get("resident_place")));
-            user.setAddress(StringUtils.defaultIfBlank(str(row.get("current_address")), str(row.get("home_address"))));
-            user.setStatus(deleted ? 0 : toUserLoginStatus(oaStatus));
-            user.setEmploymentStatus(deleted ? 0 : toEmploymentStatus(oaStatus));
-            user.setSyncSource(SYNC_SOURCE);
-            user.setSyncedAt(now);
-
-            if (user.getStatus() == null) user.setStatus(1);
-            if (user.getEmploymentStatus() == null) user.setEmploymentStatus(1);
-
-            if (isNew) {
-                sysUserMapper.insert(user);
+            if (role.getRoleId() == null) {
+                sysRoleMapper.insert(role);
             } else {
-                sysUserMapper.updateById(user);
+                sysRoleMapper.updateById(role);
             }
-            syncUserDepartments(db, user.getUserId(), oaAdminId, oaDepartmentId, departmentId);
+            syncRolePermissionsFromOaRules(db, role.getRoleId(), str(row.get("rules")));
             count++;
         }
         return count;
+    }
+
+    private void syncRolePermissionsFromOaRules(String db, Long roleId, String rules) {
+        if (roleId == null) return;
+
+        Set<Integer> ruleIds = parseRuleIds(rules);
+        Set<String> permissionCodes = new LinkedHashSet<>();
+        permissionCodes.addAll(DEFAULT_EDIFICE_PERMISSION_CODES);
+        if (!ruleIds.isEmpty()) {
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+                    SELECT name
+                    FROM %s.oa_admin_rule
+                    WHERE status = 1
+                      AND id IN (%s)
+                      AND name LIKE 'edifice:%%'
+                    """.formatted(db, ruleIds.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","))));
+            for (Map<String, Object> row : rows) {
+                String name = str(row.get("name"));
+                if (StringUtils.startsWith(name, "edifice:")) {
+                    permissionCodes.add(name.substring("edifice:".length()));
+                }
+            }
+        }
+
+        List<SysPermission> permissions = permissionCodes.isEmpty() ? List.of()
+                : sysPermissionMapper.selectList(new LambdaQueryWrapper<SysPermission>()
+                .in(SysPermission::getPermissionCode, permissionCodes)
+                .eq(SysPermission::getIsDelete, 0));
+
+        sysRolePermissionMapper.delete(new LambdaQueryWrapper<SysRolePermission>()
+                .eq(SysRolePermission::getRoleId, roleId));
+        for (SysPermission permission : permissions) {
+            sysRolePermissionMapper.insert(SysRolePermission.builder()
+                    .roleId(roleId)
+                    .permissionId(permission.getPermissionId())
+                    .isDelete(0)
+                    .build());
+        }
+    }
+
+    private void ensureDefaultRole(SysUser user) {
+        if (user.getUserId() == null) return;
+
+        Long roleCount = sysUserRoleMapper.selectCount(new LambdaQueryWrapper<SysUserRole>()
+                .eq(SysUserRole::getUserId, user.getUserId())
+                .eq(SysUserRole::getIsDelete, 0));
+        if (roleCount != null && roleCount > 0) return;
+
+        String roleCode = "admin".equalsIgnoreCase(user.getUsername()) ? "SUPER_ADMIN" : "STAFF";
+        SysRole role = selectRole(roleCode);
+        if (role == null && !"STAFF".equals(roleCode)) {
+            role = selectRole("STAFF");
+        }
+        if (role == null) return;
+
+        boolean admin = "admin".equalsIgnoreCase(user.getUsername());
+        sysUserRoleMapper.insert(SysUserRole.builder()
+                .userId(user.getUserId())
+                .roleId(role.getRoleId())
+                .source(admin ? "MANUAL" : "OA_SYNC")
+                .sourceRef("DEFAULT")
+                .isDelete(0)
+                .build());
+    }
+
+    private void syncUserRolesFromOa(String db, SysUser user, Integer oaPositionId) {
+        if (user.getUserId() == null) return;
+        if ("admin".equalsIgnoreCase(user.getUsername())) {
+            ensureDefaultRole(user);
+            return;
+        }
+
+        Set<Integer> oaGroupIds = new LinkedHashSet<>();
+        if (oaPositionId != null && oaPositionId > 0) {
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList("""
+                    SELECT group_id
+                    FROM %s.oa_position_group
+                    WHERE pid = ?
+                    """.formatted(db), oaPositionId);
+            for (Map<String, Object> row : rows) {
+                Integer groupId = intValue(row.get("group_id"));
+                if (groupId != null && groupId > 0) {
+                    oaGroupIds.add(groupId);
+                }
+            }
+        }
+
+        sysUserRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>()
+                .eq(SysUserRole::getUserId, user.getUserId())
+                .eq(SysUserRole::getSource, "OA_SYNC"));
+
+        if (oaGroupIds.isEmpty()) {
+            ensureDefaultRole(user);
+            return;
+        }
+
+        Set<Long> existingManualRoleIds = sysUserRoleMapper.selectList(new LambdaQueryWrapper<SysUserRole>()
+                        .eq(SysUserRole::getUserId, user.getUserId())
+                        .ne(SysUserRole::getSource, "OA_SYNC")
+                        .eq(SysUserRole::getIsDelete, 0))
+                .stream()
+                .map(SysUserRole::getRoleId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        int inserted = 0;
+        for (Integer groupId : oaGroupIds) {
+            SysRole role = selectRole(oaGroupRoleCode(groupId));
+            if (role == null || role.getRoleId() == null) continue;
+            if (existingManualRoleIds.contains(role.getRoleId())) continue;
+            sysUserRoleMapper.insert(SysUserRole.builder()
+                    .userId(user.getUserId())
+                    .roleId(role.getRoleId())
+                    .source("OA_SYNC")
+                    .sourceRef("OA_ADMIN_GROUP:" + groupId)
+                    .isDelete(0)
+                    .build());
+            inserted++;
+        }
+        if (inserted == 0) {
+            ensureDefaultRole(user);
+        }
+    }
+
+    private Set<Integer> parseRuleIds(String rules) {
+        Set<Integer> result = new LinkedHashSet<>();
+        if (StringUtils.isBlank(rules)) return result;
+        for (String part : rules.split(",")) {
+            Integer id = intValue(StringUtils.trimToNull(part));
+            if (id != null && id > 0) result.add(id);
+        }
+        return result;
+    }
+
+    private String oaGroupRoleCode(Integer groupId) {
+        return "OA_GROUP_" + groupId;
+    }
+
+    private SysRole selectRole(String roleCode) {
+        if (StringUtils.isBlank(roleCode)) return null;
+        return sysRoleMapper.selectOne(new LambdaQueryWrapper<SysRole>()
+                .eq(SysRole::getRoleCode, roleCode)
+                .eq(SysRole::getIsDelete, 0)
+                .last("LIMIT 1"));
     }
 
     private void syncUserDepartments(String db, Long userId, Integer oaAdminId, Integer primaryOaDepartmentId, Long primaryDepartmentId) {

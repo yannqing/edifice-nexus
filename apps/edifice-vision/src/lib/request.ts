@@ -1,6 +1,14 @@
 import { toast } from "sonner";
 import { BaseResponse, ResponseCode } from "@/types/api";
-import { getAccessToken, getRefreshToken, setTokens, clearAuth } from "@/lib/token";
+import {
+  getAccessToken,
+  getRefreshToken,
+  setTokens,
+  setUserPermissions,
+  setUserRoles,
+  clearAuth,
+} from "@/lib/token";
+import type { SysRole } from "@/types/auth";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
@@ -25,9 +33,12 @@ async function doRefresh(): Promise<string | null> {
       body: JSON.stringify({ refreshToken }),
     });
     if (!res.ok) return null;
-    const data: BaseResponse<{ accessToken: string }> = await res.json();
+    const data: BaseResponse<{ accessToken: string; roles?: SysRole[]; permissions?: string[] }> = await res.json();
     if (data.code === ResponseCode.SUCCESS && data.data?.accessToken) {
       setTokens(data.data.accessToken, refreshToken);
+      if (data.data.roles) setUserRoles(data.data.roles);
+      if (data.data.permissions) setUserPermissions(data.data.permissions);
+      window.dispatchEvent(new Event("auth:updated"));
       return data.data.accessToken;
     }
     return null;

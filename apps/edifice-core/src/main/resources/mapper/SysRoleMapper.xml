@@ -30,6 +30,7 @@
         WHERE sur.user_id = #{userId}
           AND sr.is_delete = 0
           AND sur.is_delete = 0
+          AND sr.status = 1
     </select>
 
 </mapper>

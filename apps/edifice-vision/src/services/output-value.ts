@@ -27,12 +27,18 @@ export async function createOutputValue(
   return post<number>("/output-value/create", { body: params });
 }
 
-export async function confirmOutputValue(id: string): Promise<BaseResponse<boolean>> {
-  return put<boolean>(`/output-value/confirm/${id}`);
+export async function confirmOutputValue(
+  id: string,
+  nextUserId: string,
+): Promise<BaseResponse<boolean>> {
+  return put<boolean>(`/output-value/confirm/${id}`, { body: { nextUserId } });
 }
 
-export async function approveOutputValue(id: string): Promise<BaseResponse<boolean>> {
-  return put<boolean>(`/output-value/approve/${id}`);
+export async function approveOutputValue(
+  id: string,
+  nextUserId: string,
+): Promise<BaseResponse<boolean>> {
+  return put<boolean>(`/output-value/approve/${id}`, { body: { nextUserId } });
 }
 
 export async function payOutputValue(id: string): Promise<BaseResponse<boolean>> {

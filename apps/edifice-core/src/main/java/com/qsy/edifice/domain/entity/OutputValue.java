@@ -40,6 +40,18 @@ public class OutputValue implements Serializable {
     @TableField("submit_user_id")
     private Long submitUserId;
 
+    @TableField("confirm_user_id")
+    private Long confirmUserId;
+
+    @TableField("approve_user_id")
+    private Long approveUserId;
+
+    @TableField("pay_user_id")
+    private Long payUserId;
+
+    @TableField("current_handler_id")
+    private Long currentHandlerId;
+
     @TableField("submit_time")
     private LocalDateTime submitTime;
 
@@ -69,11 +81,11 @@ public class OutputValue implements Serializable {
     @TableField("subsidy_amount")
     private BigDecimal subsidyAmount;
 
-    /** 当前阶段累计应得（含基本+效益），v0.4 新增 */
+    /** 当前阶段应得（含基本+效益），v0.4 新增 */
     @TableField("stage_cumulative_amount")
     private BigDecimal stageCumulativeAmount;
 
-    /** 上一次产值分配单的累计（用于计算本期产值），v0.4 新增 */
+    /** 历史字段：旧累计差额模型下的上一次累计；新单固定为 0 */
     @TableField("previous_cumulative_amount")
     private BigDecimal previousCumulativeAmount;
 

@@ -8,6 +8,7 @@ import com.qsy.edifice.domain.dto.GetMyProjectListDto;
 import com.qsy.edifice.domain.dto.UpdateProjectDto;
 import com.qsy.edifice.domain.entity.*;
 import com.qsy.edifice.domain.vo.*;
+import com.qsy.edifice.enums.ApprovalBizType;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.ContractBenefitRevisionMapper;
@@ -18,6 +19,7 @@ import com.qsy.edifice.service.*;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -67,6 +69,9 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Resource
     private ContractBenefitRevisionMapper contractBenefitRevisionMapper;
+
+    @Resource
+    private JdbcTemplate jdbcTemplate;
 
     @Override
     public Project getProjectById(Long projectId) {
@@ -221,8 +226,88 @@ public class ProjectServiceImpl implements ProjectService {
     private static final Long ROLE_MEMBER_ID = 102L;
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteProject(Long projectId) {
-        return projectMapper.deleteById(projectId) > 0;
+        if (projectId == null) {
+            return false;
+        }
+        Project project = projectMapper.selectById(projectId);
+        if (project == null) {
+            return false;
+        }
+
+        String projectIdText = String.valueOf(projectId);
+        List<Long> contractIds = selectIds("SELECT contract_id FROM contract WHERE project_id = ? AND is_delete = 0", projectId);
+        List<Long> projectFileIds = selectIds("SELECT project_file_id FROM project_files WHERE project_id = ? AND is_delete = 0", projectIdText);
+        List<Long> inspectionFormIds = selectIds("SELECT inspection_form_id FROM inspection_form WHERE project_id = ? AND is_delete = 0", projectIdText);
+        List<Long> outputValueIds = selectIds("SELECT output_value_id FROM output_value WHERE project_id = ? AND is_delete = 0", projectId);
+        List<Long> timesheetIds = selectIds("SELECT timesheet_id FROM timesheet WHERE project_id = ? AND is_delete = 0", projectId);
+        List<Long> acceptanceIds = selectIds("SELECT acceptance_id FROM project_acceptance WHERE project_id = ? AND is_delete = 0", projectId);
+
+        markApprovalRecordsDeleted(ApprovalBizType.FILE.getExt(), ApprovalBizType.FILE.getCode(), projectFileIds);
+        markApprovalRecordsDeleted(ApprovalBizType.INSPECTION.getExt(), ApprovalBizType.INSPECTION.getCode(), inspectionFormIds);
+        markApprovalRecordsDeleted(ApprovalBizType.OUTPUT.getExt(), ApprovalBizType.OUTPUT.getCode(), outputValueIds);
+        markApprovalRecordsDeleted(ApprovalBizType.TIMESHEET.getExt(), ApprovalBizType.TIMESHEET.getCode(), timesheetIds);
+        markApprovalRecordsDeleted(ApprovalBizType.ACCEPTANCE.getExt(), ApprovalBizType.ACCEPTANCE.getCode(), acceptanceIds);
+
+        markDeletedByIds("output_value_distribution", "output_value_id", outputValueIds);
+        markDeletedByIds("contract_benefit_revision", "contract_id", contractIds);
+
+        markDeleted("contract", "project_id = ?", projectId);
+        markDeleted("project_stage", "project_id = ?", projectId);
+        markDeleted("project_member", "project_id = ?", projectId);
+        markDeleted("project_files", "project_id = ?", projectIdText);
+        markDeleted("inspection_form", "project_id = ?", projectIdText);
+        markDeleted("output_value", "project_id = ?", projectId);
+        markDeleted("timesheet", "project_id = ?", projectId);
+        markDeleted("collection_record", "project_id = ?", projectId);
+        markDeleted("project_acceptance", "project_id = ?", projectId);
+        markDeleted("performance_restore", "project_id = ?", projectId);
+        markDeleted("sys_user_role", "project_id = ?", projectId);
+
+        return markDeleted("project", "project_id = ?", projectId) > 0;
+    }
+
+    private List<Long> selectIds(String sql, Object... args) {
+        return jdbcTemplate.queryForList(sql, Long.class, args);
+    }
+
+    private int markDeleted(String table, String whereClause, Object... args) {
+        List<Object> params = new ArrayList<>(List.of(args));
+        return jdbcTemplate.update("""
+                UPDATE %s
+                SET is_delete = 1, updated_time = NOW()
+                WHERE is_delete = 0 AND %s
+                """.formatted(table, whereClause), params.toArray());
+    }
+
+    private void markDeletedByIds(String table, String idColumn, List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return;
+        }
+        String placeholders = ids.stream().map(id -> "?").collect(Collectors.joining(","));
+        jdbcTemplate.update("""
+                UPDATE %s
+                SET is_delete = 1, updated_time = NOW()
+                WHERE is_delete = 0 AND %s IN (%s)
+                """.formatted(table, idColumn, placeholders), ids.toArray());
+    }
+
+    private void markApprovalRecordsDeleted(String bizTypeExt, Integer approvalRecordType, List<Long> bizIds) {
+        if (bizIds == null || bizIds.isEmpty()) {
+            return;
+        }
+        String placeholders = bizIds.stream().map(id -> "?").collect(Collectors.joining(","));
+        List<Object> params = new ArrayList<>(bizIds);
+        params.add(bizTypeExt);
+        params.add(approvalRecordType);
+        jdbcTemplate.update("""
+                UPDATE approval_records
+                SET is_delete = 1, updated_time = NOW()
+                WHERE is_delete = 0
+                  AND inspection_form_id IN (%s)
+                  AND (biz_type_ext = ? OR approval_record_type = ?)
+                """.formatted(placeholders), params.toArray());
     }
 
     @Override

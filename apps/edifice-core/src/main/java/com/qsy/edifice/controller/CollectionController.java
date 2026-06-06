@@ -19,11 +19,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name = "回款管理")
 @RestController
 @RequestMapping("/collection")
+@PreAuthorize("hasAuthority('menu:collection') or hasRole('SUPER_ADMIN')")
 public class CollectionController {
 
     @Resource

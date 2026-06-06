@@ -16,5 +16,7 @@ public interface OaUserSyncService {
 
     int syncFromOa();
 
+    int syncOneFromOa(Integer oaAdminId);
+
     Map<String, Object> getStatus();
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import {
@@ -12,13 +12,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ResponseCode } from "@/types/api";
-import { getAllProjects, getProjectDetail } from "@/services/project";
+import { getAllProjects, getProjectDetail, getUserList } from "@/services/project";
 import { createAcceptance } from "@/services/acceptance";
 import type {
   ProjectDetailVo,
   ProjectListVo,
-  ProjectMemberVo,
   ProjectStageVo,
+  UserListItem,
 } from "@/types/project";
 import { ACCEPTANCE_TYPE_OPTIONS } from "@/types/acceptance";
 
@@ -39,7 +39,7 @@ export function CreateAcceptanceDialog({
   const [projectId, setProjectId] = useState<string>("");
   const [detail, setDetail] = useState<ProjectDetailVo | null>(null);
   const [stages, setStages] = useState<ProjectStageVo[]>([]);
-  const [members, setMembers] = useState<ProjectMemberVo[]>([]);
+  const [users, setUsers] = useState<UserListItem[]>([]);
   const [acceptanceType, setAcceptanceType] = useState<number>(defaultType ?? 0);
   const [stageId, setStageId] = useState<string>("");
   const [title, setTitle] = useState<string>("");
@@ -52,7 +52,6 @@ export function CreateAcceptanceDialog({
     setProjectId("");
     setDetail(null);
     setStages([]);
-    setMembers([]);
     setAcceptanceType(defaultType ?? 0);
     setStageId("");
     setTitle("");
@@ -65,9 +64,15 @@ export function CreateAcceptanceDialog({
     if (!open) return;
     reset();
     (async () => {
-      const res = await getAllProjects({ pageSize: 200 });
-      if (res.code === ResponseCode.SUCCESS && res.data) {
-        setProjects(res.data.records ?? []);
+      const [projectRes, userRes] = await Promise.all([
+        getAllProjects({ pageSize: 200 }),
+        getUserList(),
+      ]);
+      if (projectRes.code === ResponseCode.SUCCESS && projectRes.data) {
+        setProjects(projectRes.data.records ?? []);
+      }
+      if (userRes.code === ResponseCode.SUCCESS && userRes.data) {
+        setUsers(userRes.data.records ?? []);
       }
     })();
   }, [open, reset]);
@@ -76,7 +81,6 @@ export function CreateAcceptanceDialog({
     if (!projectId) {
       setDetail(null);
       setStages([]);
-      setMembers([]);
       return;
     }
     let cancelled = false;
@@ -86,7 +90,6 @@ export function CreateAcceptanceDialog({
       if (res.code === ResponseCode.SUCCESS && res.data) {
         setDetail(res.data);
         setStages(res.data.projectStages ?? []);
-        setMembers(res.data.projectMemberList ?? []);
         setStageId("");
         setFirstApproverId("");
       }
@@ -95,15 +98,6 @@ export function CreateAcceptanceDialog({
       cancelled = true;
     };
   }, [projectId]);
-
-  const memberOptions = useMemo(
-    () =>
-      members.map((m) => ({
-        userId: m.userId,
-        realName: m.realName,
-      })),
-    [members],
-  );
 
   const handleSubmit = async () => {
     setError("");
@@ -210,9 +204,9 @@ export function CreateAcceptanceDialog({
                 disabled={!detail}
               >
                 <option value="">自动选取（项目经理）</option>
-                {memberOptions.map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {m.realName}
+                {users.map((u) => (
+                  <option key={u.userId} value={u.userId}>
+                    {u.realName || u.username}
                   </option>
                 ))}
               </select>

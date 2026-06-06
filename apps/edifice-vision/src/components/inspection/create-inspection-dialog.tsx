@@ -12,9 +12,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { applyInspection } from "@/services/inspection";
-import { getMyProjects, getProjectDetail, uploadDocument } from "@/services/project";
+import { getMyProjects, getProjectDetail, getUserList, uploadDocument } from "@/services/project";
 import { ResponseCode } from "@/types/api";
-import type { FilesVo, ProjectListVo, ProjectMemberVo, ProjectStageVo } from "@/types/project";
+import type { FilesVo, ProjectListVo, ProjectStageVo, UserListItem } from "@/types/project";
 import { EditableAttachmentFileList } from "@/components/file/attachment-file-list";
 
 type InitialInspectionProject = Pick<ProjectListVo, "projectId" | "projectName" | "projectCode">;
@@ -36,7 +36,7 @@ export function CreateInspectionDialog({
   const [projects, setProjects] = useState<InitialInspectionProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [stages, setStages] = useState<ProjectStageVo[]>([]);
-  const [members, setMembers] = useState<ProjectMemberVo[]>([]);
+  const [users, setUsers] = useState<UserListItem[]>([]);
   const [selectedStageId, setSelectedStageId] = useState("");
   const [firstApproverId, setFirstApproverId] = useState("");
   const [description, setDescription] = useState("");
@@ -51,7 +51,6 @@ export function CreateInspectionDialog({
       setDescription("");
       setFiles([]);
       setStages([]);
-      setMembers([]);
       setFirstApproverId("");
       setProjects([]);
       return;
@@ -61,13 +60,19 @@ export function CreateInspectionDialog({
 
     async function loadProjects() {
       try {
-        const res = await getMyProjects({ projectStatus: 1, pageSize: 100 });
-        if (res.code === ResponseCode.SUCCESS && res.data) {
-          const records = res.data.records ?? [];
+        const [projectRes, userRes] = await Promise.all([
+          getMyProjects({ projectStatus: 1, pageSize: 100 }),
+          getUserList(),
+        ]);
+        if (projectRes.code === ResponseCode.SUCCESS && projectRes.data) {
+          const records = projectRes.data.records ?? [];
           const hasInitialProject = initialProject
             ? records.some((project) => String(project.projectId) === String(initialProject.projectId))
             : true;
           setProjects(hasInitialProject || !initialProject ? records : [initialProject, ...records]);
+        }
+        if (userRes.code === ResponseCode.SUCCESS && userRes.data) {
+          setUsers(userRes.data.records ?? []);
         }
       } catch {
         if (initialProject) setProjects([initialProject]);
@@ -80,7 +85,6 @@ export function CreateInspectionDialog({
   useEffect(() => {
     if (!selectedProjectId) {
       setStages([]);
-      setMembers([]);
       setSelectedStageId("");
       setFirstApproverId("");
       return;
@@ -92,12 +96,10 @@ export function CreateInspectionDialog({
         if (res.code === ResponseCode.SUCCESS && res.data) {
           const inProgressStages = (res.data.projectStages ?? []).filter((stage) => stage.stageStatus === 1);
           setStages(inProgressStages);
-          setMembers(res.data.projectMemberList ?? []);
           setFirstApproverId("");
         }
       } catch {
         setStages([]);
-        setMembers([]);
         setFirstApproverId("");
       }
     }
@@ -224,17 +226,23 @@ export function CreateInspectionDialog({
               value={firstApproverId}
               onChange={(event) => setFirstApproverId(event.target.value)}
               className="form-input"
-              disabled={!selectedProjectId || members.length === 0}
+              disabled={!selectedProjectId || users.length === 0}
             >
-              <option value="">{selectedProjectId ? "请选择一级审批人" : "请先选择项目"}</option>
-              {members.map((member) => (
-                <option key={member.userId} value={member.userId}>
-                  {member.realName}
+              <option value="">
+                {!selectedProjectId
+                  ? "请先选择项目"
+                  : users.length === 0
+                    ? "暂无可选审批人"
+                    : "请选择一级审批人"}
+              </option>
+              {users.map((user) => (
+                <option key={user.userId} value={user.userId}>
+                  {user.realName || user.username}
                 </option>
               ))}
             </select>
-            {selectedProjectId && members.length === 0 && (
-              <p className="text-xs text-amber-500 mt-1">该项目暂无成员，请先维护项目成员</p>
+            {selectedProjectId && users.length === 0 && (
+              <p className="text-xs text-amber-500 mt-1">暂无可选审批人，请先维护启用员工</p>
             )}
           </div>
 

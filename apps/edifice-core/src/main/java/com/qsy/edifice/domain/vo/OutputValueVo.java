@@ -58,7 +58,7 @@ public class OutputValueVo implements Serializable {
 
     // ==================== v0.4 阶段累计快照 ====================
 
-    /** 当前阶段累计应得（含基本+效益） */
+    /** 当前阶段应得（含基本+效益） */
     private BigDecimal stageCumulativeAmount;
 
     /** 上一次产值分配单的累计 */
@@ -77,6 +77,23 @@ public class OutputValueVo implements Serializable {
     private Integer status;
 
     private String submitUserName;
+    private String confirmUserName;
+    private String approveUserName;
+    private String payUserName;
+
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long confirmUserId;
+
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long approveUserId;
+
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long payUserId;
+
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long currentHandlerId;
+
+    private String currentHandlerName;
 
     private LocalDateTime submitTime;
     private LocalDateTime approvedTime;

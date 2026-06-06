@@ -80,6 +80,7 @@ export interface NavItem {
   icon: string;
   href: string;
   badge?: number;
+  permissionCode?: string;
 }
 
 export interface NavSection {

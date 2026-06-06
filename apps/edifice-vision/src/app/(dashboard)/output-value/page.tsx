@@ -15,8 +15,16 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { TablePageSkeleton } from "@/components/ui/skeleton";
+import { getUserList } from "@/services/project";
 import {
   getOutputValueList,
   getOutputValueStats,
@@ -27,6 +35,7 @@ import {
 } from "@/services/output-value";
 import { ResponseCode } from "@/types/api";
 import type { OutputValueVo, OutputValueStats } from "@/types/output-value";
+import type { UserListItem } from "@/types/project";
 import {
   OUTPUT_VALUE_STATUS_MAP,
   WORK_TYPE_LABELS,
@@ -35,6 +44,7 @@ import {
 import { CreateOutputValueDialog } from "@/components/output-value/create-output-value-dialog";
 
 type TabKey = "all" | "pending" | "review" | "approved" | "paid";
+type ActionKind = "confirm" | "approve" | "pay";
 
 const statusFilterMap: Record<TabKey, number | undefined> = {
   all: undefined,
@@ -77,19 +87,27 @@ export default function OutputValuePage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [users, setUsers] = useState<UserListItem[]>([]);
+  const [actionTarget, setActionTarget] = useState<OutputValueVo | null>(null);
+  const [actionKind, setActionKind] = useState<ActionKind | null>(null);
+  const [nextUserId, setNextUserId] = useState("");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [listRes, statsRes] = await Promise.all([
+      const [listRes, statsRes, usersRes] = await Promise.all([
         getOutputValueList(statusFilterMap[activeTab]),
         getOutputValueStats(),
+        getUserList(),
       ]);
       if (listRes.code === ResponseCode.SUCCESS) {
         setItems(listRes.data ?? []);
       }
       if (statsRes.code === ResponseCode.SUCCESS) {
         setStats(statsRes.data ?? null);
+      }
+      if (usersRes.code === ResponseCode.SUCCESS && usersRes.data) {
+        setUsers(usersRes.data.records ?? []);
       }
     } catch { /* 静默 */ }
     finally { setLoading(false); }
@@ -102,14 +120,38 @@ export default function OutputValuePage() {
     return (item.projectName ?? "").includes(searchText) || (item.projectCode ?? "").includes(searchText);
   });
 
-  const handleAction = async (id: string, action: "confirm" | "approve" | "pay") => {
+  const openAction = (item: OutputValueVo, action: ActionKind) => {
+    setActionTarget(item);
+    setActionKind(action);
+    setNextUserId("");
+  };
+
+  const closeAction = () => {
+    setActionTarget(null);
+    setActionKind(null);
+    setNextUserId("");
+  };
+
+  const handleAction = async () => {
+    if (!actionTarget || !actionKind) return;
+    if ((actionKind === "confirm" || actionKind === "approve") && !nextUserId) {
+      toast.error(actionKind === "confirm" ? "请选择审批人" : "请选择发放人");
+      return;
+    }
+
+    const id = actionTarget.outputValueId;
     setActionLoading(id);
     try {
-      const actionMap = { confirm: confirmOutputValue, approve: approveOutputValue, pay: payOutputValue };
       const labelMap = { confirm: "确认成功", approve: "审批通过", pay: "发放成功" };
-      const res = await actionMap[action](id);
+      const res =
+        actionKind === "confirm"
+          ? await confirmOutputValue(id, nextUserId)
+          : actionKind === "approve"
+            ? await approveOutputValue(id, nextUserId)
+            : await payOutputValue(id);
       if (res.code === ResponseCode.SUCCESS) {
-        toast.success(labelMap[action]);
+        toast.success(labelMap[actionKind]);
+        closeAction();
         fetchData();
       }
       // 业务错误由 request.ts 统一提示
@@ -138,6 +180,9 @@ export default function OutputValuePage() {
     { key: "approved", label: "已审批", count: items.filter((i) => i.status === 2).length },
     { key: "paid", label: "已发放", count: items.filter((i) => i.status === 3).length },
   ];
+  const actionTitle =
+    actionKind === "confirm" ? "确认分配单" : actionKind === "approve" ? "审批分配单" : "发放产值";
+  const nextUserLabel = actionKind === "confirm" ? "审批人" : actionKind === "approve" ? "发放人" : "";
 
   return (
     <div className="p-4 md:p-8 space-y-6">
@@ -177,6 +222,59 @@ export default function OutputValuePage() {
         onOpenChange={setCreateOpen}
         onSuccess={fetchData}
       />
+
+      <Dialog open={!!actionTarget} onOpenChange={(open) => !open && closeAction()}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{actionTitle}</DialogTitle>
+            <DialogDescription>
+              {actionTarget?.projectName} · {actionTarget?.stageName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              当前办理人：{actionTarget?.currentHandlerName || "-"}
+            </div>
+            {(actionKind === "confirm" || actionKind === "approve") && (
+              <div>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">
+                  指定{nextUserLabel} <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
+                  value={nextUserId}
+                  onChange={(e) => setNextUserId(e.target.value)}
+                >
+                  <option value="">请选择{nextUserLabel}</option>
+                  {users.map((user) => (
+                    <option key={user.userId} value={user.userId}>
+                      {user.realName || user.username}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {actionKind === "pay" && (
+              <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                确认后该分配单将进入已发放状态。
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={closeAction} disabled={!!actionLoading}>
+              取消
+            </Button>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={handleAction}
+              disabled={!!actionLoading}
+            >
+              {actionLoading && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+              确认
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {loading && <TablePageSkeleton columns={4} rows={4} />}
 
@@ -261,8 +359,7 @@ export default function OutputValuePage() {
                         </div>
                         {item.stageCumulativeAmount != null && (
                           <p className="text-xs text-slate-400 mt-2">
-                            阶段累计应得 ¥{(item.stageCumulativeAmount ?? 0).toLocaleString()}
-                            （上次累计 ¥{(item.previousCumulativeAmount ?? 0).toLocaleString()}）
+                            阶段应得 ¥{(item.stageCumulativeAmount ?? 0).toLocaleString()}
                             · 基本部分 ¥{(item.baseAmountPart ?? 0).toLocaleString()}
                             {item.benefitSnapshot != null && (
                               <> · 创建时效益值 ¥{(item.benefitSnapshot ?? 0).toLocaleString()}</>
@@ -319,6 +416,10 @@ export default function OutputValuePage() {
 
                         <div className="flex gap-6 mt-4 pt-4 border-t border-slate-100 text-xs text-slate-400">
                           <span>提交时间：{formatDate(item.submitTime)}</span>
+                          {item.confirmUserName && <span>确认人：{item.confirmUserName}</span>}
+                          {item.approveUserName && <span>审批人：{item.approveUserName}</span>}
+                          {item.payUserName && <span>发放人：{item.payUserName}</span>}
+                          {item.currentHandlerName && <span>当前办理：{item.currentHandlerName}</span>}
                           {item.approvedTime && <span>审批时间：{formatDate(item.approvedTime)}</span>}
                           {item.paidTime && <span>发放时间：{formatDate(item.paidTime)}</span>}
                         </div>
@@ -326,21 +427,21 @@ export default function OutputValuePage() {
                         <div className="flex justify-end gap-3 mt-4">
                           {item.status === 0 && (
                             <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={actionLoading === item.outputValueId}
-                              onClick={() => handleAction(item.outputValueId, "confirm")}>
+                              onClick={() => openAction(item, "confirm")}>
                               {actionLoading === item.outputValueId ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
                               确认分配
                             </Button>
                           )}
                           {item.status === 1 && (
                             <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={actionLoading === item.outputValueId}
-                              onClick={() => handleAction(item.outputValueId, "approve")}>
+                              onClick={() => openAction(item, "approve")}>
                               {actionLoading === item.outputValueId ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
                               审批通过
                             </Button>
                           )}
                           {item.status === 2 && (
                             <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={actionLoading === item.outputValueId}
-                              onClick={() => handleAction(item.outputValueId, "pay")}>
+                              onClick={() => openAction(item, "pay")}>
                               {actionLoading === item.outputValueId ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
                               发放产值
                             </Button>

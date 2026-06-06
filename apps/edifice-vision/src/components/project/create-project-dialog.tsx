@@ -47,7 +47,6 @@ const initialForm: CreateProjectParams = {
   contractType: 0,
   contractAmount: 0,
   baseAmount: 0,
-  benefitRule: "",
   benefitAmount: undefined,
   projectCharges: [],
   projectMembers: [],
@@ -402,15 +401,6 @@ export function CreateProjectDialog({
                     min={0}
                   />
                 </FormField>
-                <FormField label="效益规则">
-                  <input
-                    type="text"
-                    value={form.benefitRule ?? ""}
-                    onChange={(e) => updateField("benefitRule", e.target.value)}
-                    placeholder="如：按审减额 5%（自由文本说明）"
-                    className="form-input"
-                  />
-                </FormField>
               </>
             )}
 
@@ -424,7 +414,7 @@ export function CreateProjectDialog({
             </FormField>
 
             {/* 合同主文件 */}
-            <FormField label="合同文件">
+            <FormField label="合同文件" required>
               {contractMainFile ? (
                 <EditableAttachmentFileList
                   files={[contractMainFile]}

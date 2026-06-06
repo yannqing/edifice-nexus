@@ -5,6 +5,7 @@ import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.service.OaUserSyncService;
 import com.qsy.edifice.utils.ResultUtils;
 import jakarta.annotation.Resource;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,6 +16,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/admin/oa-sync")
+@PreAuthorize("hasAuthority('menu:user-management') or hasRole('SUPER_ADMIN')")
 public class OaSyncController {
 
     @Resource

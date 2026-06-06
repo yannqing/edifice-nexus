@@ -12,9 +12,9 @@ import java.util.List;
  * 创建产值分配单请求参数（v0.4 修订）
  *
  * 计算口径（v0.4 与 v0.2 的关键差异）：
- * - 阶段产值（totalAmount）由系统自动计算：基于合同 base_amount + benefit_amount 与
- *   阶段的累计计入比例（stage_output / benefit_inclusion_ratio）；
- *   本期产值 = 当前累计 - 上一次累计
+ * - 阶段产值（totalAmount）由系统自动计算：
+ *   基本收费按合同金额 × 当前阶段比例；
+ *   基本+效益按 base_amount × 当前阶段比例 + benefit_amount × 当前阶段效益比例；
  * - 比例对调：员工池 40%、公司账 60%（v0.2 写反了）
  * - 每人应得 = 员工池 × allocRatio%
  * - 每人实得 = 每人应得 × completionRatio%
@@ -39,6 +39,9 @@ public class CreateOutputValueDto {
     @Schema(description = "所属季度，格式 YYYY-Qn", requiredMode = Schema.RequiredMode.REQUIRED)
     private String quarter;
 
+    @Schema(description = "确认人id；创建后由该用户确认分配单", requiredMode = Schema.RequiredMode.REQUIRED)
+    private Long confirmUserId;
+
     /**
      * v0.4 起 totalAmount 由系统从合同 + 阶段比例自动算出，前端不再传。
      * 保留字段仅作向后兼容（若传入会被忽略）。
@@ -50,10 +53,8 @@ public class CreateOutputValueDto {
     @Schema(description = "公司补贴（元，只记录不计入产值）")
     private BigDecimal subsidyAmount;
 
-    /**
-     * 当效益修正导致本期产值为负（罕见）时，财务需显式确认才能落库。
-     */
-    @Schema(description = "允许本期产值为负（效益下调时使用，需财务显式确认）")
+    @Deprecated
+    @Schema(description = "[已废弃] 旧累计差额模型下允许负产值的开关，当前阶段独立比例模型不再使用")
     private Boolean allowNegative;
 
     @Schema(description = "分配明细列表", requiredMode = Schema.RequiredMode.REQUIRED)

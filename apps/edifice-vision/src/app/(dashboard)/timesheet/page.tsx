@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Pencil,
+  Save,
   Trash2,
   Loader2,
 } from "lucide-react";
@@ -543,9 +544,21 @@ function TimesheetFormDialog({ open, onOpenChange, editing, defaultDate, onSucce
           </div>
         </div>
 
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 mt-4 text-xs text-amber-700">
+          保存为草稿后仅暂存记录，不会进入正式提交状态。
+        </div>
+
         <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
-          <Button variant="outline" disabled={submitting} onClick={() => handleSubmit(0)}>保存草稿</Button>
+          <Button
+            variant="outline"
+            disabled={submitting}
+            onClick={() => handleSubmit(0)}
+            className="border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800"
+          >
+            <Save className="w-4 h-4 mr-1" />
+            保存为草稿
+          </Button>
           <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={submitting} onClick={() => handleSubmit(1)}>
             {submitting ? <><Loader2 className="w-4 h-4 animate-spin mr-1" />提交中...</> : "提交"}
           </Button>

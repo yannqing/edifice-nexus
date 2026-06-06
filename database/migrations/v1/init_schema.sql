@@ -320,6 +320,10 @@ create table output_value
     total_amount       decimal(20, 2)                     not null comment '产值总额（元）',
     status             tinyint  default 0                 not null comment '状态：0-待确认/1-待审核/2-已审批/3-已发放',
     submit_user_id     bigint                             null     comment '提交人id',
+    confirm_user_id    bigint                             null     comment '确认人id',
+    approve_user_id    bigint                             null     comment '审批人id',
+    pay_user_id        bigint                             null     comment '发放人id',
+    current_handler_id bigint                             null     comment '当前办理人id',
     submit_time        datetime                           null     comment '提交时间',
     approved_time      datetime                           null     comment '审批时间',
     paid_time          datetime                           null     comment '发放时间',
@@ -339,7 +343,8 @@ create table output_value
     key idx_output_value_project (project_id),
     key idx_output_value_stage (project_stage_id),
     key idx_output_value_status (status),
-    key idx_output_value_quarter (quarter)
+    key idx_output_value_quarter (quarter),
+    key idx_output_value_current_handler (current_handler_id)
 )
     comment '产值分配单表';
 

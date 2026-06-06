@@ -238,7 +238,7 @@ export default function UserManagementPage() {
                             {item.realName || item.username}
                             {genderLabel && <span className="ml-2 text-xs text-slate-400 font-normal">{genderLabel}</span>}
                           </p>
-                          <p className="text-xs text-slate-400 truncate">@{item.username}</p>
+                          <p className="text-xs text-slate-400 truncate">@{item.username} · ID {item.userId}</p>
                         </div>
                       </div>
                     </td>

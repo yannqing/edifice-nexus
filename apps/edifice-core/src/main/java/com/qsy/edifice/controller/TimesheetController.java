@@ -15,6 +15,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -23,6 +24,7 @@ import java.util.Map;
 @Tag(name = "工时管理")
 @RestController
 @RequestMapping("/timesheet")
+@PreAuthorize("hasAuthority('menu:timesheet') or hasRole('SUPER_ADMIN')")
 public class TimesheetController {
 
     @Resource

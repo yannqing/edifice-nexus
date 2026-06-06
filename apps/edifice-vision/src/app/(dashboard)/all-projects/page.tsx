@@ -17,19 +17,27 @@ import {
   ChevronRight,
   Briefcase,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { isAbortError } from "@/lib/request";
 import { TablePageSkeleton } from "@/components/ui/skeleton";
-import { getAllProjects, getProjectStatistics, getProjectTypes, getExportUrl } from "@/services/project";
+import { getAllProjects, getProjectStatistics, getProjectTypes, getExportUrl, deleteProject } from "@/services/project";
 import { ProjectDetailDialog } from "@/components/project/project-detail-dialog";
 import { ImportProjectDialog } from "@/components/project/import-project-dialog";
 import { EditProjectDialog } from "@/components/project/edit-project-dialog";
-import { deleteProject } from "@/services/project";
 import { getAccessToken } from "@/lib/token";
 import { ResponseCode } from "@/types/api";
+import { toast } from "sonner";
 import type { ProjectListVo, ProjectStatisticsVo } from "@/types/project";
 import {
   PROJECT_STATUS_MAP,
@@ -116,6 +124,8 @@ export default function AllProjectsPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ProjectListVo | null>(null);
 
   // 搜索防抖
   useEffect(() => {
@@ -212,6 +222,33 @@ export default function AllProjectsPage() {
     setSelectedStatus("all");
     setSelectedType("all");
     setSearchText("");
+  };
+
+  const handleDeleteProject = async () => {
+    if (!deleteTarget) return;
+
+    const projectId = deleteTarget.projectId;
+    setDeletingProjectId(projectId);
+    try {
+      const res = await deleteProject(projectId);
+      if (res.code === ResponseCode.SUCCESS) {
+        toast.success("项目已删除");
+        setDeleteTarget(null);
+        setSelectedRows((prev) => prev.filter((id) => id !== projectId));
+        if (projects.length === 1 && currentPage > 1) {
+          setCurrentPage((p) => p - 1);
+        } else {
+          fetchProjects();
+        }
+        fetchStatistics();
+      } else {
+        toast.error(res.msg || "删除失败");
+      }
+    } catch {
+      toast.error("删除失败，请稍后重试");
+    } finally {
+      setDeletingProjectId(null);
+    }
   };
 
   return (
@@ -567,6 +604,7 @@ export default function AllProjectsPage() {
                             setSelectedProjectId(project.projectId);
                             setDetailOpen(true);
                           }}
+                          title="查看详情"
                           className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         >
                           <Eye className="w-4 h-4" />
@@ -576,9 +614,22 @@ export default function AllProjectsPage() {
                             setEditProjectId(project.projectId);
                             setEditOpen(true);
                           }}
+                          title="编辑项目"
                           className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
                         >
                           <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget(project)}
+                          disabled={deletingProjectId === project.projectId}
+                          title="删除项目"
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {deletingProjectId === project.projectId ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
                         </button>
                       </div>
                     </td>
@@ -685,6 +736,61 @@ export default function AllProjectsPage() {
           fetchStatistics();
         }}
       />
+
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open && !deletingProjectId) {
+            setDeleteTarget(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>删除项目</DialogTitle>
+            <DialogDescription>
+              此操作不可挽回，请确定是否需要删除。
+            </DialogDescription>
+          </DialogHeader>
+
+          {deleteTarget && (
+            <div className="rounded-xl border border-rose-100 bg-rose-50 px-4 py-3">
+              <p className="text-sm font-medium text-rose-700">
+                {deleteTarget.projectName}
+              </p>
+              <p className="mt-1 text-xs text-rose-500">
+                删除后将同时逻辑删除该项目下的合同、项目文件、验工、审批、产值、工时、回款等业务数据。
+              </p>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!!deletingProjectId}
+              onClick={() => setDeleteTarget(null)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={!!deletingProjectId}
+              onClick={handleDeleteProject}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              {deletingProjectId ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  删除中...
+                </>
+              ) : (
+                "确认删除"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

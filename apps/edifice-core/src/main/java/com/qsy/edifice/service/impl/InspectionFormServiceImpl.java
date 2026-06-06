@@ -16,6 +16,7 @@ import com.qsy.edifice.enums.ApprovalBizType;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.ContractMapper;
+import com.qsy.edifice.mapper.ApprovalRecordsMapper;
 import com.qsy.edifice.mapper.InspectionFormMapper;
 import com.qsy.edifice.mapper.ProjectMapper;
 import com.qsy.edifice.mapper.ProjectStageMapper;
@@ -52,6 +53,10 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class InspectionFormServiceImpl implements InspectionFormService {
+
+    private static final int RECORD_PENDING = 0;
+    private static final int RECORD_APPROVED = 1;
+    private static final int RECORD_REJECTED = 2;
 
     @Resource
     private InspectionFormMapper inspectionFormMapper;
@@ -90,6 +95,9 @@ public class InspectionFormServiceImpl implements InspectionFormService {
     @Resource
     private ApprovalFlowService approvalFlowService;
 
+    @Resource
+    private ApprovalRecordsMapper approvalRecordsMapper;
+
     // ==================== 查询列表 ====================
 
     @Override
@@ -104,10 +112,17 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         Integer current = query.getCurrent() != null ? query.getCurrent() : 1;
         Integer pageSize = query.getPageSize() != null ? query.getPageSize() : 10;
 
-        List<ApprovalRecordVo> pendingRecords = approvalFlowService.listPendingByApprover(
-                userId, ApprovalBizType.INSPECTION);
-        Set<Long> inspectionIds = pendingRecords.stream()
-                .map(ApprovalRecordVo::getBizId)
+        List<Integer> recordStatuses = resolveApprovalRecordStatuses(query);
+        LambdaQueryWrapper<ApprovalRecords> recordWrapper = new LambdaQueryWrapper<>();
+        recordWrapper.eq(ApprovalRecords::getApprover, userId)
+                .eq(ApprovalRecords::getBizTypeExt, ApprovalBizType.INSPECTION.getExt())
+                .in(ApprovalRecords::getInspectionFormStatus, recordStatuses)
+                .orderByDesc(ApprovalRecords::getUpdatedTime)
+                .orderByDesc(ApprovalRecords::getCreatedTime);
+        List<ApprovalRecords> records = approvalRecordsMapper.selectList(recordWrapper);
+
+        Set<Long> inspectionIds = records.stream()
+                .map(ApprovalRecords::getInspectionFormId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         if (inspectionIds.isEmpty()) {
@@ -122,30 +137,64 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         if (StringUtils.hasText(query.getProjectId())) {
             wrapper.eq(InspectionForm::getProjectId, query.getProjectId());
         }
-        if (query.getInspectionFormStatuses() != null && !query.getInspectionFormStatuses().isEmpty()) {
+        if (shouldFilterInspectionStatus(query) && query.getInspectionFormStatuses() != null
+                && !query.getInspectionFormStatuses().isEmpty()) {
             wrapper.in(InspectionForm::getInspectionFormStatus, query.getInspectionFormStatuses());
-        } else if (query.getInspectionFormStatus() != null) {
+        } else if (shouldFilterInspectionStatus(query) && query.getInspectionFormStatus() != null) {
             wrapper.eq(InspectionForm::getInspectionFormStatus, query.getInspectionFormStatus());
         }
-        wrapper.orderByDesc(InspectionForm::getCreatedTime);
 
-        Page<InspectionForm> page = inspectionFormMapper.selectPage(new Page<>(current, pageSize), wrapper);
-        ListResolveCtx ctx = prefetchForList(page.getRecords());
-        Map<Long, ApprovalRecordVo> currentRecordMap = pendingRecords.stream()
-                .filter(record -> record.getBizId() != null)
-                .collect(Collectors.toMap(ApprovalRecordVo::getBizId, record -> record, (a, b) -> a));
+        List<InspectionForm> matchedForms = inspectionFormMapper.selectList(wrapper);
+        Map<Long, InspectionForm> formMap = matchedForms.stream()
+                .collect(Collectors.toMap(InspectionForm::getInspectionFormId, f -> f, (a, b) -> a));
 
-        List<InspectionFormListVo> voList = page.getRecords().stream()
-                .map(f -> {
-                    InspectionFormListVo vo = convertToListVo(f, ctx);
-                    fillCurrentApprovalInfo(vo, currentRecordMap.get(f.getInspectionFormId()));
-                    return vo;
-                })
+        List<InspectionForm> orderedForms = records.stream()
+                .map(ApprovalRecords::getInspectionFormId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .map(formMap::get)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        Page<InspectionFormListVo> voPage = new Page<>(current, pageSize, page.getTotal());
+        int total = orderedForms.size();
+        int fromIndex = Math.min(Math.max(current - 1, 0) * pageSize, total);
+        int toIndex = Math.min(fromIndex + pageSize, total);
+        List<InspectionForm> pageRecords = orderedForms.subList(fromIndex, toIndex);
+
+        ListResolveCtx ctx = prefetchForList(pageRecords);
+
+        List<InspectionFormListVo> voList = pageRecords.stream()
+                .map(f -> convertToListVo(f, ctx))
+                .collect(Collectors.toList());
+        fillCurrentApprovalInfo(voList);
+
+        Page<InspectionFormListVo> voPage = new Page<>(current, pageSize, total);
         voPage.setRecords(voList);
         return voPage;
+    }
+
+    private List<Integer> resolveApprovalRecordStatuses(GetInspectionFormListDto query) {
+        if (query.getInspectionFormStatuses() != null && !query.getInspectionFormStatuses().isEmpty()) {
+            boolean pendingMainStatuses = query.getInspectionFormStatuses().stream()
+                    .allMatch(status -> status != null && (status == 0 || status == 1));
+            if (pendingMainStatuses) return List.of(RECORD_PENDING);
+        }
+        Integer status = query.getInspectionFormStatus();
+        if (status != null) {
+            if (status == 3) return List.of(RECORD_APPROVED);
+            if (status == 2) return List.of(RECORD_REJECTED);
+            if (status == 0 || status == 1) return List.of(RECORD_PENDING);
+        }
+        return List.of(RECORD_PENDING, RECORD_APPROVED, RECORD_REJECTED);
+    }
+
+    private boolean shouldFilterInspectionStatus(GetInspectionFormListDto query) {
+        if (query.getInspectionFormStatuses() != null && !query.getInspectionFormStatuses().isEmpty()) {
+            return query.getInspectionFormStatuses().stream()
+                    .anyMatch(status -> status != null && (status == 0 || status == 1));
+        }
+        Integer status = query.getInspectionFormStatus();
+        return status != null && (status == 0 || status == 1);
     }
 
     @Override
@@ -323,6 +372,8 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         vo.setApproved(0L);
         vo.setRejected(0L);
         if (approverId == null) return vo;
+        vo.setApproved(countDistinctApprovalRecordsByStatus(approverId, RECORD_APPROVED));
+        vo.setRejected(countDistinctApprovalRecordsByStatus(approverId, RECORD_REJECTED));
 
         List<ApprovalRecordVo> pendingRecords = approvalFlowService.listPendingByApprover(
                 approverId, ApprovalBizType.INSPECTION);
@@ -338,6 +389,18 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         vo.setPendingApproval(forms.stream().filter(f -> Objects.equals(f.getInspectionFormStatus(), 0)).count());
         vo.setPendingFirstReview(forms.stream().filter(f -> Objects.equals(f.getInspectionFormStatus(), 1)).count());
         return vo;
+    }
+
+    private long countDistinctApprovalRecordsByStatus(Long approverId, int recordStatus) {
+        LambdaQueryWrapper<ApprovalRecords> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(ApprovalRecords::getApprover, approverId)
+                .eq(ApprovalRecords::getBizTypeExt, ApprovalBizType.INSPECTION.getExt())
+                .eq(ApprovalRecords::getInspectionFormStatus, recordStatus);
+        return approvalRecordsMapper.selectList(wrapper).stream()
+                .map(ApprovalRecords::getInspectionFormId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .count();
     }
 
     private long countByStatus(int status, Long applyUserId) {
@@ -439,6 +502,10 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         if (dto.getResult() != 1 && dto.getResult() != 2) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "审批结果必须为 1-通过 或 2-驳回");
         }
+        if (!StringUtils.hasText(dto.getApprovalDescription())) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "审批意见不能为空");
+        }
+        dto.setApprovalDescription(dto.getApprovalDescription().trim());
 
         // 查询验工单
         InspectionForm form = inspectionFormMapper.selectById(dto.getInspectionFormId());

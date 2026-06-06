@@ -76,6 +76,7 @@ export interface LoginResponseData {
   refreshToken: string;
   userInfo: SysUser;
   roles: SysRole[];
+  permissions?: string[];
 }
 
 // ==================== 认证状态 ====================
@@ -84,6 +85,7 @@ export interface AuthState {
   isAuthenticated: boolean;
   user: SysUser | null;
   roles: SysRole[];
+  permissions: string[];
   accessToken: string | null;
   refreshToken: string | null;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Eye, FileText, Loader2, Upload, X } from "lucide-react";
 import {
@@ -12,13 +12,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ResponseCode } from "@/types/api";
-import { getAllProjects, getProjectDetail, uploadProjectAttachment } from "@/services/project";
+import { getAllProjects, getProjectDetail, getUserList, uploadProjectAttachment } from "@/services/project";
 import { createProjectFile } from "@/services/project-file";
 import type {
   ProjectListVo,
   ProjectDetailVo,
   ProjectStageVo,
-  ProjectMemberVo,
+  UserListItem,
   FilesVo,
 } from "@/types/project";
 import { FILE_CATEGORY_OPTIONS } from "@/types/project-file";
@@ -85,7 +85,7 @@ export function UploadProjectFileDialog({
   const [projectId, setProjectId] = useState<string>(lockedProjectId ?? "");
   const [detail, setDetail] = useState<ProjectDetailVo | null>(null);
   const [stages, setStages] = useState<ProjectStageVo[]>([]);
-  const [members, setMembers] = useState<ProjectMemberVo[]>([]);
+  const [users, setUsers] = useState<UserListItem[]>([]);
   const [stageId, setStageId] = useState<string>("");
   const [displayName, setDisplayName] = useState<string>("");
   const [category, setCategory] = useState<string>("");
@@ -98,7 +98,7 @@ export function UploadProjectFileDialog({
   const [error, setError] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 仅重置表单录入项；不清 detail/stages/members（它们的刷新交给下面的 effect 按 open 触发）
+  // 仅重置表单录入项；项目详情和阶段刷新交给下面的 effect 按 open 触发。
   const reset = useCallback(() => {
     setProjectId(lockedProjectId ?? "");
     setStageId("");
@@ -115,14 +115,18 @@ export function UploadProjectFileDialog({
   useEffect(() => {
     if (!open) return;
     reset();
-    if (!locked) {
-      (async () => {
-        const res = await getAllProjects({ pageSize: 200 });
-        if (res.code === ResponseCode.SUCCESS && res.data) {
-          setProjects(res.data.records ?? []);
-        }
-      })();
-    }
+    (async () => {
+      const [projectRes, userRes] = await Promise.all([
+        locked ? Promise.resolve(null) : getAllProjects({ pageSize: 200 }),
+        getUserList(),
+      ]);
+      if (projectRes?.code === ResponseCode.SUCCESS && projectRes.data) {
+        setProjects(projectRes.data.records ?? []);
+      }
+      if (userRes.code === ResponseCode.SUCCESS && userRes.data) {
+        setUsers(userRes.data.records ?? []);
+      }
+    })();
   }, [open, reset, locked]);
 
   // 打开且 projectId 就绪时加载项目详情（锁定模式下，同一 projectId 每次开弹窗也会重新拉一次）
@@ -131,7 +135,6 @@ export function UploadProjectFileDialog({
       if (!open) {
         setDetail(null);
         setStages([]);
-        setMembers([]);
       }
       return;
     }
@@ -142,20 +145,12 @@ export function UploadProjectFileDialog({
       if (res.code === ResponseCode.SUCCESS && res.data) {
         setDetail(res.data);
         setStages(res.data.projectStages ?? []);
-        setMembers(res.data.projectMemberList ?? []);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [open, projectId]);
-
-  const memberOptions = useMemo(() => {
-    return members.map((m) => ({
-      userId: m.userId,
-      realName: m.realName,
-    }));
-  }, [members]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
@@ -327,7 +322,7 @@ export function UploadProjectFileDialog({
             </div>
             <div className="col-span-2">
               <label className="text-xs font-medium text-slate-600 mb-1 block">
-                一级审批人（项目负责人，缺省自动取）
+                一级审批人（缺省自动取项目经理）
               </label>
               <select
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
@@ -336,9 +331,9 @@ export function UploadProjectFileDialog({
                 disabled={!detail}
               >
                 <option value="">自动选取（项目经理）</option>
-                {memberOptions.map((m) => (
-                  <option key={m.userId} value={m.userId}>
-                    {m.realName}
+                {users.map((u) => (
+                  <option key={u.userId} value={u.userId}>
+                    {u.realName || u.username}
                   </option>
                 ))}
               </select>
@@ -357,7 +352,9 @@ export function UploadProjectFileDialog({
           </div>
 
           <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">上传文件</label>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">
+              上传文件 <span className="text-rose-500">*</span>
+            </label>
             {!file ? (
               <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
                 <Upload className="w-6 h-6 text-slate-300" />

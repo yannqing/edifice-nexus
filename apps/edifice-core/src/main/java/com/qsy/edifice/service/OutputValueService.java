@@ -29,20 +29,20 @@ public interface OutputValueService {
      * 确认分配（待确认→待审核）
      * @param outputValueId 分配单id
      */
-    void confirmOutputValue(Long outputValueId);
+    void confirmOutputValue(Long outputValueId, Long operatorId, Long approveUserId);
 
     /**
      * 审批通过（待审核→已审批）
      * @param outputValueId 分配单id
      * @param userId 审批人id
      */
-    void approveOutputValue(Long outputValueId, Long userId);
+    void approveOutputValue(Long outputValueId, Long operatorId, Long payUserId);
 
     /**
      * 发放产值（已审批→已发放）
      * @param outputValueId 分配单id
      */
-    void payOutputValue(Long outputValueId);
+    void payOutputValue(Long outputValueId, Long operatorId);
 
     /**
      * 统计数据

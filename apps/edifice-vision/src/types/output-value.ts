@@ -41,9 +41,9 @@ export interface OutputValueVo {
   subsidyAmount: number;
 
   // ========== v0.4 阶段累计快照 ==========
-  /** 当前阶段累计应得（含基本+效益） */
+  /** 当前阶段应得（含基本+效益） */
   stageCumulativeAmount: number | null;
-  /** 上一次产值分配单累计 */
+  /** 历史字段：旧累计差额模型下的上一次累计；新单固定为 0 */
   previousCumulativeAmount: number | null;
   /** 本期基本部分 */
   baseAmountPart: number | null;
@@ -55,6 +55,14 @@ export interface OutputValueVo {
   /** 0-待确认/1-待审核/2-已审批/3-已发放 */
   status: number;
   submitUserName: string;
+  confirmUserId: string | null;
+  confirmUserName: string | null;
+  approveUserId: string | null;
+  approveUserName: string | null;
+  payUserId: string | null;
+  payUserName: string | null;
+  currentHandlerId: string | null;
+  currentHandlerName: string | null;
   submitTime: string;
   approvedTime: string | null;
   paidTime: string | null;
@@ -78,16 +86,18 @@ export interface CreateOutputValueParams {
   projectStageId: string;
   /** 所属季度 YYYY-Qn */
   quarter: string;
+  /** 确认人 */
+  confirmUserId: string;
   /** v0.4 已废弃：系统自动算 */
   totalAmount?: number;
   /** 公司补贴（元，只记录不计入产值） */
   subsidyAmount?: number;
-  /** 当效益修正使本期产值为负时，财务显式确认 */
+  /** 已废弃：旧累计差额模型下允许负产值的开关 */
   allowNegative?: boolean;
   distributions: CreateDistributionItem[];
 }
 
-/** 创建产值分配单前预览：当前阶段累计 / 上次累计 / 本期 = 差值 */
+/** 创建产值分配单前预览：当前阶段独立产值 */
 export interface OutputValuePreview {
   baseAmount: number;
   benefitAmount: number;

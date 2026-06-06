@@ -103,7 +103,6 @@ export function EditProjectDialog({
             contractType: d.contract?.contractType,
             contractAmount: d.contract?.contractAmount,
             baseAmount: d.contract?.baseAmount,
-            benefitRule: d.contract?.benefitRules,
             // benefitAmount 故意不读：编辑项目不允许改预计效益，必须走"效益修正"流程
             preStartTime: d.contract?.preStartDate?.slice(0, 10) ?? d.preStartTime?.slice(0, 10),
             preEndTime: d.contract?.preEndDate?.slice(0, 10) ?? d.preEndTime?.slice(0, 10),
@@ -337,15 +336,6 @@ export function EditProjectDialog({
                         onChange={(e) => updateField("baseAmount", Number(e.target.value))}
                         className="form-input"
                         min={0}
-                      />
-                    </FormField>
-                    <FormField label="效益规则">
-                      <input
-                        type="text"
-                        value={form.benefitRule ?? ""}
-                        onChange={(e) => updateField("benefitRule", e.target.value)}
-                        placeholder="自由文本说明，如：按审减额 5%"
-                        className="form-input"
                       />
                     </FormField>
                     {/* 预计效益金额必须走"效益修正"流程，保证审计留痕 */}

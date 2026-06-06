@@ -17,6 +17,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
 
@@ -91,11 +92,18 @@ public class MyLoginSuccessHandler implements AuthenticationSuccessHandler {
         userInfoMap.put("lastLoginTime", user.getLastLoginTime());
 
         // 构建返回数据
+        List<String> permissions = securityUser.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .filter(authority -> !authority.startsWith("ROLE_"))
+                .distinct()
+                .toList();
+
         java.util.Map<String, Object> responseData = new java.util.HashMap<>();
         responseData.put("accessToken", accessToken);
         responseData.put("refreshToken", refreshToken);
         responseData.put("userInfo", userInfoMap);
         responseData.put("roles", roles);
+        responseData.put("permissions", permissions);
 
         response.getWriter().write(JSON.toJSONString(ResultUtils.success(Code.LOGIN_SUCCESS, responseData, "登录成功")));
         log.info("用户{}登录成功！Access Token 有效期2小时，Refresh Token 有效期7天", user.getUsername());
