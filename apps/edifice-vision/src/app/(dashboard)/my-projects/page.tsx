@@ -143,6 +143,15 @@ export default function MyProjectsPage() {
     notStarted: 0,
   });
 
+  // 支持从 OA 合同详情直接打开已关联工程项目。
+  useEffect(() => {
+    const projectId = new URLSearchParams(window.location.search).get("projectId");
+    if (projectId && /^\d+$/.test(projectId)) {
+      setSelectedProjectId(projectId);
+      setDetailOpen(true);
+    }
+  }, []);
+
   // 搜索防抖
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchText), 300);
