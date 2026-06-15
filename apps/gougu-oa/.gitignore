@@ -1,0 +1,14 @@
+/.idea
+/.vscode
+/.gitee
+*.log
+*.env
+*.ini
+/vendor/
+/runtime/*
+!/runtime/.gitkeep
+/public/storage/*
+!/public/storage/.gitkeep
+/public/backup/*
+!/public/backup/.gitkeep
+/app/crud/file/*

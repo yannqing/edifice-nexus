@@ -11,12 +11,13 @@
 
 - `apps/edifice-core` is the Spring Boot backend.
 - `apps/edifice-vision` is the Next.js frontend.
-- The integrated OA system is a separate Gougu OA/ThinkPHP app under `/root/project/workspace/office` on the server.
+- `apps/gougu-oa` is the integrated Gougu OA/ThinkPHP source. The current server deployment still runs from `/root/project/workspace/office` until deployment is switched to this monorepo path.
 - Edifice and OA share user/organization data through the existing sync code and database mappings. OA is the main maintenance entry for users, departments, positions, and permissions.
 
 ## OA Integration
 
 - Current Gougu OA SSO entry is `/home/sso/login?ssoToken=...`.
+- OA to Edifice reverse SSO entry is `/home/index/edifice_sso`.
 - Do not use the old `/login/sso` route; it belongs to the previous integration path and returns a ThinkPHP 404 on the current OA app.
 - Edifice permissions are configured from OA. Edifice should consume permission snapshots and hide/show menus accordingly, not expose a separate permission configuration UI.
 - Default Edifice menus expected for normal permission sets include workbench, my projects, and personal performance unless the business rule changes.
@@ -25,5 +26,5 @@
 
 - For frontend changes, run TypeScript checks for `apps/edifice-vision` when practical.
 - For backend changes, run Maven compile/tests for `apps/edifice-core` when practical.
+- For OA changes, run PHP syntax checks and keep `apps/gougu-oa/.env`, `vendor`, `runtime`, uploads, and backups out of Git.
 - After deployment-related changes, verify the exact running port and process before assuming a URL maps to dev or packaged output.
-
