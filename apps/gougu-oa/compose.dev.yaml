@@ -1,0 +1,33 @@
+services:
+  oa:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: edifice-gougu-oa-dev
+    working_dir: /app
+    command: ["sh", "./docker/dev-entrypoint.sh"]
+    environment:
+      APP_DEBUG: "${APP_DEBUG:-true}"
+      OA_DB_HOST: "${OA_DB_HOST:-host.docker.internal}"
+      OA_DB_PORT: "${OA_DB_PORT:-3306}"
+      OA_DB_NAME: "${OA_DB_NAME:-office_db}"
+      OA_DB_USER: "${OA_DB_USER:-root}"
+      OA_DB_PASSWORD: "${OA_DB_PASSWORD:-}"
+      EDIFICE_WEB_URL: "${EDIFICE_WEB_URL:-http://127.0.0.1:3000}"
+      EDIFICE_SYNC_BASE_URL: "${EDIFICE_SYNC_BASE_URL:-http://host.docker.internal:8081}"
+      EDIFICE_SYNC_URL: "${EDIFICE_SYNC_URL:-http://host.docker.internal:8081/admin/oa-sync/internal/users/full}"
+      EDIFICE_SYNC_KEY: "${EDIFICE_SYNC_KEY:-}"
+      EDIFICE_SYNC_API_KEY: "${EDIFICE_SYNC_API_KEY:-}"
+      EDIFICE_SSO_SECRET: "${EDIFICE_SSO_SECRET:-}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+      - gougu_oa_vendor:/app/vendor
+    init: true
+    stop_grace_period: 5s
+
+volumes:
+  gougu_oa_vendor:

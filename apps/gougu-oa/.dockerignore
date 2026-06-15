@@ -1,0 +1,10 @@
+.env
+.git
+.gitee
+.idea
+.vscode
+public/backup
+public/storage
+runtime
+temp
+vendor

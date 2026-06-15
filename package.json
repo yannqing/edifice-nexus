@@ -8,6 +8,8 @@
     "dev:vision": "pnpm --filter edifice-vision dev",
     "dev:core": "pnpm --filter edifice-core dev",
     "dev:oa": "pnpm --filter gougu-oa dev",
+    "dev:oa:down": "pnpm --filter gougu-oa dev:down",
+    "dev:oa:logs": "pnpm --filter gougu-oa dev:logs",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "java:dev": "pnpm dev:core",

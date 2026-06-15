@@ -5,33 +5,27 @@ Production runtime data and secrets are intentionally excluded from Git.
 
 ## Requirements
 
-- PHP 8.1 or newer
-- Composer
+- Docker Desktop with Docker Compose
 - MySQL 8 with an `office_db` database
-- PHP extensions required by `composer.json`, including PDO MySQL and cURL
 - A running Edifice backend for user, permission, contract, and SSO integration
 
 ## Setup
 
-1. Install PHP dependencies:
+1. Create the local environment file:
 
    ```bash
-   cd apps/gougu-oa
-   composer install
+   cp apps/gougu-oa/.env.example apps/gougu-oa/.env
    ```
 
-2. Create the local environment file:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-3. Set the same values for `EDIFICE_SSO_SECRET` and the Edifice backend
+2. Set the same values for `EDIFICE_SSO_SECRET` and the Edifice backend
    `oa.sso-secret`. Set `EDIFICE_SYNC_KEY` / `EDIFICE_SYNC_API_KEY` to the
    Edifice backend `oa.sync.api-key`. A matching Edifice template is available
    at `apps/edifice-core/.env.example`.
 
-4. Initialize `office_db` using:
+   OA runs inside Docker, so services running directly on the Mac are reached
+   through `host.docker.internal`.
+
+3. Initialize `office_db` using:
 
    ```bash
    mysql -u root -p office_db < app/install/data/gouguoa.sql
@@ -41,13 +35,7 @@ Production runtime data and secrets are intentionally excluded from Git.
    Apply Edifice migrations separately to `edifice_db`, including
    `edifice_menu_permissions.sql` and `oa_contract_project_mapping.sql`.
 
-5. Ensure these writable directories exist:
-
-   ```bash
-   mkdir -p runtime public/storage public/backup
-   ```
-
-6. From the repository root, start OA only:
+4. From the repository root, start OA only:
 
    ```bash
    pnpm dev:oa
@@ -57,6 +45,10 @@ Open `http://127.0.0.1:8080/home/index/index.html`.
 
 Use `pnpm dev` from the repository root to start Edifice Vision, Edifice Core,
 and Gougu OA together.
+
+The first OA start builds the PHP 8.2 development image and installs Composer
+dependencies into a Docker volume. Use `pnpm dev:oa:down` to stop and remove the
+OA container, or `pnpm dev:oa:logs` to follow its logs.
 
 ## Repository Rules
 

@@ -146,6 +146,9 @@ pnpm dev:vision
 
 # 或者只起 OA
 pnpm dev:oa
+
+# 停止 OA 容器
+pnpm dev:oa:down
 ```
 
 跑起来后：
@@ -167,6 +170,8 @@ pnpm dev:oa
 | `pnpm dev:vision` | 只启动前端 `edifice-vision` |
 | `pnpm dev:core` | 只启动后端 `edifice-core` |
 | `pnpm dev:oa` | 只启动 `gougu-oa` |
+| `pnpm dev:oa:down` | 停止并删除 OA 开发容器 |
+| `pnpm dev:oa:logs` | 查看 OA 开发容器日志 |
 | `pnpm build` | 构建所有 app |
 | `pnpm lint` | 全量 lint |
 | `pnpm java:dev` | `pnpm dev:core` 的兼容别名 |

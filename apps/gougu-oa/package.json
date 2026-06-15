@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "php think run --host 127.0.0.1 --port 8080"
+    "dev": "docker compose -f compose.dev.yaml up --build",
+    "dev:down": "docker compose -f compose.dev.yaml down",
+    "dev:logs": "docker compose -f compose.dev.yaml logs -f"
   }
 }
