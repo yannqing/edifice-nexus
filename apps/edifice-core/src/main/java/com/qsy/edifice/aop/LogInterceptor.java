@@ -13,6 +13,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.UUID;
+import java.util.Set;
 
 /**
  * 请求响应日志 AOP
@@ -22,6 +23,10 @@ import java.util.UUID;
 @Component
 @Slf4j
 public class LogInterceptor {
+
+    private static final Set<String> SENSITIVE_PATHS = Set.of(
+            "/auth/oa-sso-login"
+    );
 
     /**
      * 执行拦截
@@ -39,7 +44,9 @@ public class LogInterceptor {
         String url = httpServletRequest.getRequestURI();
         // 获取请求参数
         Object[] args = point.getArgs();
-        String reqParam = "[" + StringUtils.join(args, ", ") + "]";
+        String reqParam = SENSITIVE_PATHS.contains(url)
+                ? "[REDACTED]"
+                : "[" + StringUtils.join(args, ", ") + "]";
         // 输出请求日志
         log.info("request start，id: {}, path: {}, ip: {}, params: {}", requestId, url,
                 httpServletRequest.getRemoteHost(), reqParam);
@@ -52,4 +59,3 @@ public class LogInterceptor {
         return result;
     }
 }
-
