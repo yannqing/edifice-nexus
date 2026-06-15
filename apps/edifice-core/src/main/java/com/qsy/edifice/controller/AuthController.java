@@ -1,13 +1,20 @@
 package com.qsy.edifice.controller;
 
 import com.alibaba.fastjson2.JSON;
+import com.auth0.jwt.JWT;
+import com.auth0.jwt.algorithms.Algorithm;
+import com.auth0.jwt.interfaces.DecodedJWT;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.qsy.edifice.common.Code;
 import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.entity.SysRole;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.mapper.SysRoleMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
+import com.qsy.edifice.service.OaUserSyncService;
 import com.qsy.edifice.utils.JwtUtils;
 import com.qsy.edifice.utils.RedisCache;
 import com.qsy.edifice.utils.ResultUtils;
@@ -55,6 +62,57 @@ public class AuthController {
 
     @Resource
     private SysRoleMapper sysRoleMapper;
+
+    @Resource
+    private OaUserSyncService oaUserSyncService;
+
+    @PostMapping("/oa-sso-login")
+    @Operation(summary = "OA 反向单点登录", description = "校验 OA 签发的短期 Token 并签发 Edifice 登录令牌")
+    public BaseResponse<Map<String, Object>> oaSsoLogin(@RequestBody OaSsoLoginRequest body) {
+        String token = body == null ? null : body.getToken();
+        if (token == null || token.isBlank()) {
+            return ResultUtils.failure(Code.TOKEN_ERROR, null, "OA SSO Token 不能为空");
+        }
+
+        DecodedJWT decoded;
+        try {
+            decoded = JWT.require(Algorithm.HMAC256(oaSsoSecret))
+                    .withIssuer("gougu-oa")
+                    .withAudience("edifice-nexus")
+                    .build()
+                    .verify(token);
+        } catch (Exception e) {
+            log.warn("OA 反向 SSO Token 校验失败: {}", e.getMessage());
+            return ResultUtils.failure(Code.TOKEN_AUTHENTICATE_FAILURE, null, "OA 登录凭证无效或已过期");
+        }
+
+        Integer oaAdminId = decoded.getClaim("oaAdminId").asInt();
+        String jti = decoded.getId();
+        if (oaAdminId == null || oaAdminId <= 0 || jti == null || jti.isBlank()) {
+            return ResultUtils.failure(Code.TOKEN_AUTHENTICATE_FAILURE, null, "OA 登录凭证载荷不完整");
+        }
+        if (redisCache.getCacheObject("oa_sso_jti:" + jti) != null) {
+            return ResultUtils.failure(Code.TOKEN_AUTHENTICATE_FAILURE, null, "OA 登录凭证已使用");
+        }
+        redisCache.setCacheObject("oa_sso_jti:" + jti, "used", 5, TimeUnit.MINUTES);
+
+        oaUserSyncService.syncOneFromOa(oaAdminId);
+        SysUser user = sysUserMapper.selectOne(new LambdaQueryWrapper<SysUser>()
+                .eq(SysUser::getOaAdminId, oaAdminId)
+                .eq(SysUser::getIsDelete, 0)
+                .last("LIMIT 1"));
+        if (user == null || !Integer.valueOf(1).equals(user.getStatus())
+                || !Integer.valueOf(1).equals(user.getEmploymentStatus())) {
+            return ResultUtils.failure(Code.LOGIN_FAILURE, null, "OA 用户未同步、已停用或已离职");
+        }
+
+        try {
+            return ResultUtils.success(Code.LOGIN_SUCCESS, issueLoginTokens(user), "登录成功");
+        } catch (Exception e) {
+            log.error("OA 反向 SSO 签发 Edifice Token 失败", e);
+            return ResultUtils.failure(Code.FAILURE, null, "生成 Edifice 登录凭证失败");
+        }
+    }
 
     @GetMapping("/oa-sso-token")
     @Operation(summary = "获取 OA 单点登录 Token", description = "为当前登录用户签发 5 分钟有效的 OA SSO Token")
@@ -231,5 +289,60 @@ public class AuthController {
     @lombok.Data
     public static class RefreshRequest {
         private String refreshToken;
+    }
+
+    @lombok.Data
+    public static class OaSsoLoginRequest {
+        private String token;
+    }
+
+    private Map<String, Object> issueLoginTokens(SysUser user) throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule());
+        objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+        String userInfoJson = objectMapper.writeValueAsString(user);
+        List<SysRole> roles = sysRoleMapper.selectRolesByUserId(user.getUserId());
+        List<String> permissions = sysUserMapper.selectPermissionCodesByUserId(user.getUserId());
+
+        String accessToken = jwtUtils.generateAccessToken(userInfoJson, JSON.toJSONString(roles));
+        String refreshToken = jwtUtils.generateRefreshToken(String.valueOf(user.getUserId()));
+
+        String oldTokensJson = redisCache.getCacheObject("user_tokens:" + user.getUserId());
+        if (oldTokensJson != null) {
+            com.alibaba.fastjson2.JSONObject oldTokens = JSON.parseObject(oldTokensJson);
+            String oldAccessToken = oldTokens.getString("accessToken");
+            String oldRefreshToken = oldTokens.getString("refreshToken");
+            if (oldAccessToken != null) redisCache.deleteObject("access_token:" + oldAccessToken);
+            if (oldRefreshToken != null) redisCache.deleteObject("refresh_token:" + oldRefreshToken);
+        }
+
+        redisCache.setCacheObject("access_token:" + accessToken, userInfoJson,
+                (int) (JwtUtils.ACCESS_TOKEN_TTL_MS / 1000), TimeUnit.SECONDS);
+        redisCache.setCacheObject("refresh_token:" + refreshToken, String.valueOf(user.getUserId()),
+                (int) (JwtUtils.REFRESH_TOKEN_TTL_MS / 1000), TimeUnit.SECONDS);
+
+        Map<String, String> userTokens = new LinkedHashMap<>();
+        userTokens.put("accessToken", accessToken);
+        userTokens.put("refreshToken", refreshToken);
+        redisCache.setCacheObject("user_tokens:" + user.getUserId(), JSON.toJSONString(userTokens),
+                (int) (JwtUtils.REFRESH_TOKEN_TTL_MS / 1000), TimeUnit.SECONDS);
+
+        Map<String, Object> userInfo = new LinkedHashMap<>();
+        userInfo.put("userId", String.valueOf(user.getUserId()));
+        userInfo.put("username", user.getUsername());
+        userInfo.put("realName", user.getRealName());
+        userInfo.put("email", user.getEmail());
+        userInfo.put("phone", user.getPhone());
+        userInfo.put("status", user.getStatus());
+        userInfo.put("lastLoginIp", user.getLastLoginIp());
+        userInfo.put("lastLoginTime", user.getLastLoginTime());
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("accessToken", accessToken);
+        data.put("refreshToken", refreshToken);
+        data.put("userInfo", userInfo);
+        data.put("roles", roles);
+        data.put("permissions", permissions);
+        return data;
     }
 }

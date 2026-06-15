@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 // 无需认证即可访问的路径
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = ["/login", "/sso/oa"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

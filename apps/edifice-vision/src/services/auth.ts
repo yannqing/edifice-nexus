@@ -23,6 +23,13 @@ export async function login(
   });
 }
 
+export async function loginWithOaSso(token: string): Promise<BaseResponse<LoginResponseData>> {
+  return post<LoginResponseData>("/auth/oa-sso-login", {
+    body: { token },
+    toastOnBizError: false,
+  });
+}
+
 /**
  * 判断登录是否成功
  */
