@@ -226,7 +226,7 @@ export default function OaApplicationsPage() {
     try {
       const res = await getOaSsoToken();
       if (res.code === ResponseCode.SUCCESS && res.data?.token) {
-        const url = `${res.data.oaUrl.replace(/\/$/, "")}/login/sso?ssoToken=${encodeURIComponent(res.data.token)}`;
+        const url = `${res.data.oaUrl.replace(/\/$/, "")}/home/sso/login?ssoToken=${encodeURIComponent(res.data.token)}`;
         window.open(url, "_blank", "noopener,noreferrer");
       }
     } finally {
