@@ -11,7 +11,7 @@ public class OaUserSyncProperties {
 
     private boolean enabled = true;
 
-    private String baseUrl = "http://127.0.0.1:8088";
+    private String baseUrl = "http://127.0.0.1:8080";
 
     private String apiKey;
 

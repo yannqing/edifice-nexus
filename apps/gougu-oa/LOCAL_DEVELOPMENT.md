@@ -24,6 +24,10 @@ Production runtime data and secrets are intentionally excluded from Git.
 
    OA runs inside Docker, so services running directly on the Mac are reached
    through `host.docker.internal`.
+   For local cross-system SSO, keep `EDIFICE_WEB_URL=http://127.0.0.1:3000`
+   in `apps/gougu-oa/.env` and `OA_URL=http://127.0.0.1:8080` in
+   `apps/edifice-core/.env`. Production should provide its own public URLs
+   through the same environment keys.
 
 3. Initialize `office_db` using:
 

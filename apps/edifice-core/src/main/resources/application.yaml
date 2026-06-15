@@ -1,11 +1,11 @@
 app:
-  url: ${APP_URL:http://localhost:8080}
+  url: ${APP_URL:http://127.0.0.1:8081}
 oa:
-  url: ${OA_URL:http://211.149.166.182:8080}
+  url: ${OA_URL:http://127.0.0.1:8080}
   sso-secret: ${OA_SSO_SECRET:edifice-oa-sso-secret-2026}
   sync:
     enabled: ${OA_SYNC_ENABLED:true}
-    base-url: ${OA_SYNC_BASE_URL:http://127.0.0.1:8088}
+    base-url: ${OA_SYNC_BASE_URL:http://127.0.0.1:8080}
     api-key: ${OA_SYNC_API_KEY:}
     office-database: ${OA_SYNC_OFFICE_DATABASE:office_db}
     default-password: ${OA_SYNC_DEFAULT_PASSWORD:12345678}

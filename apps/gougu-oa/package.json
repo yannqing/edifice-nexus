@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "docker compose -f compose.dev.yaml up --build",
-    "dev:down": "docker compose -f compose.dev.yaml down",
-    "dev:logs": "docker compose -f compose.dev.yaml logs -f"
+    "dev": "docker compose --project-directory . -f compose.dev.yaml up --build",
+    "dev:down": "docker compose --project-directory . -f compose.dev.yaml down",
+    "dev:logs": "docker compose --project-directory . -f compose.dev.yaml logs -f"
   }
 }

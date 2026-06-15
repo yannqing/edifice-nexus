@@ -48,7 +48,7 @@ public class AuthController {
     @Value("${oa.sso-secret:edifice-oa-sso-secret-2026}")
     private String oaSsoSecret;
 
-    @Value("${oa.url:http://211.149.166.182:8080}")
+    @Value("${oa.url:http://127.0.0.1:8080}")
     private String oaUrl;
 
     @Resource
