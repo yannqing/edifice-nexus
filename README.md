@@ -126,23 +126,26 @@ mysql -u root -p edifice_db < database/migrations/v1/init_schema.sql
 
 ### 4. 配前端环境变量
 
-后端默认跑在 `8080`。在 `apps/edifice-vision/` 下建 `.env.local`：
+后端默认跑在 `8081`。在 `apps/edifice-vision/` 下建 `.env.local`：
 
 ```dotenv
-NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8081
 ```
 
 ### 5. 启动
 
 ```bash
-# 一起起（前端 + 后端，Turbo 编排）
+# 一起启动 Vision、Core 和 OA（Turbo 编排）
 pnpm dev
 
 # 或者只起后端
-pnpm java:dev
+pnpm dev:core
 
 # 或者只起前端
-pnpm --filter edifice-vision dev
+pnpm dev:vision
+
+# 或者只起 OA
+pnpm dev:oa
 ```
 
 跑起来后：
@@ -150,8 +153,9 @@ pnpm --filter edifice-vision dev
 | 服务 | 地址 |
 | --- | --- |
 | 前端 | http://localhost:3000 |
-| 后端 API | http://localhost:8080 |
-| 接口文档（Knife4j） | http://localhost:8080/doc.html |
+| OA | http://localhost:8080/home/index/index.html |
+| 后端 API | http://localhost:8081 |
+| 接口文档（Knife4j） | http://localhost:8081/doc.html |
 
 ---
 
@@ -159,10 +163,13 @@ pnpm --filter edifice-vision dev
 
 | 命令 | 作用 |
 | --- | --- |
-| `pnpm dev` | 同时起所有 app（Turbo 并行编排） |
+| `pnpm dev` | 同时启动 Vision、Core 和 OA（Turbo 并行编排） |
+| `pnpm dev:vision` | 只启动前端 `edifice-vision` |
+| `pnpm dev:core` | 只启动后端 `edifice-core` |
+| `pnpm dev:oa` | 只启动 `gougu-oa` |
 | `pnpm build` | 构建所有 app |
 | `pnpm lint` | 全量 lint |
-| `pnpm java:dev` | 只起后端 `edifice-core` |
+| `pnpm java:dev` | `pnpm dev:core` 的兼容别名 |
 | `pnpm env:pull` | 从 Infisical 拉取 `.env`（前后端各一份） |
 
 后端单独构建（在 `apps/edifice-core/` 下）：

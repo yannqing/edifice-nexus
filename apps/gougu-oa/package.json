@@ -1,0 +1,8 @@
+{
+  "name": "gougu-oa",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "php think run --host 127.0.0.1 --port 8080"
+  }
+}

@@ -47,13 +47,16 @@ Production runtime data and secrets are intentionally excluded from Git.
    mkdir -p runtime public/storage public/backup
    ```
 
-6. Start OA only:
+6. From the repository root, start OA only:
 
    ```bash
-   php think run --host 127.0.0.1 --port 8080
+   pnpm dev:oa
    ```
 
 Open `http://127.0.0.1:8080/home/index/index.html`.
+
+Use `pnpm dev` from the repository root to start Edifice Vision, Edifice Core,
+and Gougu OA together.
 
 ## Repository Rules
 

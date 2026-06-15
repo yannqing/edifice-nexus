@@ -4,10 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=edifice-vision --filter=edifice-core --filter=gougu-oa",
+    "dev:vision": "pnpm --filter edifice-vision dev",
+    "dev:core": "pnpm --filter edifice-core dev",
+    "dev:oa": "pnpm --filter gougu-oa dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
-    "java:dev": "turbo run dev --filter=edifice-core",
+    "java:dev": "pnpm dev:core",
     "env:pull": "infisical export --format=dotenv --path=/edifice-core | sed \"s/'//g\" > apps/edifice-core/.env && infisical export --format=dotenv --path=/edifice-vision | sed \"s/'//g\" > apps/edifice-vision/.env"
   },
   "keywords": [],
