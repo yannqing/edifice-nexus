@@ -13,6 +13,8 @@ import {
   Loader2,
   X,
   Trash2,
+  ExternalLink,
+  Workflow,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CardPageSkeleton } from "@/components/ui/skeleton";
 import { getDashboard } from "@/services/report";
+import { getOaSsoToken } from "@/services/oa";
 import type { DashboardData } from "@/services/report";
 import {
   getRecentAnnouncements,
@@ -108,6 +111,16 @@ export default function DashboardPage() {
     } catch { /* 由 request.ts 提示 */ }
   };
 
+  const handleOpenOa = async () => {
+    try {
+      const res = await getOaSsoToken();
+      if (res.code === ResponseCode.SUCCESS && res.data?.token && res.data?.oaUrl) {
+        const oaBaseUrl = res.data.oaUrl.replace(/\/$/, "");
+        window.location.href = oaBaseUrl + "/home/sso/login?ssoToken=" + encodeURIComponent(res.data.token);
+      }
+    } catch { /* 由 request.ts 提示 */ }
+  };
+
   const totalCategoryCount = data?.categoryDistribution?.reduce((sum, c) => sum + c.count, 0) ?? 0;
 
   return (
@@ -129,6 +142,25 @@ export default function DashboardPage() {
         onCreate={() => setCreateOpen(true)}
         onDelete={handleDeleteAnnouncement}
       />
+
+      <div className="glass-card rounded-2xl p-6 shadow-sm flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+            <Workflow className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-slate-800">OA 办公系统</h3>
+            <p className="text-sm text-slate-500 mt-0.5">进入审批、人事、行政、财务与项目协同工作台</p>
+          </div>
+        </div>
+        <Button
+          onClick={handleOpenOa}
+          className="bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2 md:w-auto w-full justify-center"
+        >
+          <ExternalLink className="w-4 h-4" />
+          进入 OA
+        </Button>
+      </div>
 
       {loading && <CardPageSkeleton cards={4} />}
 

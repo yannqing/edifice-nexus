@@ -29,7 +29,8 @@ public class Constant {
             "/doc.html/**",
             "/webjars/**",
             "/v3/**",
-            "/ws/**"
+            "/ws/**",
+            "/admin/oa-sync/internal/**"
     };
 
     // 图片类型文件的一级类型

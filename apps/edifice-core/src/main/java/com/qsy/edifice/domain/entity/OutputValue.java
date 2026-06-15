@@ -85,7 +85,7 @@ public class OutputValue implements Serializable {
     @TableField("stage_cumulative_amount")
     private BigDecimal stageCumulativeAmount;
 
-    /** 上一次产值分配单的累计（同项目 status>=2 单的最大 stage_cumulative_amount，首单为 0）；本期产值 = stage_cumulative_amount - 本字段 */
+    /** 历史字段：旧累计差额模型下的上一次累计；新单固定为 0 */
     @TableField("previous_cumulative_amount")
     private BigDecimal previousCumulativeAmount;
 

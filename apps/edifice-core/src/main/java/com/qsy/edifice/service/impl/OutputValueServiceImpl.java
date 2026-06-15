@@ -143,17 +143,16 @@ public class OutputValueServiceImpl implements OutputValueService {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "该阶段产值已通过分配单确认，无法重复提交");
         }
 
-        // 1. 系统自动算 totalAmount = 本阶段累计 − 上一次已确认累计（v0.4 累计差额模型）
+        // 1. 系统自动算 totalAmount
         StageCumulativeResult cumulative = calcStageCumulative(dto.getProjectId(), dto.getProjectStageId());
-        BigDecimal total = cumulative.current.subtract(cumulative.previous)
-                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal total = cumulative.current.setScale(2, RoundingMode.HALF_UP);
 
         if (total.signum() == 0) {
-            throw new BusinessException(ErrorType.OPERATION_FAILED,
-                    "本阶段累计与上一次相同，无新增产值，无需创建分配单");
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "本阶段产值为 0，请检查合同金额和阶段产值比例");
         }
-        // v0.4 §11.2：效益值下调可能导致本期产值为负（多退少补），允许负产值落库，
-        // 由财务在审批/季度还原环节按回收处理；此处不再硬拒绝。
+        if (total.signum() < 0) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "本阶段产值不能为负，请检查合同金额和阶段产值比例");
+        }
 
         // 2. v0.4 比例：员工 40% / 公司 60%
         BigDecimal employeePool = total.multiply(PERSONAL_POOL_RATE)
@@ -281,10 +280,7 @@ public class OutputValueServiceImpl implements OutputValueService {
     }
 
     /**
-     * 计算指定阶段产值。
-     * stage_output / benefit_inclusion_ratio 是项目【累计%】（v0.4），
-     * 因此本期产值 = 本阶段累计应得 − 同项目历史已确认单的最大累计（首单为 0），
-     * 返回的 basePart / benefitPart 为【本期增量】，二者之和恒等于本期 totalAmount。
+     * 计算指定阶段产值。阶段比例是单阶段比例，不是项目累计比例。
      */
     private StageCumulativeResult calcStageCumulative(Long projectId, Long stageId) {
         ProjectStage stage = projectStageService.getProjectStageById(stageId);
@@ -311,43 +307,14 @@ public class OutputValueServiceImpl implements OutputValueService {
                 ? resolveBenefitRatio(stage.getBenefitInclusionRatio(), baseRatio)
                 : BigDecimal.ZERO;
 
-        // 本阶段累计应得（含基本+效益），作为落库快照 stage_cumulative_amount
-        BigDecimal baseCumulative = baseAmt.multiply(baseRatio)
+        BigDecimal basePart = baseAmt.multiply(baseRatio)
                 .divide(BD_100, 2, RoundingMode.HALF_UP);
-        BigDecimal benefitCumulative = benefitAmt.multiply(benefitRatio)
+        BigDecimal benefitPart = benefitAmt.multiply(benefitRatio)
                 .divide(BD_100, 2, RoundingMode.HALF_UP);
-        BigDecimal currentCumulative = baseCumulative.add(benefitCumulative);
+        BigDecimal currentCumulative = basePart.add(benefitPart);
 
-        // 上一次累计：同项目所有已确认单（status>=2）的最大阶段累计，首单为 0
-        BigDecimal previousCumulative = outputValueMapper.findMaxCumulativeByProject(projectId);
-        if (previousCumulative == null) {
-            previousCumulative = BigDecimal.ZERO;
-        }
-
-        // 本期增量 = 当前累计 − 上次累计，按基本/效益累计占比拆回两部分，保证 base+benefit=total
-        BigDecimal periodTotal = currentCumulative.subtract(previousCumulative);
-        BigDecimal[] parts = splitPeriodAmount(periodTotal, baseCumulative, benefitCumulative);
-
-        return new StageCumulativeResult(currentCumulative, previousCumulative,
-                parts[0], parts[1], benefitAmt);
-    }
-
-    /**
-     * 把本期产值增量按"基本累计 : 效益累计"的占比拆成本期基本部分与本期效益部分，
-     * 保证 basePart + benefitPart == periodTotal（差额归到基本部分，避免分位漂移破坏守恒）。
-     */
-    private BigDecimal[] splitPeriodAmount(BigDecimal periodTotal,
-                                          BigDecimal baseCumulative,
-                                          BigDecimal benefitCumulative) {
-        BigDecimal cumulativeSum = baseCumulative.add(benefitCumulative);
-        if (cumulativeSum.signum() == 0) {
-            return new BigDecimal[]{periodTotal.setScale(2, RoundingMode.HALF_UP),
-                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)};
-        }
-        BigDecimal benefitPart = periodTotal.multiply(benefitCumulative)
-                .divide(cumulativeSum, 2, RoundingMode.HALF_UP);
-        BigDecimal basePart = periodTotal.setScale(2, RoundingMode.HALF_UP).subtract(benefitPart);
-        return new BigDecimal[]{basePart, benefitPart};
+        return new StageCumulativeResult(currentCumulative, BigDecimal.ZERO,
+                basePart, benefitPart, benefitAmt);
     }
 
     /**
