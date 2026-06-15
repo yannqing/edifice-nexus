@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -33,21 +32,17 @@ public class OaContractProjectController {
     private OaUserSyncProperties properties;
 
     @GetMapping("/project-types")
-    public BaseResponse<List<Map<String, Object>>> projectTypes(
-            HttpServletRequest request,
-            @RequestHeader(value = "X-OA-SYNC-KEY", required = false) String apiKey
-    ) {
-        assertInternalRequest(request, apiKey);
+    public BaseResponse<List<Map<String, Object>>> projectTypes(HttpServletRequest request) {
+        assertInternalRequest(request);
         return ResultUtils.success(Code.SUCCESS, oaContractProjectService.listEnabledProjectTypes(), "success");
     }
 
     @GetMapping("/{oaContractId}/project")
     public BaseResponse<Map<String, Object>> status(
             @PathVariable Integer oaContractId,
-            HttpServletRequest request,
-            @RequestHeader(value = "X-OA-SYNC-KEY", required = false) String apiKey
+            HttpServletRequest request
     ) {
-        assertInternalRequest(request, apiKey);
+        assertInternalRequest(request);
         return ResultUtils.success(Code.SUCCESS, oaContractProjectService.getProjectStatus(oaContractId), "success");
     }
 
@@ -55,15 +50,15 @@ public class OaContractProjectController {
     public BaseResponse<Map<String, Object>> create(
             @PathVariable Integer oaContractId,
             @RequestBody OaContractProjectCreateDto dto,
-            HttpServletRequest request,
-            @RequestHeader(value = "X-OA-SYNC-KEY", required = false) String apiKey
+            HttpServletRequest request
     ) {
-        assertInternalRequest(request, apiKey);
+        assertInternalRequest(request);
         dto.setOaContractId(oaContractId);
         return ResultUtils.success(Code.SUCCESS, oaContractProjectService.createProject(dto), "工程项目创建成功");
     }
 
-    private void assertInternalRequest(HttpServletRequest request, String apiKey) {
+    private void assertInternalRequest(HttpServletRequest request) {
+        String apiKey = request.getHeader("X-OA-SYNC-KEY");
         if (StringUtils.isNotBlank(properties.getApiKey())) {
             if (!StringUtils.equals(properties.getApiKey(), apiKey)) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "invalid sync key");
