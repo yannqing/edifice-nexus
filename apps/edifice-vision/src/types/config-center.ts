@@ -71,6 +71,16 @@ export interface BusinessRuleConfigVo {
   updatedTime?: string | null;
 }
 
+export interface BusinessRuleTemplateVo {
+  bizType: ConfigBizType;
+  bizTypeLabel: string;
+  ruleKey: string;
+  ruleName: string;
+  valueType: string;
+  defaultValue: string;
+  description?: string | null;
+}
+
 export interface SaveBusinessRuleConfigParams {
   ruleConfigId?: string;
   bizType: ConfigBizType;

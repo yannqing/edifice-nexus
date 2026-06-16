@@ -3,6 +3,7 @@ import type { BaseResponse } from "@/types/api";
 import type {
   ApprovalFlowConfigVo,
   BusinessRuleConfigVo,
+  BusinessRuleTemplateVo,
   ConfigOptionBundleVo,
   GetConfigListParams,
   SaveApprovalFlowConfigParams,
@@ -58,6 +59,10 @@ export function getBusinessRuleConfigList(
   signal?: AbortSignal
 ): Promise<BaseResponse<PageResult<BusinessRuleConfigVo>>> {
   return get<PageResult<BusinessRuleConfigVo>>("/business-rule-config/list", { params: toQuery(params), signal });
+}
+
+export function getBusinessRuleTemplates(signal?: AbortSignal): Promise<BaseResponse<BusinessRuleTemplateVo[]>> {
+  return get<BusinessRuleTemplateVo[]>("/business-rule-config/templates", { signal });
 }
 
 export function saveBusinessRuleConfig(params: SaveBusinessRuleConfigParams): Promise<BaseResponse<string>> {

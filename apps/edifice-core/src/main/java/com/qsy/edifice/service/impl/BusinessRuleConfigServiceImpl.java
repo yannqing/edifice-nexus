@@ -2,10 +2,13 @@ package com.qsy.edifice.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.qsy.edifice.domain.dto.GetBusinessRuleConfigListDto;
 import com.qsy.edifice.domain.dto.SaveBusinessRuleConfigDto;
 import com.qsy.edifice.domain.entity.BusinessRuleConfig;
 import com.qsy.edifice.domain.vo.BusinessRuleConfigVo;
+import com.qsy.edifice.domain.vo.BusinessRuleTemplateVo;
 import com.qsy.edifice.enums.ApprovalBizType;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
@@ -16,16 +19,31 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
 public class BusinessRuleConfigServiceImpl implements BusinessRuleConfigService {
 
     private static final Set<String> VALUE_TYPES = Set.of("boolean", "number", "string", "json");
+    private static final List<BusinessRuleTemplateVo> RULE_TEMPLATES = List.of(
+            template("inspection", "require_materials", "验工材料必填", "boolean", "true",
+                    "控制发起验工单时是否必须上传验收材料。"),
+            template("output", "allow_negative_output", "允许负产值", "boolean", "false",
+                    "控制产值分配单计算结果为负数时是否允许创建。"),
+            template("output", "require_stage_inspection_passed", "阶段必须验工通过", "boolean", "true",
+                    "控制产值分配是否只允许选择已完成/验工通过的项目阶段。")
+    );
+    private static final TypeReference<Map<String, Object>> JSON_MAP_TYPE = new TypeReference<>() {};
 
     @Resource
     private BusinessRuleConfigMapper businessRuleConfigMapper;
+
+    @Resource
+    private ObjectMapper objectMapper;
 
     @Override
     public Page<BusinessRuleConfigVo> list(GetBusinessRuleConfigListDto dto) {
@@ -66,24 +84,26 @@ public class BusinessRuleConfigServiceImpl implements BusinessRuleConfigService 
     @Transactional(rollbackFor = Exception.class)
     public Long save(SaveBusinessRuleConfigDto dto, Long userId) {
         validate(dto);
+        BusinessRuleTemplateVo template = findTemplate(dto.getBizType(), dto.getRuleKey())
+                .orElseThrow(() -> new BusinessException(ErrorType.ARGS_INVALID, "不支持的业务规则编码，请从规则模板中选择"));
         BusinessRuleConfig entity = dto.getRuleConfigId() == null ? new BusinessRuleConfig() : find(dto.getRuleConfigId());
         if (dto.getRuleConfigId() == null) {
             Long duplicate = businessRuleConfigMapper.selectCount(new LambdaQueryWrapper<BusinessRuleConfig>()
                     .eq(BusinessRuleConfig::getBizType, dto.getBizType())
-                    .eq(BusinessRuleConfig::getRuleKey, dto.getRuleKey()));
+                    .eq(BusinessRuleConfig::getRuleKey, dto.getRuleKey().trim()));
             if (duplicate != null && duplicate > 0) {
                 throw new BusinessException(ErrorType.ARGS_INVALID, "该业务规则已存在");
             }
-        } else if (!entity.getBizType().equals(dto.getBizType()) || !entity.getRuleKey().equals(dto.getRuleKey())) {
+        } else if (!entity.getBizType().equals(dto.getBizType()) || !entity.getRuleKey().equals(dto.getRuleKey().trim())) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "不允许修改规则业务类型和规则编码");
         }
         entity.setBizType(dto.getBizType());
         entity.setRuleKey(dto.getRuleKey().trim());
-        entity.setRuleName(dto.getRuleName().trim());
+        entity.setRuleName(template.getRuleName());
         entity.setRuleValue(dto.getRuleValue() == null ? "" : dto.getRuleValue().trim());
-        entity.setValueType(dto.getValueType());
+        entity.setValueType(template.getValueType());
         entity.setEnabled(dto.getEnabled() == null || dto.getEnabled() == 1 ? 1 : 0);
-        entity.setDescription(StringUtils.hasText(dto.getDescription()) ? dto.getDescription().trim() : null);
+        entity.setDescription(StringUtils.hasText(dto.getDescription()) ? dto.getDescription().trim() : template.getDescription());
         entity.setUpdatedBy(userId);
         if (entity.getRuleConfigId() == null) {
             businessRuleConfigMapper.insert(entity);
@@ -121,6 +141,11 @@ public class BusinessRuleConfigServiceImpl implements BusinessRuleConfigService 
     }
 
     @Override
+    public List<BusinessRuleTemplateVo> templates() {
+        return RULE_TEMPLATES;
+    }
+
+    @Override
     public boolean booleanValue(String bizType, String ruleKey, boolean defaultValue) {
         BusinessRuleConfig rule = enabledRule(bizType, ruleKey);
         if (rule == null || !StringUtils.hasText(rule.getRuleValue())) return defaultValue;
@@ -128,10 +153,32 @@ public class BusinessRuleConfigServiceImpl implements BusinessRuleConfigService 
     }
 
     @Override
+    public BigDecimal numberValue(String bizType, String ruleKey, BigDecimal defaultValue) {
+        BusinessRuleConfig rule = enabledRule(bizType, ruleKey);
+        if (rule == null || !StringUtils.hasText(rule.getRuleValue())) return defaultValue;
+        try {
+            return new BigDecimal(rule.getRuleValue().trim());
+        } catch (NumberFormatException exception) {
+            return defaultValue;
+        }
+    }
+
+    @Override
     public String stringValue(String bizType, String ruleKey, String defaultValue) {
         BusinessRuleConfig rule = enabledRule(bizType, ruleKey);
         if (rule == null || rule.getRuleValue() == null) return defaultValue;
         return rule.getRuleValue();
+    }
+
+    @Override
+    public Map<String, Object> jsonValue(String bizType, String ruleKey, Map<String, Object> defaultValue) {
+        BusinessRuleConfig rule = enabledRule(bizType, ruleKey);
+        if (rule == null || !StringUtils.hasText(rule.getRuleValue())) return defaultValue;
+        try {
+            return objectMapper.readValue(rule.getRuleValue(), JSON_MAP_TYPE);
+        } catch (Exception exception) {
+            return defaultValue;
+        }
     }
 
     private BusinessRuleConfig enabledRule(String bizType, String ruleKey) {
@@ -153,15 +200,45 @@ public class BusinessRuleConfigServiceImpl implements BusinessRuleConfigService 
     private void validate(SaveBusinessRuleConfigDto dto) {
         if (dto == null || !StringUtils.hasText(dto.getBizType())
                 || !StringUtils.hasText(dto.getRuleKey())
-                || !StringUtils.hasText(dto.getRuleName())
                 || !StringUtils.hasText(dto.getValueType())) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "业务类型、规则编码、规则名称和值类型不能为空");
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "业务类型、规则编码和值类型不能为空");
         }
         if (ApprovalBizType.fromExt(dto.getBizType()) == null) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "不支持的业务类型");
         }
         if (!VALUE_TYPES.contains(dto.getValueType())) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "规则值类型不支持");
+        }
+        BusinessRuleTemplateVo template = findTemplate(dto.getBizType(), dto.getRuleKey())
+                .orElseThrow(() -> new BusinessException(ErrorType.ARGS_INVALID, "不支持的业务规则编码，请从规则模板中选择"));
+        if (!template.getValueType().equals(dto.getValueType())) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "规则值类型与模板不一致");
+        }
+        validateRuleValue(dto.getRuleValue(), template);
+    }
+
+    private void validateRuleValue(String value, BusinessRuleTemplateVo template) {
+        if ("boolean".equals(template.getValueType())) {
+            if (!"true".equalsIgnoreCase(value) && !"false".equalsIgnoreCase(value)) {
+                throw new BusinessException(ErrorType.ARGS_INVALID, "布尔规则值只能为 true 或 false");
+            }
+            return;
+        }
+        if ("number".equals(template.getValueType())) {
+            try {
+                new BigDecimal(value);
+                return;
+            } catch (Exception exception) {
+                throw new BusinessException(ErrorType.ARGS_INVALID, "数字规则值不合法");
+            }
+        }
+        if ("json".equals(template.getValueType())) {
+            try {
+                objectMapper.readValue(StringUtils.hasText(value) ? value : "{}", JSON_MAP_TYPE);
+                return;
+            } catch (Exception exception) {
+                throw new BusinessException(ErrorType.ARGS_INVALID, "JSON规则值不合法");
+            }
         }
     }
 
@@ -180,6 +257,31 @@ public class BusinessRuleConfigServiceImpl implements BusinessRuleConfigService 
                 .updatedBy(entity.getUpdatedBy())
                 .createdTime(entity.getCreatedTime())
                 .updatedTime(entity.getUpdatedTime())
+                .build();
+    }
+
+    private Optional<BusinessRuleTemplateVo> findTemplate(String bizType, String ruleKey) {
+        if (!StringUtils.hasText(bizType) || !StringUtils.hasText(ruleKey)) return Optional.empty();
+        return RULE_TEMPLATES.stream()
+                .filter(template -> bizType.equals(template.getBizType()) && ruleKey.trim().equals(template.getRuleKey()))
+                .findFirst();
+    }
+
+    private static BusinessRuleTemplateVo template(String bizType,
+                                                  String ruleKey,
+                                                  String ruleName,
+                                                  String valueType,
+                                                  String defaultValue,
+                                                  String description) {
+        ApprovalBizType approvalBizType = ApprovalBizType.fromExt(bizType);
+        return BusinessRuleTemplateVo.builder()
+                .bizType(bizType)
+                .bizTypeLabel(approvalBizType == null ? bizType : approvalBizType.getLabel())
+                .ruleKey(ruleKey)
+                .ruleName(ruleName)
+                .valueType(valueType)
+                .defaultValue(defaultValue)
+                .description(description)
                 .build();
     }
 }

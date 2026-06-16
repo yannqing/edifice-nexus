@@ -9,6 +9,7 @@ import com.qsy.edifice.domain.dto.SaveBusinessRuleConfigDto;
 import com.qsy.edifice.domain.dto.ToggleConfigStatusDto;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.domain.vo.BusinessRuleConfigVo;
+import com.qsy.edifice.domain.vo.BusinessRuleTemplateVo;
 import com.qsy.edifice.service.BusinessRuleConfigService;
 import com.qsy.edifice.utils.JwtUtils;
 import com.qsy.edifice.utils.ResultUtils;
@@ -49,6 +50,12 @@ public class BusinessRuleConfigController {
     @Operation(summary = "按业务类型获取启用业务规则")
     public BaseResponse<List<BusinessRuleConfigVo>> enabled(@PathVariable String bizType) {
         return ResultUtils.success(Code.SUCCESS, businessRuleConfigService.getEnabledByBizType(bizType));
+    }
+
+    @GetMapping("/templates")
+    @Operation(summary = "业务规则模板")
+    public BaseResponse<List<BusinessRuleTemplateVo>> templates() {
+        return ResultUtils.success(Code.SUCCESS, businessRuleConfigService.templates());
     }
 
     @PostMapping("/save")

@@ -28,12 +28,14 @@ import { cn } from "@/lib/utils";
 import {
   deleteBusinessRuleConfig,
   getBusinessRuleConfigList,
+  getBusinessRuleTemplates,
   saveBusinessRuleConfig,
   toggleBusinessRuleConfig,
 } from "@/services/config-center";
 import { ResponseCode } from "@/types/api";
 import type {
   BusinessRuleConfigVo,
+  BusinessRuleTemplateVo,
   ConfigBizType,
   SaveBusinessRuleConfigParams,
 } from "@/types/config-center";
@@ -68,12 +70,12 @@ const valueTypeLabel: Record<string, string> = {
 function emptyForm(): SaveBusinessRuleConfigParams {
   return {
     bizType: "output",
-    ruleKey: "",
-    ruleName: "",
-    ruleValue: "true",
+    ruleKey: "allow_negative_output",
+    ruleName: "允许负产值",
+    ruleValue: "false",
     valueType: "boolean",
     enabled: 1,
-    description: "",
+    description: "控制产值分配单计算结果为负数时是否允许创建。",
   };
 }
 
@@ -81,8 +83,24 @@ function formatTime(value?: string | null) {
   return value?.replace("T", " ").slice(0, 16) || "-";
 }
 
+function applyTemplate(
+  template: BusinessRuleTemplateVo,
+  enabled = 1
+): SaveBusinessRuleConfigParams {
+  return {
+    bizType: template.bizType,
+    ruleKey: template.ruleKey,
+    ruleName: template.ruleName,
+    ruleValue: template.defaultValue,
+    valueType: template.valueType,
+    enabled,
+    description: template.description ?? "",
+  };
+}
+
 export default function BusinessRuleConfigPage() {
   const [items, setItems] = useState<BusinessRuleConfigVo[]>([]);
+  const [templates, setTemplates] = useState<BusinessRuleTemplateVo[]>([]);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -136,10 +154,26 @@ export default function BusinessRuleConfigPage() {
     return () => controller.abort();
   }, [fetchList]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    getBusinessRuleTemplates(controller.signal)
+      .then((res) => {
+        if (res.code === ResponseCode.SUCCESS && res.data) {
+          setTemplates(res.data);
+        }
+      })
+      .catch((err) => {
+        if (!isAbortError(err)) setTemplates([]);
+      });
+    return () => controller.abort();
+  }, []);
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const openCreate = () => {
-    setForm(emptyForm());
+    const defaultTemplate = templates.find((template) => template.bizType === "output")
+      ?? templates[0];
+    setForm(defaultTemplate ? applyTemplate(defaultTemplate) : emptyForm());
     setFormOpen(true);
   };
 
@@ -156,6 +190,11 @@ export default function BusinessRuleConfigPage() {
     });
     setFormOpen(true);
   };
+
+  const templatesForBiz = templates.filter((template) => template.bizType === form.bizType);
+  const selectedTemplate = templates.find(
+    (template) => template.bizType === form.bizType && template.ruleKey === form.ruleKey
+  );
 
   const handleSave = async () => {
     if (!form.ruleKey.trim() || !form.ruleName.trim()) {
@@ -335,7 +374,7 @@ export default function BusinessRuleConfigPage() {
         <DialogContent className="max-w-2xl max-h-[86vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{form.ruleConfigId ? "编辑业务规则" : "新建业务规则"}</DialogTitle>
-            <DialogDescription>规则会保存为结构化配置，后续业务服务按 ruleKey 逐步接入读取。</DialogDescription>
+            <DialogDescription>规则来自业务模板，保存后业务服务会按模板编码读取。</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -343,7 +382,15 @@ export default function BusinessRuleConfigPage() {
                 <select
                   value={form.bizType}
                   disabled={Boolean(form.ruleConfigId)}
-                  onChange={(event) => setForm((prev) => ({ ...prev, bizType: event.target.value as ConfigBizType }))}
+                  onChange={(event) => {
+                    const nextBizType = event.target.value as ConfigBizType;
+                    const nextTemplate = templates.find((template) => template.bizType === nextBizType);
+                    setForm(nextTemplate ? applyTemplate(nextTemplate, form.enabled) : {
+                      ...emptyForm(),
+                      bizType: nextBizType,
+                      enabled: form.enabled,
+                    });
+                  }}
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
                 >
                   {bizTypeOptions.filter((option) => option.value !== "all").map((option) => (
@@ -351,17 +398,31 @@ export default function BusinessRuleConfigPage() {
                   ))}
                 </select>
               </Field>
-              <Field label="值类型" required>
+              <Field label="规则模板" required>
                 <select
-                  value={form.valueType}
+                  value={form.ruleKey}
+                  disabled={Boolean(form.ruleConfigId)}
                   onChange={(event) => setForm((prev) => ({
-                    ...prev,
-                    valueType: event.target.value,
-                    ruleValue: event.target.value === "boolean" ? "true" : event.target.value === "json" ? "{}" : "",
+                    ...applyTemplate(templates.find((template) =>
+                      template.bizType === prev.bizType && template.ruleKey === event.target.value
+                    ) ?? {
+                      bizType: prev.bizType,
+                      bizTypeLabel: prev.bizType,
+                      ruleKey: event.target.value,
+                      ruleName: "",
+                      valueType: "boolean",
+                      defaultValue: "true",
+                      description: "",
+                    }, prev.enabled),
                   }))}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
                 >
-                  {valueTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  {templatesForBiz.length === 0 && <option value="">暂无可用规则模板</option>}
+                  {templatesForBiz.map((template) => (
+                    <option key={template.ruleKey} value={template.ruleKey}>
+                      {template.ruleName}
+                    </option>
+                  ))}
                 </select>
               </Field>
             </div>
@@ -369,21 +430,23 @@ export default function BusinessRuleConfigPage() {
               <Field label="规则编码" required>
                 <input
                   value={form.ruleKey}
-                  disabled={Boolean(form.ruleConfigId)}
-                  onChange={(event) => setForm((prev) => ({ ...prev, ruleKey: event.target.value }))}
+                  disabled
                   className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
-                  placeholder="例如 require_materials"
                 />
               </Field>
-              <Field label="规则名称" required>
+              <Field label="值类型" required>
                 <input
-                  value={form.ruleName}
-                  onChange={(event) => setForm((prev) => ({ ...prev, ruleName: event.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
-                  placeholder="请输入规则名称"
+                  value={valueTypeLabel[form.valueType] ?? form.valueType}
+                  disabled
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-slate-50"
                 />
               </Field>
             </div>
+            {selectedTemplate?.description && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                {selectedTemplate.description}
+              </div>
+            )}
 
             <Field label="规则值" required>
               {form.valueType === "boolean" ? (
