@@ -133,6 +133,7 @@ public class OutputValueServiceImpl implements OutputValueService {
         if (dto.getProjectId() == null || dto.getProjectStageId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择项目和阶段");
         }
+        projectService.ensureProjectNotArchived(dto.getProjectId());
         if (dto.getDistributions() == null || dto.getDistributions().isEmpty()) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请添加至少一条分配明细");
         }

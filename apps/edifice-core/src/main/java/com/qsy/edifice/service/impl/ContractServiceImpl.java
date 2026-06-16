@@ -5,12 +5,20 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.GetContractListDto;
 import com.qsy.edifice.domain.dto.UpdateContractDto;
 import com.qsy.edifice.domain.entity.Contract;
+import com.qsy.edifice.domain.entity.ContractChangeLog;
+import com.qsy.edifice.domain.entity.Files;
 import com.qsy.edifice.domain.entity.Project;
+import com.qsy.edifice.domain.entity.SysUser;
+import com.qsy.edifice.domain.vo.ContractChangeLogVo;
 import com.qsy.edifice.domain.vo.ContractListVo;
+import com.qsy.edifice.domain.vo.FilesVo;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
+import com.qsy.edifice.mapper.ContractChangeLogMapper;
 import com.qsy.edifice.mapper.ContractMapper;
+import com.qsy.edifice.mapper.FilesMapper;
 import com.qsy.edifice.mapper.ProjectMapper;
+import com.qsy.edifice.mapper.SysUserMapper;
 import com.qsy.edifice.service.ContractService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -20,8 +28,14 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -36,6 +50,15 @@ public class ContractServiceImpl implements ContractService {
 
     @Resource
     private ProjectMapper projectMapper;
+
+    @Resource
+    private FilesMapper filesMapper;
+
+    @Resource
+    private ContractChangeLogMapper contractChangeLogMapper;
+
+    @Resource
+    private SysUserMapper sysUserMapper;
 
     @Override
     public Contract getContractById(Long contractId) {
@@ -113,7 +136,7 @@ public class ContractServiceImpl implements ContractService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void updateContractInfo(UpdateContractDto dto) {
+    public void updateContractInfo(UpdateContractDto dto, Long operatorId) {
         if (dto == null || dto.getContractId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "合同ID不能为空");
         }
@@ -132,17 +155,52 @@ public class ContractServiceImpl implements ContractService {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "预计效益金额请通过效益修正流程调整");
         }
 
-        if (StringUtils.hasText(dto.getContractName())) contract.setContractName(dto.getContractName().trim());
-        if (StringUtils.hasText(dto.getContractCode())) contract.setContractCode(dto.getContractCode().trim());
-        if (dto.getContractType() != null) contract.setContractType(dto.getContractType());
-        if (dto.getContractAmount() != null) contract.setContractAmount(dto.getContractAmount());
-        if (dto.getBaseAmount() != null) contract.setBaseAmount(dto.getBaseAmount());
-        if (dto.getBenefitRules() != null) contract.setBenefitRules(dto.getBenefitRules());
-        if (dto.getSigningDate() != null) contract.setSigningDate(dto.getSigningDate());
-        if (dto.getPreStartDate() != null) contract.setPreStartDate(dto.getPreStartDate());
-        if (dto.getPreEndDate() != null) contract.setPreEndDate(dto.getPreEndDate());
+        List<ContractChangeLog> logs = new ArrayList<>();
+        recordChange(logs, contract, "contractName", "合同名称", contract.getContractName(), dto.getContractName(),
+                value -> contract.setContractName(value.trim()), operatorId);
+        recordChange(logs, contract, "contractCode", "合同编号", contract.getContractCode(), dto.getContractCode(),
+                value -> contract.setContractCode(value.trim()), operatorId);
+        recordChange(logs, contract, "contractType", "合同类型", contract.getContractType(), dto.getContractType(),
+                contract::setContractType, operatorId);
+        recordChange(logs, contract, "contractAmount", "合同金额", contract.getContractAmount(), dto.getContractAmount(),
+                contract::setContractAmount, operatorId);
+        recordChange(logs, contract, "baseAmount", "基本收费金额", contract.getBaseAmount(), dto.getBaseAmount(),
+                contract::setBaseAmount, operatorId);
+        recordChange(logs, contract, "benefitRules", "效益规则", contract.getBenefitRules(), dto.getBenefitRules(),
+                contract::setBenefitRules, operatorId);
+        recordChange(logs, contract, "signingDate", "签订日期", contract.getSigningDate(), dto.getSigningDate(),
+                contract::setSigningDate, operatorId);
+        recordChange(logs, contract, "preStartDate", "预计开始日期", contract.getPreStartDate(), dto.getPreStartDate(),
+                contract::setPreStartDate, operatorId);
+        recordChange(logs, contract, "preEndDate", "预计结束日期", contract.getPreEndDate(), dto.getPreEndDate(),
+                contract::setPreEndDate, operatorId);
 
         contractMapper.updateById(contract);
+        logs.forEach(contractChangeLogMapper::insert);
+    }
+
+    @Override
+    public List<ContractChangeLogVo> getContractChangeLogs(Long contractId) {
+        if (contractId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "合同ID不能为空");
+        }
+        List<ContractChangeLog> logs = contractChangeLogMapper.selectList(new LambdaQueryWrapper<ContractChangeLog>()
+                .eq(ContractChangeLog::getContractId, contractId)
+                .orderByDesc(ContractChangeLog::getCreatedTime));
+        if (logs == null || logs.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return logs.stream().map(log -> {
+            ContractChangeLogVo vo = new ContractChangeLogVo();
+            BeanUtils.copyProperties(log, vo);
+            if (log.getOperatorId() != null) {
+                SysUser user = sysUserMapper.selectById(log.getOperatorId());
+                if (user != null) {
+                    vo.setOperatorName(StringUtils.hasText(user.getRealName()) ? user.getRealName() : user.getUsername());
+                }
+            }
+            return vo;
+        }).collect(Collectors.toList());
     }
 
     @Override
@@ -185,6 +243,74 @@ public class ContractServiceImpl implements ContractService {
         if (Objects.equals(contract.getContractType(), 0) && vo.getBenefitAmount() == null) {
             vo.setBenefitAmount(BigDecimal.ZERO);
         }
+        vo.setContractFileDetail(toFileVo(contract.getContractFile()));
+        vo.setContractAttachmentFiles(parseFileIds(contract.getContractOtherFiles()).stream()
+                .map(this::toFileVo)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList()));
         return vo;
+    }
+
+    private <T> void recordChange(List<ContractChangeLog> logs,
+                                  Contract contract,
+                                  String fieldName,
+                                  String fieldLabel,
+                                  T oldValue,
+                                  T newValue,
+                                  Consumer<T> setter,
+                                  Long operatorId) {
+        if (newValue == null) {
+            return;
+        }
+        if (newValue instanceof String text && !StringUtils.hasText(text)) {
+            return;
+        }
+        if (Objects.equals(normalizeValue(oldValue), normalizeValue(newValue))) {
+            return;
+        }
+        setter.accept(newValue);
+        logs.add(ContractChangeLog.builder()
+                .contractId(contract.getContractId())
+                .projectId(contract.getProjectId())
+                .fieldName(fieldName)
+                .fieldLabel(fieldLabel)
+                .oldValue(normalizeValue(oldValue))
+                .newValue(normalizeValue(newValue))
+                .operatorId(operatorId)
+                .createdTime(LocalDateTime.now())
+                .build());
+    }
+
+    private String normalizeValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigDecimal decimal) {
+            return decimal.stripTrailingZeros().toPlainString();
+        }
+        return String.valueOf(value);
+    }
+
+    private FilesVo toFileVo(Long fileId) {
+        if (fileId == null) {
+            return null;
+        }
+        Files file = filesMapper.selectById(fileId);
+        return file == null ? null : FilesVo.objToVo(file);
+    }
+
+    private List<Long> parseFileIds(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return Collections.emptyList();
+        }
+        List<Long> ids = new ArrayList<>();
+        Matcher matcher = Pattern.compile("\\d+").matcher(raw);
+        while (matcher.find()) {
+            try {
+                ids.add(Long.parseLong(matcher.group()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return ids;
     }
 }

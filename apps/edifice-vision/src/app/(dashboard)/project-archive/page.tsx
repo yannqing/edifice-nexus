@@ -23,7 +23,7 @@ import { TablePageSkeleton } from "@/components/ui/skeleton";
 import { isAbortError } from "@/lib/request";
 import { cn } from "@/lib/utils";
 import {
-  archiveProject,
+  archiveProjectWithRemark,
   getArchivableProjects,
   getArchivedProjects,
   unarchiveProject,
@@ -57,6 +57,7 @@ export default function ProjectArchivePage() {
   const [keyword, setKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
   const [actionTarget, setActionTarget] = useState<ProjectArchiveVo | null>(null);
+  const [archiveRemark, setArchiveRemark] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
@@ -109,10 +110,11 @@ export default function ProjectArchivePage() {
     try {
       const res = isArchivedTab
         ? await unarchiveProject(actionTarget.projectId)
-        : await archiveProject(actionTarget.projectId);
+        : await archiveProjectWithRemark(actionTarget.projectId, archiveRemark);
       if (res.code === ResponseCode.SUCCESS) {
         toast.success(isArchivedTab ? "已取消归档" : "归档成功");
         setActionTarget(null);
+        setArchiveRemark("");
         fetchList();
       }
     } finally {
@@ -186,6 +188,11 @@ export default function ProjectArchivePage() {
                     {!isArchivedTab && !item.archiveReady && (
                       <div className="text-xs text-amber-600 mt-2">{item.archiveWarning}</div>
                     )}
+                    {isArchivedTab && (
+                      <div className="text-xs text-slate-400 mt-2">
+                        归档：{formatDate(item.archiveTime)} · {item.archiveUserName || "未知操作人"}
+                      </div>
+                    )}
                   </td>
                   <td className="px-5 py-4 text-slate-600">{item.projectType?.projectTypeName ?? "-"}</td>
                   <td className="px-5 py-4 font-semibold text-slate-800">{formatMoney(item.contractAmount)}</td>
@@ -209,7 +216,10 @@ export default function ProjectArchivePage() {
                       variant={isArchivedTab ? "outline" : "default"}
                       size="sm"
                       disabled={!isArchivedTab && !item.archiveReady}
-                      onClick={() => setActionTarget(item)}
+                      onClick={() => {
+                        setActionTarget(item);
+                        setArchiveRemark(item.archiveRemark || "");
+                      }}
                       className={isArchivedTab ? "" : "bg-blue-600 hover:bg-blue-700"}
                     >
                       {isArchivedTab ? (
@@ -245,7 +255,12 @@ export default function ProjectArchivePage() {
         </div>
       </div>
 
-      <Dialog open={Boolean(actionTarget)} onOpenChange={(open) => !open && setActionTarget(null)}>
+      <Dialog open={Boolean(actionTarget)} onOpenChange={(open) => {
+        if (!open) {
+          setActionTarget(null);
+          setArchiveRemark("");
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{isArchivedTab ? "取消归档项目" : "归档项目"}</DialogTitle>
@@ -258,7 +273,22 @@ export default function ProjectArchivePage() {
           <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
             <div className="font-medium text-slate-800">{actionTarget?.projectName}</div>
             <div className="mt-1">{actionTarget?.projectCode}</div>
+            {isArchivedTab && actionTarget?.archiveRemark && (
+              <div className="mt-2 text-slate-500">备注：{actionTarget.archiveRemark}</div>
+            )}
           </div>
+          {!isArchivedTab && (
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium text-slate-600">归档备注</span>
+              <textarea
+                value={archiveRemark}
+                onChange={(event) => setArchiveRemark(event.target.value)}
+                rows={3}
+                placeholder="可填写归档说明、资料交接情况等"
+                className="form-input resize-none"
+              />
+            </label>
+          )}
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setActionTarget(null)}>取消</Button>
             <Button onClick={confirmAction} disabled={actionLoading} className="bg-blue-600 hover:bg-blue-700">

@@ -10,6 +10,7 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 合同管理列表 VO
@@ -46,6 +47,10 @@ public class ContractListVo implements Serializable {
     private Long contractFile;
 
     private String contractOtherFiles;
+
+    private FilesVo contractFileDetail;
+
+    private List<FilesVo> contractAttachmentFiles;
 
     private BigDecimal baseAmount;
 

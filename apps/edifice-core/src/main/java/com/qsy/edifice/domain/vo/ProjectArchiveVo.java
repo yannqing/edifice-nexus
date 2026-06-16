@@ -47,6 +47,17 @@ public class ProjectArchiveVo implements Serializable {
 
     private String archiveWarning;
 
+    private Integer archiveStatus;
+
+    private LocalDateTime archiveTime;
+
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long archiveUserId;
+
+    private String archiveUserName;
+
+    private String archiveRemark;
+
     private LocalDateTime projectStartTime;
 
     private LocalDateTime projectEndTime;

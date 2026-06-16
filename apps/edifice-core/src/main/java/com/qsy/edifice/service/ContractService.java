@@ -4,7 +4,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.GetContractListDto;
 import com.qsy.edifice.domain.dto.UpdateContractDto;
 import com.qsy.edifice.domain.entity.Contract;
+import com.qsy.edifice.domain.vo.ContractChangeLogVo;
 import com.qsy.edifice.domain.vo.ContractListVo;
+
+import java.util.List;
 
 /**
  * 合同服务接口
@@ -58,7 +61,14 @@ public interface ContractService {
      * 合同管理更新
      * @param dto 更新参数
      */
-    void updateContractInfo(UpdateContractDto dto);
+    void updateContractInfo(UpdateContractDto dto, Long operatorId);
+
+    /**
+     * 合同字段变更日志
+     * @param contractId 合同id
+     * @return 变更日志
+     */
+    List<ContractChangeLogVo> getContractChangeLogs(Long contractId);
 
     /**
      * 保存合同

@@ -72,6 +72,30 @@ public class Project implements Serializable {
     private LocalDateTime projectEndTime;
 
     /**
+     * 归档状态：0-未归档/1-已归档
+     */
+    @TableField("archive_status")
+    private Integer archiveStatus;
+
+    /**
+     * 归档时间
+     */
+    @TableField("archive_time")
+    private LocalDateTime archiveTime;
+
+    /**
+     * 归档操作人
+     */
+    @TableField("archive_user_id")
+    private Long archiveUserId;
+
+    /**
+     * 归档备注
+     */
+    @TableField("archive_remark")
+    private String archiveRemark;
+
+    /**
      * 创建时间
      */
     @TableField(value = "created_time", fill = FieldFill.INSERT)

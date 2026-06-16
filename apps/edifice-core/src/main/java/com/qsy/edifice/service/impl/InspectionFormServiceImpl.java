@@ -426,6 +426,7 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         if (dto.getProjectId() == null || dto.getProjectStageId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目和阶段不能为空");
         }
+        projectService.ensureProjectNotArchived(dto.getProjectId());
         if (dto.getFirstApproverId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "一级审批人不能为空");
         }

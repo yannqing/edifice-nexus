@@ -35,7 +35,16 @@ export async function getArchivedProjects(
 }
 
 export async function archiveProject(projectId: string): Promise<BaseResponse<boolean>> {
-  return put<boolean>(`/project-archive/archive/${projectId}`);
+  return put<boolean>(`/project-archive/archive/${projectId}`, { body: {} });
+}
+
+export async function archiveProjectWithRemark(
+  projectId: string,
+  archiveRemark?: string
+): Promise<BaseResponse<boolean>> {
+  return put<boolean>(`/project-archive/archive/${projectId}`, {
+    body: { archiveRemark: archiveRemark?.trim() || undefined },
+  });
 }
 
 export async function unarchiveProject(projectId: string): Promise<BaseResponse<boolean>> {

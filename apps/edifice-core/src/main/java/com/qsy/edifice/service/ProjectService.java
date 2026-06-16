@@ -150,11 +150,17 @@ public interface ProjectService {
      * 归档项目
      * @param projectId 项目id
      */
-    void archiveProject(Long projectId);
+    void archiveProject(Long projectId, Long operatorId, String archiveRemark);
 
     /**
      * 取消归档
      * @param projectId 项目id
      */
     void unarchiveProject(Long projectId);
+
+    /**
+     * 检查项目是否已归档，归档项目禁止新增业务操作
+     * @param projectId 项目id
+     */
+    void ensureProjectNotArchived(Long projectId);
 }

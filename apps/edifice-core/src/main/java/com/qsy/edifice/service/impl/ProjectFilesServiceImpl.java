@@ -109,6 +109,13 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
         if (dto.getProjectId() == null || dto.getFileId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目 / 文件不能为空");
         }
+        Project project = projectMapper.selectById(dto.getProjectId());
+        if (project == null) {
+            throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
+        }
+        if (Objects.equals(project.getArchiveStatus(), 1)) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "项目已归档，不能上传项目文件");
+        }
         if (filesMapper.selectById(dto.getFileId()) == null) {
             throw new BusinessException(ErrorType.FILE_NOT_FOUND);
         }

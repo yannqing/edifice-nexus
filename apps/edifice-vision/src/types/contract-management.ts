@@ -1,4 +1,5 @@
 import type { PageResult } from "@/types/project";
+import type { FilesVo } from "@/types/project";
 
 export interface ContractListVo {
   contractId: string;
@@ -12,6 +13,8 @@ export interface ContractListVo {
   contractAmount: number;
   contractFile: string | null;
   contractOtherFiles: string | null;
+  contractFileDetail: FilesVo | null;
+  contractAttachmentFiles: FilesVo[];
   baseAmount: number | null;
   benefitRules: string | null;
   benefitAmount: number | null;
@@ -46,3 +49,16 @@ export interface UpdateContractParams {
 }
 
 export type ContractPageResult = PageResult<ContractListVo>;
+
+export interface ContractChangeLogVo {
+  changeLogId: string;
+  contractId: string;
+  projectId: string | null;
+  fieldName: string;
+  fieldLabel: string;
+  oldValue: string | null;
+  newValue: string | null;
+  operatorId: string | null;
+  operatorName: string | null;
+  createdTime: string | null;
+}

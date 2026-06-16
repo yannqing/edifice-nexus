@@ -21,17 +21,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TablePageSkeleton } from "@/components/ui/skeleton";
+import { AttachmentFileActions } from "@/components/file/attachment-file-list";
 import { isAbortError } from "@/lib/request";
 import { cn } from "@/lib/utils";
 import {
+  getContractChangeLogs,
   getContractList,
   updateContractInfo,
 } from "@/services/contract-management";
 import { ResponseCode } from "@/types/api";
 import type {
   ContractListVo,
+  ContractChangeLogVo,
   UpdateContractParams,
 } from "@/types/contract-management";
+import type { FilesVo } from "@/types/project";
 
 const PAGE_SIZE = 10;
 
@@ -91,6 +95,8 @@ export default function ContractManagementPage() {
   const [contractType, setContractType] = useState("all");
   const [editing, setEditing] = useState<ContractListVo | null>(null);
   const [form, setForm] = useState<UpdateContractParams | null>(null);
+  const [changeLogs, setChangeLogs] = useState<ContractChangeLogVo[]>([]);
+  const [changeLogsLoading, setChangeLogsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -137,6 +143,15 @@ export default function ContractManagementPage() {
   const openEdit = (item: ContractListVo) => {
     setEditing(item);
     setForm(buildForm(item));
+    setChangeLogs([]);
+    setChangeLogsLoading(true);
+    getContractChangeLogs(item.contractId)
+      .then((res) => {
+        if (res.code === ResponseCode.SUCCESS && res.data) {
+          setChangeLogs(res.data);
+        }
+      })
+      .finally(() => setChangeLogsLoading(false));
   };
 
   const handleSave = async () => {
@@ -335,6 +350,47 @@ export default function ContractManagementPage() {
               <Field label="效益规则">
                 <textarea value={form.benefitRules ?? ""} onChange={(event) => setForm({ ...form, benefitRules: event.target.value })} rows={3} className="form-input resize-none" />
               </Field>
+              {editing && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+                    <div className="text-sm font-semibold text-slate-800 mb-3">合同文件</div>
+                    <div className="space-y-2">
+                      {editing.contractFileDetail && (
+                        <ContractFileRow label="主合同" file={editing.contractFileDetail} />
+                      )}
+                      {(editing.contractAttachmentFiles ?? []).map((file, index) => (
+                        <ContractFileRow key={file.fileId} label={`附件 ${index + 1}`} file={file} />
+                      ))}
+                      {!editing.contractFileDetail && (!editing.contractAttachmentFiles || editing.contractAttachmentFiles.length === 0) && (
+                        <div className="text-sm text-slate-400">暂无合同文件</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+                    <div className="text-sm font-semibold text-slate-800 mb-3">最近变更</div>
+                    {changeLogsLoading && <div className="text-sm text-slate-400">加载中...</div>}
+                    {!changeLogsLoading && changeLogs.length === 0 && (
+                      <div className="text-sm text-slate-400">暂无变更记录</div>
+                    )}
+                    {!changeLogsLoading && changeLogs.length > 0 && (
+                      <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+                        {changeLogs.slice(0, 8).map((log) => (
+                          <div key={log.changeLogId} className="text-sm">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium text-slate-700">{log.fieldLabel}</span>
+                              <span className="text-xs text-slate-400">{formatDate(log.createdTime)}</span>
+                            </div>
+                            <div className="mt-1 text-xs text-slate-500 break-all">
+                              {log.oldValue || "-"} → {log.newValue || "-"}
+                            </div>
+                            <div className="mt-1 text-xs text-slate-400">{log.operatorName || "未知操作人"}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="flex justify-end gap-3 pt-2">
                 <Button variant="outline" onClick={() => { setEditing(null); setForm(null); }}>
                   <X className="w-4 h-4 mr-1" /> 取消
@@ -357,5 +413,18 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-sm font-medium text-slate-600">{label}</span>
       {children}
     </label>
+  );
+}
+
+function ContractFileRow({ label, file }: { label: string; file: FilesVo }) {
+  const displayName = file.displayName || `${label}.${file.fileExtension || "file"}`;
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 border border-slate-100">
+      <div className="min-w-0">
+        <div className="text-xs text-slate-400">{label}</div>
+        <div className="text-sm font-medium text-slate-700 truncate">{displayName}</div>
+      </div>
+      <AttachmentFileActions fileId={String(file.fileId)} fileName={displayName} />
+    </div>
   );
 }

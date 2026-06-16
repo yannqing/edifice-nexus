@@ -122,6 +122,9 @@ public class ProjectServiceImpl implements ProjectService {
         if (project == null) {
             throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
         }
+        if (Objects.equals(project.getArchiveStatus(), ARCHIVE_STATUS_ARCHIVED)) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "项目已归档，不能修改项目信息");
+        }
 
         if (StringUtils.hasText(dto.getProjectName())) {
             project.setProjectName(dto.getProjectName());
@@ -227,6 +230,7 @@ public class ProjectServiceImpl implements ProjectService {
     private static final Long ROLE_MANAGER_ID = 101L;
     private static final Long ROLE_MEMBER_ID = 102L;
     private static final Integer PROJECT_STATUS_ARCHIVED = 4;
+    private static final Integer ARCHIVE_STATUS_ARCHIVED = 1;
     private static final Set<Integer> ARCHIVABLE_STAGE_STATUSES = Set.of(3, 6);
 
     @Override
@@ -407,6 +411,7 @@ public class ProjectServiceImpl implements ProjectService {
                 .projectCode(projectCode)
                 .projectType(dto.getProjectType())
                 .projectStatus(0) // 未开始
+                .archiveStatus(0)
                 .isShow(1) // 默认公开
                 .projectStartTime(dto.getPreStartTime())
                 .projectEndTime(dto.getPreEndTime())
@@ -655,7 +660,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void archiveProject(Long projectId) {
+    public void archiveProject(Long projectId, Long operatorId, String archiveRemark) {
         if (projectId == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目ID不能为空");
         }
@@ -667,9 +672,13 @@ public class ProjectServiceImpl implements ProjectService {
         if (!Boolean.TRUE.equals(archiveVo.getArchiveReady())) {
             throw new BusinessException(ErrorType.OPERATION_FAILED, archiveVo.getArchiveWarning());
         }
-        if (Objects.equals(project.getProjectStatus(), PROJECT_STATUS_ARCHIVED)) {
+        if (Objects.equals(project.getArchiveStatus(), ARCHIVE_STATUS_ARCHIVED)) {
             return;
         }
+        project.setArchiveStatus(ARCHIVE_STATUS_ARCHIVED);
+        project.setArchiveTime(LocalDateTime.now());
+        project.setArchiveUserId(operatorId);
+        project.setArchiveRemark(StringUtils.hasText(archiveRemark) ? archiveRemark.trim() : null);
         project.setProjectStatus(PROJECT_STATUS_ARCHIVED);
         projectMapper.updateById(project);
     }
@@ -684,9 +693,13 @@ public class ProjectServiceImpl implements ProjectService {
         if (project == null) {
             throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
         }
-        if (!Objects.equals(project.getProjectStatus(), PROJECT_STATUS_ARCHIVED)) {
+        if (!Objects.equals(project.getArchiveStatus(), ARCHIVE_STATUS_ARCHIVED)) {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "只有已归档项目可以取消归档");
         }
+        project.setArchiveStatus(0);
+        project.setArchiveTime(null);
+        project.setArchiveUserId(null);
+        project.setArchiveRemark(null);
         project.setProjectStatus(1);
         projectMapper.updateById(project);
     }
@@ -700,6 +713,20 @@ public class ProjectServiceImpl implements ProjectService {
         return project != null;
     }
 
+    @Override
+    public void ensureProjectNotArchived(Long projectId) {
+        if (projectId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目ID不能为空");
+        }
+        Project project = projectMapper.selectById(projectId);
+        if (project == null) {
+            throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
+        }
+        if (Objects.equals(project.getArchiveStatus(), ARCHIVE_STATUS_ARCHIVED)) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "项目已归档，不能继续发起业务操作");
+        }
+    }
+
     private Page<ProjectArchiveVo> getProjectArchivePage(GetProjectArchiveListDto dto, boolean archived) {
         if (dto == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL);
@@ -709,9 +736,9 @@ public class ProjectServiceImpl implements ProjectService {
 
         LambdaQueryWrapper<Project> wrapper = new LambdaQueryWrapper<>();
         if (archived) {
-            wrapper.eq(Project::getProjectStatus, PROJECT_STATUS_ARCHIVED);
+            wrapper.eq(Project::getArchiveStatus, ARCHIVE_STATUS_ARCHIVED);
         } else {
-            wrapper.ne(Project::getProjectStatus, PROJECT_STATUS_ARCHIVED);
+            wrapper.and(w -> w.ne(Project::getArchiveStatus, ARCHIVE_STATUS_ARCHIVED).or().isNull(Project::getArchiveStatus));
         }
         if (StringUtils.hasText(dto.getKeywords())) {
             String keyword = dto.getKeywords().trim();
@@ -734,9 +761,20 @@ public class ProjectServiceImpl implements ProjectService {
         vo.setProjectName(project.getProjectName());
         vo.setProjectCode(project.getProjectCode());
         vo.setProjectStatus(project.getProjectStatus());
+        vo.setArchiveStatus(project.getArchiveStatus() == null ? 0 : project.getArchiveStatus());
+        vo.setArchiveTime(project.getArchiveTime());
+        vo.setArchiveUserId(project.getArchiveUserId());
+        vo.setArchiveRemark(project.getArchiveRemark());
         vo.setProjectStartTime(project.getProjectStartTime());
         vo.setProjectEndTime(project.getProjectEndTime());
         vo.setUpdatedTime(project.getUpdatedTime());
+
+        if (project.getArchiveUserId() != null) {
+            SysUser user = sysUserMapper.selectById(project.getArchiveUserId());
+            if (user != null) {
+                vo.setArchiveUserName(StringUtils.hasText(user.getRealName()) ? user.getRealName() : user.getUsername());
+            }
+        }
 
         if (project.getProjectType() != null) {
             ProjectType projectType = projectTypeService.getProjectTypeById(project.getProjectType());
@@ -761,7 +799,10 @@ public class ProjectServiceImpl implements ProjectService {
                 .count();
         vo.setTotalStageCount(totalStageCount);
         vo.setCompletedStageCount(completedStageCount);
-        if (totalStageCount == 0) {
+        if (Objects.equals(project.getArchiveStatus(), ARCHIVE_STATUS_ARCHIVED)) {
+            vo.setArchiveReady(false);
+            vo.setArchiveWarning(null);
+        } else if (totalStageCount == 0) {
             vo.setArchiveReady(false);
             vo.setArchiveWarning("项目未配置阶段，无法归档");
         } else if (completedStageCount < totalStageCount) {

@@ -13,6 +13,11 @@ export interface ProjectArchiveVo {
   totalStageCount: number;
   archiveReady: boolean;
   archiveWarning: string | null;
+  archiveStatus: number;
+  archiveTime: string | null;
+  archiveUserId: string | null;
+  archiveUserName: string | null;
+  archiveRemark: string | null;
   projectStartTime: string | null;
   projectEndTime: string | null;
   updatedTime: string | null;
@@ -23,6 +28,10 @@ export interface GetProjectArchiveListParams {
   projectType?: number;
   current?: number;
   pageSize?: number;
+}
+
+export interface ArchiveProjectParams {
+  archiveRemark?: string;
 }
 
 export type ProjectArchivePageResult = PageResult<ProjectArchiveVo>;

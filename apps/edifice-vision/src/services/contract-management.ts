@@ -2,6 +2,7 @@ import { get, put } from "@/lib/request";
 import type { BaseResponse } from "@/types/api";
 import type {
   ContractListVo,
+  ContractChangeLogVo,
   ContractPageResult,
   GetContractListParams,
   UpdateContractParams,
@@ -30,4 +31,11 @@ export async function updateContractInfo(
   params: UpdateContractParams
 ): Promise<BaseResponse<boolean>> {
   return put<boolean>("/contracts/update", { body: params });
+}
+
+export async function getContractChangeLogs(
+  contractId: string,
+  signal?: AbortSignal
+): Promise<BaseResponse<ContractChangeLogVo[]>> {
+  return get<ContractChangeLogVo[]>(`/contracts/${contractId}/change-logs`, { signal });
 }
