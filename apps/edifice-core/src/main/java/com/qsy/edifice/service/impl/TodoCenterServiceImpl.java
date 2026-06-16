@@ -106,8 +106,7 @@ public class TodoCenterServiceImpl implements TodoCenterService {
         if (type == null || record.getInspectionFormId() == null) {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "审批业务信息不完整");
         }
-        List<ApprovalRecords> chain = approvalRecordsMapper
-                .selectByBizTypeExtAndBizId(type.getExt(), record.getInspectionFormId());
+        List<ApprovalRecords> chain = queryChainRecords(type, record.getInspectionFormId());
         boolean visible = chain.stream().anyMatch(item -> userId.equals(item.getApprover())
                 || userId.equals(item.getApplyUserId()));
         if (!visible) {
@@ -333,6 +332,17 @@ public class TodoCenterServiceImpl implements TodoCenterService {
     private ApprovalBizType resolveBizType(ApprovalRecords record) {
         ApprovalBizType bizType = ApprovalBizType.fromExt(record.getBizTypeExt());
         return bizType != null ? bizType : ApprovalBizType.fromCode(record.getApprovalRecordType());
+    }
+
+    private List<ApprovalRecords> queryChainRecords(ApprovalBizType type, Long bizId) {
+        if (type == null || bizId == null) return List.of();
+        List<ApprovalRecords> chain = approvalRecordsMapper.selectByBizTypeExtAndBizId(type.getExt(), bizId);
+        if (!chain.isEmpty()) return chain;
+        return approvalRecordsMapper.selectList(new LambdaQueryWrapper<ApprovalRecords>()
+                .eq(ApprovalRecords::getApprovalRecordType, type.getCode())
+                .eq(ApprovalRecords::getInspectionFormId, bizId)
+                .orderByAsc(ApprovalRecords::getCreatedTime)
+                .orderByAsc(ApprovalRecords::getApprovalRecordId));
     }
 
     private String linkFor(ApprovalRecords record, boolean pendingAction) {

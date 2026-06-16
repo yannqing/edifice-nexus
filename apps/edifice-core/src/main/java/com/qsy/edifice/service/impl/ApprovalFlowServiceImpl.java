@@ -177,6 +177,13 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
         if (bizType == null || bizId == null) return Collections.emptyList();
         List<ApprovalRecords> list = approvalRecordsMapper
                 .selectByBizTypeExtAndBizId(bizType.getExt(), bizId);
+        if (list.isEmpty()) {
+            list = approvalRecordsMapper.selectList(new LambdaQueryWrapper<ApprovalRecords>()
+                    .eq(ApprovalRecords::getApprovalRecordType, bizType.getCode())
+                    .eq(ApprovalRecords::getInspectionFormId, bizId)
+                    .orderByAsc(ApprovalRecords::getCreatedTime)
+                    .orderByAsc(ApprovalRecords::getApprovalRecordId));
+        }
         return toVos(list);
     }
 

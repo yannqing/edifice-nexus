@@ -235,8 +235,8 @@ export default function TodoCenterPage() {
 
   const handleApprove = async (pass: boolean) => {
     if (!approveItem || !approveItem.bizType) return;
-    if (!pass && !comment.trim()) {
-      toast.error("请输入驳回原因");
+    if (!comment.trim()) {
+      toast.error(pass ? "请输入审批意见" : "请输入驳回原因");
       return;
     }
     const shouldTerminate = pass ? terminateHere || approveDefaultTerminate : true;
@@ -567,14 +567,14 @@ export default function TodoCenterPage() {
 
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">
-                审批意见 / 驳回原因
+                审批意见 / 驳回原因 <span className="text-rose-500">*</span>
               </label>
               <textarea
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 rows={3}
                 value={comment}
                 onChange={(event) => setComment(event.target.value)}
-                placeholder="驳回时必填"
+                placeholder="请输入审批意见或驳回原因"
               />
             </div>
           </div>
