@@ -50,6 +50,7 @@ const stageStatusMap: Record<number, string> = {
 
 const eventIconMap: Record<string, ComponentType<{ className?: string }>> = {
   project: Briefcase,
+  contract: FileText,
   stage: GitBranch,
   inspection: CheckCircle2,
   output: Coins,

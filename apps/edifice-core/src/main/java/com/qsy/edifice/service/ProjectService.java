@@ -106,7 +106,7 @@ public interface ProjectService {
      * @param dto 查询条件
      * @return 分页结果
      */
-    Page<ProjectListVo> getLifecycleProjectPage(GetAllProjectListDto dto);
+    Page<ProjectListVo> getLifecycleProjectPage(GetAllProjectListDto dto, Long userId, boolean canViewAll);
 
     /**
      * 分页查询本人参与的项目列表
@@ -128,7 +128,7 @@ public interface ProjectService {
      * @param projectId 项目id
      * @return 生命周期聚合详情
      */
-    ProjectLifecycleVo getProjectLifecycleDetail(Long projectId);
+    ProjectLifecycleVo getProjectLifecycleDetail(Long projectId, Long userId, boolean canViewAll);
 
     /**
      * 检查项目是否存在

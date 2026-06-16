@@ -17,6 +17,10 @@ const APPROVAL_DETAIL_PATHS = new Set([
   "/oa/applications",
 ]);
 
+const PROJECT_DETAIL_PATHS = new Set([
+  "/project-lifecycle",
+]);
+
 export function PermissionRouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -35,7 +39,13 @@ export function PermissionRouteGuard({ children }: { children: React.ReactNode }
     && typeof window !== "undefined"
     && APPROVAL_DETAIL_PATHS.has(pathname)
     && new URLSearchParams(window.location.search).has("detailId");
-  const allowed = messageDetailAccess || hasPermission(permissions, matchedItem?.permissionCode, roles);
+  const projectDetailAccess = isHydrated
+    && typeof window !== "undefined"
+    && PROJECT_DETAIL_PATHS.has(pathname)
+    && new URLSearchParams(window.location.search).has("projectId");
+  const allowed = messageDetailAccess
+    || projectDetailAccess
+    || hasPermission(permissions, matchedItem?.permissionCode, roles);
 
   useEffect(() => {
     if (!isHydrated || !isAuthenticated || !accessToken) return;

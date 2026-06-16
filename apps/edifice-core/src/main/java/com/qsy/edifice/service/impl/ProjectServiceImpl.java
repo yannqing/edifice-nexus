@@ -402,8 +402,19 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public Page<ProjectListVo> getLifecycleProjectPage(GetAllProjectListDto dto) {
-        return getAllProjectPage(dto);
+    public Page<ProjectListVo> getLifecycleProjectPage(GetAllProjectListDto dto, Long userId, boolean canViewAll) {
+        if (canViewAll) {
+            return getAllProjectPage(dto);
+        }
+        if (userId == null || dto == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
+        }
+        GetMyProjectListDto mineDto = new GetMyProjectListDto();
+        mineDto.setKeywords(dto.getKeywords());
+        mineDto.setProjectStatus(dto.getProjectStatus());
+        mineDto.setCurrent(dto.getCurrent());
+        mineDto.setPageSize(dto.getPageSize());
+        return getMyProjectPage(userId, mineDto);
     }
 
     @Override
@@ -647,13 +658,19 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public ProjectLifecycleVo getProjectLifecycleDetail(Long projectId) {
+    public ProjectLifecycleVo getProjectLifecycleDetail(Long projectId, Long userId, boolean canViewAll) {
         if (projectId == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目ID不能为空");
+        }
+        if (!canViewAll && userId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "用户ID不能为空");
         }
         Project project = projectMapper.selectById(projectId);
         if (project == null) {
             throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
+        }
+        if (!canViewAll && projectMemberService.getProjectMemberByProjectIdAndUserId(projectId, userId) == null) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "无权查看该项目生命周期");
         }
 
         ProjectDetailVo projectDetail = convertToDetailVo(project);
@@ -1282,9 +1299,26 @@ public class ProjectServiceImpl implements ProjectService {
                 project.getProjectName(),
                 project.getProjectStatus(),
                 null,
-                "/all-projects?detailId=" + project.getProjectId(),
+                "/project-lifecycle?projectId=" + project.getProjectId(),
                 project.getCreatedTime()
         ));
+
+        Contract contract = contractService.getContractByProjectId(project.getProjectId());
+        if (contract != null) {
+            events.add(lifecycleEvent(
+                    "contract:" + contract.getContractId(),
+                    "contract",
+                    "合同",
+                    "合同：" + nullableText(contract.getContractName(), contract.getContractCode()),
+                    "合同金额：" + moneyText(contract.getContractAmount()),
+                    contract.getContractType(),
+                    null,
+                    "/project-lifecycle?projectId=" + project.getProjectId(),
+                    contract.getSigningDate() != null ? contract.getSigningDate()
+                            : contract.getCreatedTime() != null ? contract.getCreatedTime()
+                            : contract.getUpdatedTime()
+            ));
+        }
 
         for (ProjectStage stage : stages == null ? Collections.<ProjectStage>emptyList() : stages) {
             events.add(lifecycleEvent(
@@ -1345,7 +1379,7 @@ public class ProjectServiceImpl implements ProjectService {
                     (stage == null ? "未关联阶段" : "阶段：" + stage.getStageName()) + " · 金额：" + moneyText(record.getAmount()),
                     null,
                     displayUserName(recordUser),
-                    "/collection",
+                    "/project-lifecycle?projectId=" + project.getProjectId(),
                     record.getCreatedTime()
             ));
         }
@@ -1374,7 +1408,7 @@ public class ProjectServiceImpl implements ProjectService {
                     nullableText(project.getArchiveRemark(), "项目生命周期已完成"),
                     project.getArchiveStatus(),
                     displayUserName(archiveUser),
-                    "/project-archive",
+                    "/project-lifecycle?projectId=" + project.getProjectId(),
                     project.getArchiveTime()
             ));
         }

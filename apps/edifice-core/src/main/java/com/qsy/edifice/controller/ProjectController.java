@@ -28,6 +28,8 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -110,17 +112,24 @@ public class ProjectController {
 
     @GetMapping("/lifecycle/list")
     @Operation(summary = "项目生命周期可选项目", description = "分页 + 条件查询生命周期看板可查看项目")
-    @PreAuthorize("hasAuthority('menu:project-lifecycle') or hasRole('SUPER_ADMIN')")
-    public BaseResponse<Page<ProjectListVo>> getLifecycleProjects(GetAllProjectListDto dto) {
-        Page<ProjectListVo> result = projectService.getLifecycleProjectPage(dto);
+    @PreAuthorize("isAuthenticated()")
+    public BaseResponse<Page<ProjectListVo>> getLifecycleProjects(GetAllProjectListDto dto, HttpServletRequest request)
+            throws JsonProcessingException {
+        SysUser loginUser = jwtUtils.getUserFromToken(request.getHeader("token"));
+        Page<ProjectListVo> result = projectService.getLifecycleProjectPage(
+                dto, loginUser.getUserId(), canViewAllLifecycle());
         return ResultUtils.success(Code.SUCCESS, result);
     }
 
     @GetMapping("/lifecycle/{id}")
     @Operation(summary = "项目生命周期详情", description = "聚合项目从立项到归档的阶段、验工、产值、回款和文件动态")
-    @PreAuthorize("hasAuthority('menu:project-lifecycle') or hasRole('SUPER_ADMIN')")
-    public BaseResponse<ProjectLifecycleVo> getProjectLifecycle(@PathVariable("id") Long projectId) {
-        return ResultUtils.success(Code.SUCCESS, projectService.getProjectLifecycleDetail(projectId));
+    @PreAuthorize("isAuthenticated()")
+    public BaseResponse<ProjectLifecycleVo> getProjectLifecycle(@PathVariable("id") Long projectId,
+                                                               HttpServletRequest request)
+            throws JsonProcessingException {
+        SysUser loginUser = jwtUtils.getUserFromToken(request.getHeader("token"));
+        return ResultUtils.success(Code.SUCCESS, projectService.getProjectLifecycleDetail(
+                projectId, loginUser.getUserId(), canViewAllLifecycle()));
     }
 
     @GetMapping("/mine/statistics")
@@ -209,5 +218,16 @@ public class ProjectController {
         SysUser loginUser = jwtUtils.getUserFromToken(token);
         String result = projectExcelService.importProjects(file, loginUser.getUserId());
         return ResultUtils.success(Code.SUCCESS, result);
+    }
+
+    private boolean canViewAllLifecycle() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream().anyMatch(authority ->
+                "menu:project-lifecycle".equals(authority.getAuthority())
+                        || "menu:all-projects".equals(authority.getAuthority())
+                        || "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
     }
 }
