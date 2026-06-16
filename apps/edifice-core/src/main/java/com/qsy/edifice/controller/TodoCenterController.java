@@ -6,6 +6,7 @@ import com.qsy.edifice.common.Code;
 import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.dto.GetTodoCenterListDto;
 import com.qsy.edifice.domain.entity.SysUser;
+import com.qsy.edifice.domain.vo.TodoCenterDetailVo;
 import com.qsy.edifice.domain.vo.TodoCenterItemVo;
 import com.qsy.edifice.domain.vo.TodoCenterStatsVo;
 import com.qsy.edifice.service.TodoCenterService;
@@ -17,6 +18,7 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -51,6 +53,13 @@ public class TodoCenterController {
     public BaseResponse<Page<TodoCenterItemVo>> processed(GetTodoCenterListDto dto, HttpServletRequest request)
             throws JsonProcessingException {
         return ResultUtils.success(Code.SUCCESS, todoCenterService.processed(userId(request), dto));
+    }
+
+    @GetMapping("/{recordId}")
+    @Operation(summary = "待办详情")
+    public BaseResponse<TodoCenterDetailVo> detail(@PathVariable Long recordId, HttpServletRequest request)
+            throws JsonProcessingException {
+        return ResultUtils.success(Code.SUCCESS, todoCenterService.detail(userId(request), recordId));
     }
 
     @GetMapping("/statistics")

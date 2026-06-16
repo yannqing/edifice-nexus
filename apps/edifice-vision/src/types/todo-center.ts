@@ -1,3 +1,5 @@
+import type { ApprovalRecordVo } from "@/types/approval";
+
 export type TodoCenterTab = "pending" | "initiated" | "processed" | "cc";
 
 export interface TodoCenterItem {
@@ -25,6 +27,11 @@ export interface TodoCenterStats {
   processedCount: number;
   ccCount: number;
   todayPendingCount: number;
+}
+
+export interface TodoCenterDetail {
+  item: TodoCenterItem;
+  approvalRecords: ApprovalRecordVo[];
 }
 
 export interface GetTodoCenterListParams {

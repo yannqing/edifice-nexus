@@ -5,10 +5,14 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.GetTodoCenterListDto;
 import com.qsy.edifice.domain.entity.*;
+import com.qsy.edifice.domain.vo.TodoCenterDetailVo;
 import com.qsy.edifice.domain.vo.TodoCenterItemVo;
 import com.qsy.edifice.domain.vo.TodoCenterStatsVo;
 import com.qsy.edifice.enums.ApprovalBizType;
+import com.qsy.edifice.enums.ErrorType;
+import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.*;
+import com.qsy.edifice.service.ApprovalFlowService;
 import com.qsy.edifice.service.TodoCenterService;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
@@ -57,6 +61,9 @@ public class TodoCenterServiceImpl implements TodoCenterService {
     @Resource
     private ProjectMapper projectMapper;
 
+    @Resource
+    private ApprovalFlowService approvalFlowService;
+
     @Override
     public Page<TodoCenterItemVo> pending(Long userId, GetTodoCenterListDto dto) {
         if (userId == null) return emptyPage(dto);
@@ -84,6 +91,37 @@ public class TodoCenterServiceImpl implements TodoCenterService {
                 .in(ApprovalRecords::getInspectionFormStatus, STATUS_APPROVED, STATUS_REJECTED)
                 .orderByDesc(ApprovalRecords::getUpdatedTime));
         return page(buildRecordItems(records, false), dto);
+    }
+
+    @Override
+    public TodoCenterDetailVo detail(Long userId, Long recordId) {
+        if (userId == null || recordId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "审批记录id不能为空");
+        }
+        ApprovalRecords record = approvalRecordsMapper.selectById(recordId);
+        if (record == null) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "审批记录不存在");
+        }
+        ApprovalBizType type = resolveBizType(record);
+        if (type == null || record.getInspectionFormId() == null) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "审批业务信息不完整");
+        }
+        List<ApprovalRecords> chain = approvalRecordsMapper
+                .selectByBizTypeExtAndBizId(type.getExt(), record.getInspectionFormId());
+        boolean visible = chain.stream().anyMatch(item -> userId.equals(item.getApprover())
+                || userId.equals(item.getApplyUserId()));
+        if (!visible) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "无权查看该待办详情");
+        }
+        Map<String, String> businessNames = resolveBusinessNames(chain);
+        Map<Long, String> userNames = resolveUserNames(userIds(chain));
+        TodoCenterItemVo item = buildItem(record, record, businessNames, userNames,
+                Integer.valueOf(STATUS_PENDING).equals(record.getInspectionFormStatus()),
+                statusOf(record), statusLabel(statusOf(record)));
+        return TodoCenterDetailVo.builder()
+                .item(item)
+                .approvalRecords(approvalFlowService.queryChain(type, record.getInspectionFormId()))
+                .build();
     }
 
     @Override

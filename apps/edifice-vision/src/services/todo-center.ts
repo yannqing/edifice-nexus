@@ -2,6 +2,7 @@ import { get } from "@/lib/request";
 import type { BaseResponse } from "@/types/api";
 import type {
   GetTodoCenterListParams,
+  TodoCenterDetail,
   TodoCenterItem,
   TodoCenterStats,
   TodoCenterTab,
@@ -38,4 +39,11 @@ export function getTodoCenterList(
 
 export function getTodoCenterStats(signal?: AbortSignal): Promise<BaseResponse<TodoCenterStats>> {
   return get<TodoCenterStats>("/todo-center/statistics", { signal });
+}
+
+export function getTodoCenterDetail(
+  recordId: string,
+  signal?: AbortSignal
+): Promise<BaseResponse<TodoCenterDetail>> {
+  return get<TodoCenterDetail>(`/todo-center/${recordId}`, { signal });
 }

@@ -4,24 +4,43 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
+  Check,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
   Clock3,
   Eye,
   Inbox,
+  Loader2,
   Search,
   Send,
   UserRoundCheck,
+  X,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { TablePageSkeleton } from "@/components/ui/skeleton";
 import { isAbortError } from "@/lib/request";
 import { cn } from "@/lib/utils";
-import { getTodoCenterList, getTodoCenterStats } from "@/services/todo-center";
+import { approvalInspection } from "@/services/inspection";
+import { approveAcceptance } from "@/services/acceptance";
+import { approveBid } from "@/services/bid";
+import { approveOaApplication } from "@/services/oa";
+import { approveProjectFile } from "@/services/project-file";
+import { getUserList } from "@/services/project";
+import { getTodoCenterDetail, getTodoCenterList, getTodoCenterStats } from "@/services/todo-center";
 import { ResponseCode } from "@/types/api";
-import type { TodoCenterItem, TodoCenterStats, TodoCenterTab } from "@/types/todo-center";
+import type { ApprovalRecordVo } from "@/types/approval";
+import type { UserListItem } from "@/types/project";
+import type { TodoCenterDetail, TodoCenterItem, TodoCenterStats, TodoCenterTab } from "@/types/todo-center";
 
 const PAGE_SIZE = 10;
 
@@ -56,6 +75,8 @@ const statusStyles: Record<number, string> = {
   2: "bg-rose-100 text-rose-700",
 };
 
+const directApprovalBizTypes = new Set(["inspection", "file", "bid", "acceptance", "oa_application"]);
+
 function formatTime(value?: string | null) {
   return value?.replace("T", " ").slice(0, 16) || "-";
 }
@@ -82,6 +103,16 @@ export default function TodoCenterPage() {
   const [status, setStatus] = useState("all");
   const [keyword, setKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
+  const [users, setUsers] = useState<UserListItem[]>([]);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detail, setDetail] = useState<TodoCenterDetail | null>(null);
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [approveItem, setApproveItem] = useState<TodoCenterItem | null>(null);
+  const [nextApproverId, setNextApproverId] = useState("");
+  const [comment, setComment] = useState("");
+  const [terminateHere, setTerminateHere] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -149,8 +180,107 @@ export default function TodoCenterPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const openItem = (item: TodoCenterItem) => {
+  const refreshAll = useCallback(() => {
+    fetchStats();
+    fetchList();
+    window.dispatchEvent(new Event("message-center:updated"));
+  }, [fetchList, fetchStats]);
+
+  const openOriginalPage = (item: TodoCenterItem) => {
     router.push(item.link || "/");
+  };
+
+  const openDetail = async (item: TodoCenterItem) => {
+    setDetailOpen(true);
+    setDetailLoading(true);
+    setDetail(null);
+    try {
+      const res = await getTodoCenterDetail(item.todoId);
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setDetail(res.data);
+      }
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const openApproval = async (item: TodoCenterItem) => {
+    if (!item.bizType || !directApprovalBizTypes.has(item.bizType)) {
+      openOriginalPage(item);
+      return;
+    }
+    setApproveItem(item);
+    setNextApproverId("");
+    setComment("");
+    setTerminateHere(false);
+    setApproveOpen(true);
+    if (users.length === 0) {
+      const res = await getUserList();
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setUsers(res.data.records ?? []);
+      }
+    }
+  };
+
+  const closeApproval = () => {
+    if (submitting) return;
+    setApproveOpen(false);
+    setApproveItem(null);
+  };
+
+  const approveDefaultTerminate = Boolean(
+    (approveItem?.bizType === "file" || approveItem?.bizType === "inspection")
+      && (approveItem.approvalLevel ?? 1) >= 3
+  );
+
+  const handleApprove = async (pass: boolean) => {
+    if (!approveItem || !approveItem.bizType) return;
+    if (!pass && !comment.trim()) {
+      toast.error("请输入驳回原因");
+      return;
+    }
+    const shouldTerminate = pass ? terminateHere || approveDefaultTerminate : true;
+    if (pass && !shouldTerminate && !nextApproverId) {
+      toast.error("请选择下一级审批人，或勾选终审通过");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const common = {
+        recordId: approveItem.todoId,
+        pass,
+        nextApproverId: pass && !shouldTerminate ? nextApproverId : undefined,
+        comment: comment.trim() || undefined,
+      };
+      const res = approveItem.bizType === "inspection"
+        ? await approvalInspection({
+          inspectionFormId: approveItem.bizId,
+          result: pass ? 1 : 2,
+          approvalDescription: comment.trim() || undefined,
+          nextApproverId: pass && !shouldTerminate ? nextApproverId : undefined,
+        })
+        : approveItem.bizType === "file"
+          ? await approveProjectFile(common)
+          : approveItem.bizType === "bid"
+            ? await approveBid(common)
+            : approveItem.bizType === "acceptance"
+              ? await approveAcceptance(common)
+              : await approveOaApplication(common);
+
+      if (res.code === ResponseCode.SUCCESS) {
+        toast.success(pass ? "审批通过" : "已驳回");
+        setApproveOpen(false);
+        setApproveItem(null);
+        refreshAll();
+        if (detailOpen && detail?.item.todoId === approveItem.todoId) {
+          setDetailOpen(false);
+          setDetail(null);
+        }
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -309,9 +439,20 @@ export default function TodoCenterPage() {
                   </td>
                   <td className="px-5 py-4 text-slate-500 whitespace-nowrap">{formatTime(item.updatedTime)}</td>
                   <td className="px-5 py-4">
-                    <Button size="sm" onClick={() => openItem(item)}>
-                      {activeTab === "pending" ? "处理" : "查看"}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" variant="outline" onClick={() => openDetail(item)}>
+                        详情
+                      </Button>
+                      {activeTab === "pending" && item.status === 0 && directApprovalBizTypes.has(item.bizType ?? "") ? (
+                        <Button size="sm" onClick={() => openApproval(item)}>
+                          审批
+                        </Button>
+                      ) : (
+                        <Button size="sm" onClick={() => openOriginalPage(item)}>
+                          查看
+                        </Button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -332,6 +473,171 @@ export default function TodoCenterPage() {
           </Button>
         </div>
       </div>
+
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>待办详情</DialogTitle>
+            <DialogDescription>
+              {detail?.item.bizTypeLabel ?? "审批事项"} · {detail?.item.statusLabel ?? "加载中"}
+            </DialogDescription>
+          </DialogHeader>
+          {detailLoading && <TablePageSkeleton columns={2} rows={3} />}
+          {!detailLoading && detail && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <DetailField label="事项" value={detail.item.bizName || detail.item.title} />
+                <DetailField label="类型" value={detail.item.bizTypeLabel} />
+                <DetailField label="申请人" value={detail.item.applyUserName || "-"} />
+                <DetailField label="当前审批人" value={detail.item.currentApproverName || "-"} />
+                <DetailField label="审批层级" value={`第 ${detail.item.approvalLevel ?? 1} 级`} />
+                <DetailField label="更新时间" value={formatTime(detail.item.updatedTime)} />
+              </div>
+
+              <section>
+                <p className="text-xs text-slate-400 mb-2">审批链路</p>
+                <ApprovalChain records={detail.approvalRecords ?? []} />
+              </section>
+
+              <div className="flex flex-wrap justify-end gap-2 pt-4 border-t border-slate-100">
+                <Button variant="outline" onClick={() => openOriginalPage(detail.item)}>
+                  进入原业务页面
+                </Button>
+                {detail.item.status === 0 && directApprovalBizTypes.has(detail.item.bizType ?? "") && (
+                  <Button onClick={() => openApproval(detail.item)}>
+                    审批
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={approveOpen} onOpenChange={(open) => !open && closeApproval()}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>审批待办</DialogTitle>
+            <DialogDescription>
+              {approveItem?.bizName ?? "审批事项"} · 第 {approveItem?.approvalLevel ?? 1} 级
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="p-3 bg-slate-50 rounded-lg text-sm">
+              <div className="font-medium text-slate-800">{approveItem?.title}</div>
+              <div className="text-xs text-slate-400 mt-1">
+                申请人：{approveItem?.applyUserName || "-"} · 当前审批人：{approveItem?.currentApproverName || "-"}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                id="todo-terminate"
+                type="checkbox"
+                checked={terminateHere || approveDefaultTerminate}
+                disabled={approveDefaultTerminate}
+                onChange={(event) => setTerminateHere(event.target.checked)}
+              />
+              <label htmlFor="todo-terminate" className="text-sm text-slate-600">
+                终审通过，不再流转下一级
+                {approveDefaultTerminate && <span className="text-slate-400 ml-1">(L3 自动终审)</span>}
+              </label>
+            </div>
+
+            {!(terminateHere || approveDefaultTerminate) && (
+              <div>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">
+                  下一级审批人 <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={nextApproverId}
+                  onChange={(event) => setNextApproverId(event.target.value)}
+                >
+                  <option value="">请选择下一级审批人</option>
+                  {users.map((user) => (
+                    <option key={user.userId} value={user.userId}>
+                      {user.realName || user.username}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">
+                审批意见 / 驳回原因
+              </label>
+              <textarea
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={3}
+                value={comment}
+                onChange={(event) => setComment(event.target.value)}
+                placeholder="驳回时必填"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-slate-100">
+            <Button variant="outline" className="text-rose-600" onClick={() => handleApprove(false)} disabled={submitting}>
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <X className="w-4 h-4 mr-1" />}
+              驳回
+            </Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleApprove(true)} disabled={submitting}>
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Check className="w-4 h-4 mr-1" />}
+              通过
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function DetailField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="py-2 px-3 bg-slate-50 rounded-lg">
+      <p className="text-xs text-slate-400 mb-0.5">{label}</p>
+      <p className="text-sm font-medium text-slate-800">{value}</p>
+    </div>
+  );
+}
+
+function ApprovalChain({ records }: { records: ApprovalRecordVo[] }) {
+  if (records.length === 0) {
+    return <div className="p-4 bg-slate-50 rounded-lg text-sm text-slate-400">暂无审批记录</div>;
+  }
+  return (
+    <div className="space-y-2">
+      {records.map((record, index) => (
+        <div key={record.approvalRecordId} className="flex gap-3 p-3 bg-slate-50 rounded-lg">
+          <span className={cn(
+            "inline-flex w-6 h-6 items-center justify-center rounded-full text-xs font-semibold shrink-0",
+            record.inspectionFormStatus === 1
+              ? "bg-emerald-100 text-emerald-700"
+              : record.inspectionFormStatus === 2
+                ? "bg-rose-100 text-rose-700"
+                : "bg-amber-100 text-amber-700"
+          )}>
+            {index + 1}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-slate-800">
+                L{record.approvalLevel ?? index + 1} · {record.approverName || "审批人"}
+              </span>
+              <Badge variant="secondary" className={cn("text-xs", statusStyles[record.inspectionFormStatus] ?? "")}>
+                {record.inspectionFormStatus === 0 ? "待审核" : record.inspectionFormStatus === 1 ? "已通过" : "已驳回"}
+              </Badge>
+            </div>
+            {record.approvalDescription && (
+              <p className="text-sm text-slate-600 mt-1">{record.approvalDescription}</p>
+            )}
+            <p className="text-xs text-slate-400 mt-1">{formatTime(record.updatedTime || record.createdTime)}</p>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -215,9 +215,12 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
                     {(() => {
                       const bizType = ITEM_BIZ_TYPE[item.id];
                       const dynamicBadge = bizType ? pendingCounts[bizType] ?? 0 : 0;
+                      const todoCenterCount = Object.values(pendingCounts).reduce((sum, count) => sum + count, 0);
                       const badgeValue = item.id === "message-center"
                         ? unreadMessageCount
-                        : dynamicBadge > 0 ? dynamicBadge : item.badge;
+                        : item.id === "todo-center"
+                          ? todoCenterCount
+                          : dynamicBadge > 0 ? dynamicBadge : item.badge;
                       if (!badgeValue) return null;
                       return (
                         <Badge
