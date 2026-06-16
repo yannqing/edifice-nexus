@@ -523,7 +523,8 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         }
 
         boolean pass = dto.getResult() == 1;
-        boolean forwardToNext = pass && dto.getNextApproverId() != null;
+        boolean terminate = pass && (dto.getTerminate() == null ? dto.getNextApproverId() == null : Boolean.TRUE.equals(dto.getTerminate()));
+        boolean forwardToNext = pass && !terminate;
 
         // 1. 找当前待审节点；没有则以当前操作人为首审补一条（兼容老流程）
         ApprovalRecords current = approvalFlowService.getCurrentPending(
@@ -543,6 +544,7 @@ public class InspectionFormServiceImpl implements InspectionFormService {
                 current.getApprovalRecordId(),
                 pass,
                 forwardToNext ? dto.getNextApproverId() : null,
+                terminate,
                 dto.getApprovalDescription()
         );
         ApprovalFlowService.ApprovalResult result = approvalFlowService.approve(approveDto, userId);

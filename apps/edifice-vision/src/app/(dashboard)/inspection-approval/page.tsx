@@ -239,6 +239,7 @@ export default function InspectionApprovalPage() {
         result,
         approvalDescription: comment,
         nextApproverId: pass && !shouldTerminate ? nextApproverId : undefined,
+        terminate: shouldTerminate,
       });
       if (res.code === ResponseCode.SUCCESS) {
         toast.success(result === 1 ? "审批通过" : "已驳回");

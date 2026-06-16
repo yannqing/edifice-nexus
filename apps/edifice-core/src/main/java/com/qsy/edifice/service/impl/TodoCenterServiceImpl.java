@@ -8,6 +8,7 @@ import com.qsy.edifice.domain.dto.GetTodoCenterListDto;
 import com.qsy.edifice.domain.dto.UrgeApprovalDto;
 import com.qsy.edifice.domain.dto.WithdrawApprovalDto;
 import com.qsy.edifice.domain.entity.*;
+import com.qsy.edifice.domain.vo.ApprovalFlowConfigVo;
 import com.qsy.edifice.domain.vo.TodoCenterDetailVo;
 import com.qsy.edifice.domain.vo.TodoCenterItemVo;
 import com.qsy.edifice.domain.vo.TodoCenterStatsVo;
@@ -15,6 +16,7 @@ import com.qsy.edifice.enums.ApprovalBizType;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.*;
+import com.qsy.edifice.service.ApprovalFlowConfigService;
 import com.qsy.edifice.service.ApprovalFlowService;
 import com.qsy.edifice.service.TodoCenterService;
 import jakarta.annotation.Resource;
@@ -76,6 +78,9 @@ public class TodoCenterServiceImpl implements TodoCenterService {
 
     @Resource
     private ApprovalFlowService approvalFlowService;
+
+    @Resource
+    private ApprovalFlowConfigService approvalFlowConfigService;
 
     @Override
     public Page<TodoCenterItemVo> pending(Long userId, GetTodoCenterListDto dto) {
@@ -215,6 +220,9 @@ public class TodoCenterServiceImpl implements TodoCenterService {
         if (record == null) return;
         ApprovalBizType type = resolveBizType(record);
         if (type == null || record.getInspectionFormId() == null) return;
+        if (!flowAllows(type, FlowAbility.CC)) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "当前流程配置不允许抄送");
+        }
         ensureParticipant(userId, type, record.getInspectionFormId());
 
         Set<Long> targetIds = dto.getCcUserIds().stream()
@@ -257,6 +265,9 @@ public class TodoCenterServiceImpl implements TodoCenterService {
         if (type == null || record.getInspectionFormId() == null) {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "审批业务信息不完整");
         }
+        if (!flowAllows(type, FlowAbility.URGE)) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "当前流程配置不允许催办");
+        }
         if (!userId.equals(record.getApplyUserId())) {
             throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只有流程发起人可以催办");
         }
@@ -291,6 +302,9 @@ public class TodoCenterServiceImpl implements TodoCenterService {
         ApprovalBizType type = resolveBizType(record);
         if (type == null || record.getInspectionFormId() == null) {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "审批业务信息不完整");
+        }
+        if (!flowAllows(type, FlowAbility.WITHDRAW)) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "当前流程配置不允许撤回");
         }
         String reason = StringUtils.hasText(dto.getReason()) ? dto.getReason().trim() : "申请人撤回";
 
@@ -472,6 +486,9 @@ public class TodoCenterServiceImpl implements TodoCenterService {
                 .createdTime(sourceRecord.getCreatedTime())
                 .updatedTime(displayRecord.getUpdatedTime() != null ? displayRecord.getUpdatedTime() : displayRecord.getCreatedTime())
                 .link(linkFor(sourceRecord, pendingAction))
+                .allowWithdraw(flowAbilityValue(bizType, FlowAbility.WITHDRAW))
+                .allowUrge(flowAbilityValue(bizType, FlowAbility.URGE))
+                .allowCc(flowAbilityValue(bizType, FlowAbility.CC))
                 .build();
     }
 
@@ -671,5 +688,26 @@ public class TodoCenterServiceImpl implements TodoCenterService {
 
     private String displayName(String label, String name) {
         return StringUtils.hasText(name) ? label + "「" + name + "」" : label;
+    }
+
+    private int flowAbilityValue(ApprovalBizType type, FlowAbility ability) {
+        return flowAllows(type, ability) ? 1 : 0;
+    }
+
+    private boolean flowAllows(ApprovalBizType type, FlowAbility ability) {
+        if (type == null) return true;
+        ApprovalFlowConfigVo config = approvalFlowConfigService.getEnabledByBizType(type.getExt());
+        if (config == null) return true;
+        return switch (ability) {
+            case WITHDRAW -> Integer.valueOf(1).equals(config.getAllowWithdraw());
+            case URGE -> Integer.valueOf(1).equals(config.getAllowUrge());
+            case CC -> Integer.valueOf(1).equals(config.getAllowCc());
+        };
+    }
+
+    private enum FlowAbility {
+        WITHDRAW,
+        URGE,
+        CC
     }
 }

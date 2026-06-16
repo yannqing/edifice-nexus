@@ -31,4 +31,7 @@ public class ApprovalInspectionDto {
      */
     @Schema(description = "通过时指定下一级审批人id（省略则终审）")
     private Long nextApproverId;
+
+    @Schema(description = "是否终审通过，不再流转下一级")
+    private Boolean terminate;
 }

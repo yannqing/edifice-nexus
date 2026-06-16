@@ -81,3 +81,16 @@ export interface SaveBusinessRuleConfigParams {
   enabled: number;
   description?: string;
 }
+
+export interface ConfigOptionVo {
+  value: string;
+  label: string;
+  type: "user" | "role" | "position";
+  description?: string | null;
+}
+
+export interface ConfigOptionBundleVo {
+  users: ConfigOptionVo[];
+  roles: ConfigOptionVo[];
+  positions: ConfigOptionVo[];
+}

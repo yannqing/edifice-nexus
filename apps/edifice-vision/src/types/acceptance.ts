@@ -39,6 +39,7 @@ export interface ApproveAcceptanceParams {
   recordId: string;
   pass: boolean;
   nextApproverId?: string;
+  terminate?: boolean;
   comment?: string;
 }
 

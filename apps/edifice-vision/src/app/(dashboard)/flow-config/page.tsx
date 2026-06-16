@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import {
   deleteFlowConfig,
   getFlowConfigList,
+  getConfigOptions,
   saveFlowConfig,
   toggleFlowConfig,
 } from "@/services/config-center";
@@ -36,6 +37,8 @@ import type {
   ApprovalFlowConfigVo,
   ApprovalFlowNodeVo,
   ConfigBizType,
+  ConfigOptionBundleVo,
+  ConfigOptionVo,
   SaveApprovalFlowConfigParams,
 } from "@/types/config-center";
 
@@ -88,11 +91,34 @@ function formatTime(value?: string | null) {
   return value?.replace("T", " ").slice(0, 16) || "-";
 }
 
+function emptyOptions(): ConfigOptionBundleVo {
+  return {
+    users: [],
+    roles: [],
+    positions: [],
+  };
+}
+
+function optionsForSource(type: string, options: ConfigOptionBundleVo): ConfigOptionVo[] {
+  if (type === "user") return options.users;
+  if (type === "role") return options.roles;
+  if (type === "position") return options.positions;
+  return [];
+}
+
+function sourcePlaceholder(type: string) {
+  if (type === "user") return "请选择用户";
+  if (type === "role") return "请选择角色";
+  if (type === "position") return "请选择岗位";
+  return "自选审批人时无需配置";
+}
+
 export default function FlowConfigPage() {
   const [items, setItems] = useState<ApprovalFlowConfigVo[]>([]);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [options, setOptions] = useState<ConfigOptionBundleVo>(emptyOptions());
   const [saving, setSaving] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
@@ -142,6 +168,20 @@ export default function FlowConfigPage() {
     fetchList(controller.signal);
     return () => controller.abort();
   }, [fetchList]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getConfigOptions(controller.signal)
+      .then((res) => {
+        if (res.code === ResponseCode.SUCCESS && res.data) {
+          setOptions(res.data);
+        }
+      })
+      .catch((err) => {
+        if (!isAbortError(err)) setOptions(emptyOptions());
+      });
+    return () => controller.abort();
+  }, []);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -201,7 +241,7 @@ export default function FlowConfigPage() {
       return;
     }
     if (form.nodes.some((node) => node.approverSourceType !== "starter_select" && !node.approverSourceId?.trim())) {
-      toast.error("指定用户/角色/岗位时，请填写来源ID");
+      toast.error("指定用户/角色/岗位时，请选择对应来源");
       return;
     }
     setSaving(true);
@@ -447,21 +487,27 @@ export default function FlowConfigPage() {
                           value={node.approverSourceType}
                           onChange={(event) => patchNode(index, {
                             approverSourceType: event.target.value,
-                            approverSourceId: event.target.value === "starter_select" ? "" : node.approverSourceId,
+                            approverSourceId: "",
                           })}
                           className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
                         >
                           {approverSourceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                         </select>
                       </Field>
-                      <Field label="来源ID">
-                        <input
+                      <Field label="来源">
+                        <select
                           value={node.approverSourceId ?? ""}
                           disabled={node.approverSourceType === "starter_select"}
                           onChange={(event) => patchNode(index, { approverSourceId: event.target.value })}
                           className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
-                          placeholder="用户/角色/岗位 ID"
-                        />
+                        >
+                          <option value="">{sourcePlaceholder(node.approverSourceType)}</option>
+                          {optionsForSource(node.approverSourceType, options).map((option) => (
+                            <option key={`${option.type}-${option.value}`} value={option.value}>
+                              {option.label}{option.description ? `（${option.description}）` : ""}
+                            </option>
+                          ))}
+                        </select>
                       </Field>
                       <Button
                         type="button"

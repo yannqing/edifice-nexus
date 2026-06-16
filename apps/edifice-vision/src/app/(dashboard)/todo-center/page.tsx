@@ -41,6 +41,7 @@ import { getUserList } from "@/services/project";
 import {
   createApprovalCc,
   getTodoCenterDetail,
+  getTodoCenterFlowConfig,
   getTodoCenterList,
   getTodoCenterStats,
   urgeApproval,
@@ -48,6 +49,7 @@ import {
 } from "@/services/todo-center";
 import { ResponseCode } from "@/types/api";
 import type { ApprovalRecordVo } from "@/types/approval";
+import type { ApprovalFlowConfigVo, ApprovalFlowNodeVo } from "@/types/config-center";
 import type { UserListItem } from "@/types/project";
 import type { TodoCenterDetail, TodoCenterItem, TodoCenterStats, TodoCenterTab } from "@/types/todo-center";
 
@@ -87,6 +89,21 @@ const statusStyles: Record<number, string> = {
 const directApprovalBizTypes = new Set(["inspection", "file", "bid", "acceptance", "oa_application"]);
 const withdrawSupportedBizTypes = new Set(["inspection", "file", "bid", "acceptance", "oa_application"]);
 
+function abilityEnabled(value?: number | null) {
+  return value !== 0;
+}
+
+function nodeAt(config: ApprovalFlowConfigVo | null, order: number): ApprovalFlowNodeVo | null {
+  return config?.nodes.find((node) => node.nodeOrder === order) ?? null;
+}
+
+function approverSourceLabel(type?: string | null) {
+  if (type === "user") return "指定用户";
+  if (type === "role") return "指定角色";
+  if (type === "position") return "指定岗位";
+  return "自选审批人";
+}
+
 function formatTime(value?: string | null) {
   return value?.replace("T", " ").slice(0, 16) || "-";
 }
@@ -119,6 +136,7 @@ export default function TodoCenterPage() {
   const [detail, setDetail] = useState<TodoCenterDetail | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
   const [approveItem, setApproveItem] = useState<TodoCenterItem | null>(null);
+  const [approvalFlowConfig, setApprovalFlowConfig] = useState<ApprovalFlowConfigVo | null>(null);
   const [nextApproverId, setNextApproverId] = useState("");
   const [ccUserIds, setCcUserIds] = useState<string[]>([]);
   const [comment, setComment] = useState("");
@@ -222,12 +240,25 @@ export default function TodoCenterPage() {
     setCcUserIds([]);
     setComment("");
     setTerminateHere(false);
+    setApprovalFlowConfig(null);
     setApproveOpen(true);
-    if (users.length === 0) {
-      const res = await getUserList();
-      if (res.code === ResponseCode.SUCCESS && res.data) {
-        setUsers(res.data.records ?? []);
+    try {
+      const requests: Array<Promise<void>> = [];
+      if (users.length === 0) {
+        requests.push(getUserList().then((res) => {
+          if (res.code === ResponseCode.SUCCESS && res.data) {
+            setUsers(res.data.records ?? []);
+          }
+        }));
       }
+      requests.push(getTodoCenterFlowConfig(item.bizType).then((res) => {
+        if (res.code === ResponseCode.SUCCESS) {
+          setApprovalFlowConfig(res.data ?? null);
+        }
+      }));
+      await Promise.all(requests);
+    } catch {
+      // The approval API still enforces the flow. Keep the dialog usable if config loading fails.
     }
   };
 
@@ -235,6 +266,7 @@ export default function TodoCenterPage() {
     if (submitting) return;
     setApproveOpen(false);
     setApproveItem(null);
+    setApprovalFlowConfig(null);
     setCcUserIds([]);
   };
 
@@ -278,10 +310,20 @@ export default function TodoCenterPage() {
     }
   };
 
+  const currentFlowNode = nodeAt(approvalFlowConfig, approveItem?.approvalLevel ?? 1);
+  const nextFlowNode = nodeAt(approvalFlowConfig, (approveItem?.approvalLevel ?? 1) + 1);
+  const flowHasNoNextNode = Boolean(approvalFlowConfig && !nextFlowNode);
+  const flowCanTerminateHere = !approvalFlowConfig || flowHasNoNextNode || currentFlowNode?.allowTerminate === 1;
+  const nextApproverRequiresSelection = !approvalFlowConfig || nextFlowNode?.approverSourceType === "starter_select";
   const approveDefaultTerminate = Boolean(
-    (approveItem?.bizType === "file" || approveItem?.bizType === "inspection")
+    !approvalFlowConfig
+      && (approveItem?.bizType === "file" || approveItem?.bizType === "inspection")
       && (approveItem.approvalLevel ?? 1) >= 3
   );
+  const terminateChecked = terminateHere || approveDefaultTerminate || flowHasNoNextNode;
+  const terminateDisabled = approveDefaultTerminate || flowHasNoNextNode || !flowCanTerminateHere;
+  const showNextApproverSelect = !terminateChecked && nextApproverRequiresSelection;
+  const showAutoNextApprover = !terminateChecked && approvalFlowConfig && nextFlowNode && !nextApproverRequiresSelection;
 
   const handleApprove = async (pass: boolean) => {
     if (!approveItem || !approveItem.bizType) return;
@@ -289,18 +331,24 @@ export default function TodoCenterPage() {
       toast.error(pass ? "请输入审批意见" : "请输入驳回原因");
       return;
     }
-    const shouldTerminate = pass ? terminateHere || approveDefaultTerminate : true;
-    if (pass && !shouldTerminate && !nextApproverId) {
+    const nextNode = nodeAt(approvalFlowConfig, (approveItem.approvalLevel ?? 1) + 1);
+    const shouldTerminate = pass
+      ? terminateHere || approveDefaultTerminate || Boolean(approvalFlowConfig && !nextNode)
+      : true;
+    const needsNextApprover = !approvalFlowConfig || nextNode?.approverSourceType === "starter_select";
+    if (pass && !shouldTerminate && needsNextApprover && !nextApproverId) {
       toast.error("请选择下一级审批人，或勾选终审通过");
       return;
     }
+    const nextApproverPayload = pass && !shouldTerminate && needsNextApprover ? nextApproverId : undefined;
 
     setSubmitting(true);
     try {
       const common = {
         recordId: approveItem.todoId,
         pass,
-        nextApproverId: pass && !shouldTerminate ? nextApproverId : undefined,
+        nextApproverId: nextApproverPayload,
+        terminate: shouldTerminate,
         comment: comment.trim() || undefined,
       };
       const res = approveItem.bizType === "inspection"
@@ -308,7 +356,8 @@ export default function TodoCenterPage() {
           inspectionFormId: approveItem.bizId,
           result: pass ? 1 : 2,
           approvalDescription: comment.trim() || undefined,
-          nextApproverId: pass && !shouldTerminate ? nextApproverId : undefined,
+          nextApproverId: nextApproverPayload,
+          terminate: shouldTerminate,
         })
         : approveItem.bizType === "file"
           ? await approveProjectFile(common)
@@ -319,7 +368,7 @@ export default function TodoCenterPage() {
               : await approveOaApplication(common);
 
       if (res.code === ResponseCode.SUCCESS) {
-        if (ccUserIds.length > 0) {
+        if (abilityEnabled(approveItem.allowCc) && ccUserIds.length > 0) {
           try {
             const ccRes = await createApprovalCc({
               recordId: approveItem.todoId,
@@ -336,6 +385,7 @@ export default function TodoCenterPage() {
         toast.success(pass ? "审批通过" : "已驳回");
         setApproveOpen(false);
         setApproveItem(null);
+        setApprovalFlowConfig(null);
         setCcUserIds([]);
         refreshAll();
         if (detailOpen && detail?.item.todoId === approveItem.todoId) {
@@ -519,11 +569,13 @@ export default function TodoCenterPage() {
                       )}
                       {activeTab === "initiated" && item.status === 0 && (
                         <>
-                          <Button size="sm" variant="outline" onClick={() => handleUrge(item)}>
-                            <BellRing className="w-4 h-4 mr-1" />
-                            催办
-                          </Button>
-                          {withdrawSupportedBizTypes.has(item.bizType ?? "") && (
+                          {abilityEnabled(item.allowUrge) && (
+                            <Button size="sm" variant="outline" onClick={() => handleUrge(item)}>
+                              <BellRing className="w-4 h-4 mr-1" />
+                              催办
+                            </Button>
+                          )}
+                          {abilityEnabled(item.allowWithdraw) && withdrawSupportedBizTypes.has(item.bizType ?? "") && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -594,11 +646,13 @@ export default function TodoCenterPage() {
                 )}
                 {activeTab === "initiated" && detail.item.status === 0 && (
                   <>
-                    <Button variant="outline" onClick={() => handleUrge(detail.item)}>
-                      <BellRing className="w-4 h-4 mr-1" />
-                      催办
-                    </Button>
-                    {withdrawSupportedBizTypes.has(detail.item.bizType ?? "") && (
+                    {abilityEnabled(detail.item.allowUrge) && (
+                      <Button variant="outline" onClick={() => handleUrge(detail.item)}>
+                        <BellRing className="w-4 h-4 mr-1" />
+                        催办
+                      </Button>
+                    )}
+                    {abilityEnabled(detail.item.allowWithdraw) && withdrawSupportedBizTypes.has(detail.item.bizType ?? "") && (
                       <Button
                         variant="outline"
                         className="text-rose-600 hover:text-rose-700"
@@ -637,17 +691,19 @@ export default function TodoCenterPage() {
               <input
                 id="todo-terminate"
                 type="checkbox"
-                checked={terminateHere || approveDefaultTerminate}
-                disabled={approveDefaultTerminate}
+                checked={terminateChecked}
+                disabled={terminateDisabled}
                 onChange={(event) => setTerminateHere(event.target.checked)}
               />
               <label htmlFor="todo-terminate" className="text-sm text-slate-600">
                 终审通过，不再流转下一级
                 {approveDefaultTerminate && <span className="text-slate-400 ml-1">(L3 自动终审)</span>}
+                {flowHasNoNextNode && <span className="text-slate-400 ml-1">(流程已到最后一级)</span>}
+                {!flowCanTerminateHere && <span className="text-slate-400 ml-1">(当前节点不可终审)</span>}
               </label>
             </div>
 
-            {!(terminateHere || approveDefaultTerminate) && (
+            {showNextApproverSelect && (
               <div>
                 <label className="text-xs font-medium text-slate-600 mb-1 block">
                   下一级审批人 <span className="text-rose-500">*</span>
@@ -667,6 +723,13 @@ export default function TodoCenterPage() {
               </div>
             )}
 
+            {showAutoNextApprover && (
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                下一级节点「{nextFlowNode.nodeName}」为{approverSourceLabel(nextFlowNode.approverSourceType)}，
+                审批通过后系统会按流程配置自动确定审批人。
+              </div>
+            )}
+
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">
                 审批意见 / 驳回原因 <span className="text-rose-500">*</span>
@@ -680,29 +743,31 @@ export default function TodoCenterPage() {
               />
             </div>
 
-            <div>
-              <label className="text-xs font-medium text-slate-600 mb-1 block">
-                抄送人
-              </label>
-              <select
-                multiple
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-24"
-                value={ccUserIds}
-                onChange={(event) => {
-                  const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
-                  setCcUserIds(selected);
-                }}
-              >
-                {users
-                  .filter((user) => String(user.userId) !== approveItem?.applyUserId)
-                  .map((user) => (
-                    <option key={user.userId} value={user.userId}>
-                      {user.realName || user.username}
-                    </option>
-                  ))}
-              </select>
-              <p className="text-xs text-slate-400 mt-1">可按住 Command / Ctrl 多选</p>
-            </div>
+            {abilityEnabled(approveItem?.allowCc) && (
+              <div>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">
+                  抄送人
+                </label>
+                <select
+                  multiple
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-24"
+                  value={ccUserIds}
+                  onChange={(event) => {
+                    const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
+                    setCcUserIds(selected);
+                  }}
+                >
+                  {users
+                    .filter((user) => String(user.userId) !== approveItem?.applyUserId)
+                    .map((user) => (
+                      <option key={user.userId} value={user.userId}>
+                        {user.realName || user.username}
+                      </option>
+                    ))}
+                </select>
+                <p className="text-xs text-slate-400 mt-1">可按住 Command / Ctrl 多选</p>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-slate-100">

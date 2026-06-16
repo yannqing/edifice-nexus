@@ -9,9 +9,11 @@ import com.qsy.edifice.domain.dto.GetTodoCenterListDto;
 import com.qsy.edifice.domain.dto.UrgeApprovalDto;
 import com.qsy.edifice.domain.dto.WithdrawApprovalDto;
 import com.qsy.edifice.domain.entity.SysUser;
+import com.qsy.edifice.domain.vo.ApprovalFlowConfigVo;
 import com.qsy.edifice.domain.vo.TodoCenterDetailVo;
 import com.qsy.edifice.domain.vo.TodoCenterItemVo;
 import com.qsy.edifice.domain.vo.TodoCenterStatsVo;
+import com.qsy.edifice.service.ApprovalFlowConfigService;
 import com.qsy.edifice.service.TodoCenterService;
 import com.qsy.edifice.utils.JwtUtils;
 import com.qsy.edifice.utils.ResultUtils;
@@ -35,6 +37,9 @@ public class TodoCenterController {
 
     @Resource
     private TodoCenterService todoCenterService;
+
+    @Resource
+    private ApprovalFlowConfigService approvalFlowConfigService;
 
     @Resource
     private JwtUtils jwtUtils;
@@ -78,6 +83,12 @@ public class TodoCenterController {
     @Operation(summary = "待办统计")
     public BaseResponse<TodoCenterStatsVo> statistics(HttpServletRequest request) throws JsonProcessingException {
         return ResultUtils.success(Code.SUCCESS, todoCenterService.statistics(userId(request)));
+    }
+
+    @GetMapping("/flow-config/{bizType}")
+    @Operation(summary = "审批弹窗读取启用流程配置")
+    public BaseResponse<ApprovalFlowConfigVo> enabledFlowConfig(@PathVariable String bizType) {
+        return ResultUtils.success(Code.SUCCESS, approvalFlowConfigService.getEnabledByBizType(bizType));
     }
 
     @PostMapping("/cc")

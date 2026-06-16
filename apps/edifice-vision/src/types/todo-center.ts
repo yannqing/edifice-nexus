@@ -19,6 +19,9 @@ export interface TodoCenterItem {
   createdTime?: string | null;
   updatedTime?: string | null;
   link: string;
+  allowWithdraw?: number | null;
+  allowUrge?: number | null;
+  allowCc?: number | null;
 }
 
 export interface TodoCenterStats {

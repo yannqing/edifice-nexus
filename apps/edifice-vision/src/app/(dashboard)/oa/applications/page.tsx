@@ -346,6 +346,7 @@ export default function OaApplicationsPage() {
         recordId: approveTarget.currentRecordId,
         pass: approvePass,
         nextApproverId: approvePass && nextApproverId ? nextApproverId : undefined,
+        terminate: approvePass && !nextApproverId,
         comment: approveComment,
       });
       if (res.code === ResponseCode.SUCCESS) {

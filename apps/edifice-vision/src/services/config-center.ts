@@ -3,6 +3,7 @@ import type { BaseResponse } from "@/types/api";
 import type {
   ApprovalFlowConfigVo,
   BusinessRuleConfigVo,
+  ConfigOptionBundleVo,
   GetConfigListParams,
   SaveApprovalFlowConfigParams,
   SaveBusinessRuleConfigParams,
@@ -31,6 +32,13 @@ export function getFlowConfigList(
   signal?: AbortSignal
 ): Promise<BaseResponse<PageResult<ApprovalFlowConfigVo>>> {
   return get<PageResult<ApprovalFlowConfigVo>>("/flow-config/list", { params: toQuery(params), signal });
+}
+
+export function getEnabledFlowConfig(
+  bizType: string,
+  signal?: AbortSignal
+): Promise<BaseResponse<ApprovalFlowConfigVo | null>> {
+  return get<ApprovalFlowConfigVo | null>(`/flow-config/enabled/${bizType}`, { signal });
 }
 
 export function saveFlowConfig(params: SaveApprovalFlowConfigParams): Promise<BaseResponse<string>> {
@@ -62,4 +70,8 @@ export function toggleBusinessRuleConfig(id: string, enabled: number): Promise<B
 
 export function deleteBusinessRuleConfig(id: string): Promise<BaseResponse<boolean>> {
   return del<boolean>(`/business-rule-config/${id}`);
+}
+
+export function getConfigOptions(signal?: AbortSignal): Promise<BaseResponse<ConfigOptionBundleVo>> {
+  return get<ConfigOptionBundleVo>("/config-options", { signal });
 }

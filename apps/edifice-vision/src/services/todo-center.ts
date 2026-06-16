@@ -1,5 +1,6 @@
 import { get, post } from "@/lib/request";
 import type { BaseResponse } from "@/types/api";
+import type { ApprovalFlowConfigVo } from "@/types/config-center";
 import type {
   CreateApprovalCcParams,
   GetTodoCenterListParams,
@@ -49,6 +50,13 @@ export function getTodoCenterDetail(
   signal?: AbortSignal
 ): Promise<BaseResponse<TodoCenterDetail>> {
   return get<TodoCenterDetail>(`/todo-center/${recordId}`, { signal });
+}
+
+export function getTodoCenterFlowConfig(
+  bizType: string,
+  signal?: AbortSignal
+): Promise<BaseResponse<ApprovalFlowConfigVo | null>> {
+  return get<ApprovalFlowConfigVo | null>(`/todo-center/flow-config/${bizType}`, { signal });
 }
 
 export function createApprovalCc(params: CreateApprovalCcParams): Promise<BaseResponse<boolean>> {

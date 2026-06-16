@@ -88,6 +88,7 @@ export interface ApprovalInspectionParams {
   result: number;
   approvalDescription?: string;
   nextApproverId?: string;
+  terminate?: boolean;
 }
 
 // ==================== 状态映射 ====================

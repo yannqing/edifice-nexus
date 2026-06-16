@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.qsy.edifice.domain.dto.ApproveDto;
 import com.qsy.edifice.domain.dto.SubmitApprovalDto;
 import com.qsy.edifice.domain.entity.ApprovalRecords;
+import com.qsy.edifice.domain.entity.SysUserRole;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.domain.vo.ApprovalFlowConfigVo;
 import com.qsy.edifice.domain.vo.ApprovalFlowNodeVo;
@@ -13,6 +14,7 @@ import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.ApprovalRecordsMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
+import com.qsy.edifice.mapper.SysUserRoleMapper;
 import com.qsy.edifice.service.ApprovalFlowConfigService;
 import com.qsy.edifice.service.ApprovalFlowService;
 import jakarta.annotation.Resource;
@@ -45,6 +47,9 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
 
     @Resource
     private SysUserMapper sysUserMapper;
+
+    @Resource
+    private SysUserRoleMapper sysUserRoleMapper;
 
     @Resource
     private ApprovalFlowConfigService approvalFlowConfigService;
@@ -121,7 +126,8 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
 
         boolean rejected = !Boolean.TRUE.equals(dto.getPass());
         ApprovalFlowConfigVo config = approvalFlowConfigService.getEnabledByBizType(bt == null ? null : bt.getExt());
-        Long effectiveNextApproverId = rejected ? null : resolveNextApprover(config, record, dto.getNextApproverId());
+        Long effectiveNextApproverId = rejected ? null : resolveNextApprover(
+                config, record, dto.getNextApproverId(), Boolean.TRUE.equals(dto.getTerminate()));
         if (!rejected && effectiveNextApproverId != null) {
             Set<Long> previousApprovers = queryChain(bt, record.getInspectionFormId()).stream()
                     .map(ApprovalRecordVo::getApprover)
@@ -316,8 +322,11 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
                 .orElse(null);
     }
 
-    private Long resolveNextApprover(ApprovalFlowConfigVo config, ApprovalRecords record, Long requestedNextApproverId) {
-        if (config == null) return requestedNextApproverId;
+    private Long resolveNextApprover(ApprovalFlowConfigVo config,
+                                     ApprovalRecords record,
+                                     Long requestedNextApproverId,
+                                     boolean terminateRequested) {
+        if (config == null) return terminateRequested ? null : requestedNextApproverId;
         int currentLevel = record.getApprovalLevel() == null ? 1 : record.getApprovalLevel();
         ApprovalFlowNodeVo currentNode = nodeAt(config, currentLevel);
         ApprovalFlowNodeVo nextNode = nodeAt(config, currentLevel + 1);
@@ -328,7 +337,10 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
             return null;
         }
         boolean canFinishHere = currentNode != null && Integer.valueOf(1).equals(currentNode.getAllowTerminate());
-        if (requestedNextApproverId == null && canFinishHere) {
+        if (terminateRequested) {
+            if (!canFinishHere) {
+                throw new BusinessException(ErrorType.OPERATION_FAILED, "当前节点不允许终审通过");
+            }
             return null;
         }
         return resolveApproverForNode(config, nextNode, requestedNextApproverId);
@@ -343,7 +355,7 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
         }
         String sourceType = node.getApproverSourceType();
         if ("user".equals(sourceType)) {
-            return parseUserId(node.getApproverSourceId(), node.getNodeName());
+            return parseSourceId(node.getApproverSourceId(), node.getNodeName());
         }
         if ("starter_select".equals(sourceType)) {
             if (config != null && !Integer.valueOf(1).equals(config.getAllowStarterSelectNext())) {
@@ -355,21 +367,72 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
             }
             return requestedApproverId;
         }
+        if ("role".equals(sourceType)) {
+            return resolveRoleApprover(node);
+        }
+        if ("position".equals(sourceType)) {
+            return resolvePositionApprover(node);
+        }
         if (requestedApproverId == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL,
-                    "节点[" + node.getNodeName() + "]为角色/岗位来源，当前版本请指定具体审批人");
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择节点[" + node.getNodeName() + "]的审批人");
         }
         return requestedApproverId;
     }
 
-    private Long parseUserId(String value, String nodeName) {
+    private Long resolveRoleApprover(ApprovalFlowNodeVo node) {
+        Long roleId = parseSourceId(node.getApproverSourceId(), node.getNodeName());
+        List<Long> userIds = sysUserRoleMapper.selectList(new LambdaQueryWrapper<SysUserRole>()
+                        .eq(SysUserRole::getRoleId, roleId)
+                        .eq(SysUserRole::getProjectId, 0L))
+                .stream()
+                .map(SysUserRole::getUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .filter(this::isActiveUser)
+                .toList();
+        return uniqueApprover(userIds, "角色", node.getNodeName());
+    }
+
+    private Long resolvePositionApprover(ApprovalFlowNodeVo node) {
+        Long positionId = parseSourceId(node.getApproverSourceId(), node.getNodeName());
+        List<Long> userIds = sysUserMapper.selectList(new LambdaQueryWrapper<SysUser>()
+                        .eq(SysUser::getPositionId, positionId)
+                        .eq(SysUser::getStatus, 1)
+                        .eq(SysUser::getEmploymentStatus, 1))
+                .stream()
+                .map(SysUser::getUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        return uniqueApprover(userIds, "岗位", node.getNodeName());
+    }
+
+    private Long uniqueApprover(List<Long> userIds, String sourceLabel, String nodeName) {
+        if (userIds.isEmpty()) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED,
+                    "节点[" + nodeName + "]配置的" + sourceLabel + "下没有可用审批人");
+        }
+        if (userIds.size() > 1) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED,
+                    "节点[" + nodeName + "]配置的" + sourceLabel + "匹配到多人，请改为指定用户或自选审批人");
+        }
+        return userIds.get(0);
+    }
+
+    private boolean isActiveUser(Long userId) {
+        SysUser user = sysUserMapper.selectById(userId);
+        return user != null && Integer.valueOf(1).equals(user.getStatus())
+                && !Integer.valueOf(0).equals(user.getEmploymentStatus());
+    }
+
+    private Long parseSourceId(String value, String nodeName) {
         if (!StringUtils.hasText(value)) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "节点[" + nodeName + "]未配置审批用户");
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "节点[" + nodeName + "]未配置审批来源");
         }
         try {
             return Long.parseLong(value.trim());
         } catch (NumberFormatException ex) {
-            throw new BusinessException(ErrorType.ARGS_INVALID, "节点[" + nodeName + "]审批用户ID不合法");
+            throw new BusinessException(ErrorType.ARGS_INVALID, "节点[" + nodeName + "]审批来源ID不合法");
         }
     }
 }

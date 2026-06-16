@@ -37,4 +37,7 @@ public class TodoCenterItemVo {
     private LocalDateTime createdTime;
     private LocalDateTime updatedTime;
     private String link;
+    private Integer allowWithdraw;
+    private Integer allowUrge;
+    private Integer allowCc;
 }
