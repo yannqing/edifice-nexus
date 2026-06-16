@@ -14,4 +14,6 @@ public interface BusinessRuleConfigService {
     void toggle(Long id, Integer enabled, Long userId);
     void delete(Long id);
     List<BusinessRuleConfigVo> getEnabledByBizType(String bizType);
+    boolean booleanValue(String bizType, String ruleKey, boolean defaultValue);
+    String stringValue(String bizType, String ruleKey, String defaultValue);
 }

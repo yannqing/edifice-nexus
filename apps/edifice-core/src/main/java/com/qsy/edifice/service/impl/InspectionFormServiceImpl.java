@@ -96,6 +96,9 @@ public class InspectionFormServiceImpl implements InspectionFormService {
     private ApprovalFlowService approvalFlowService;
 
     @Resource
+    private BusinessRuleConfigService businessRuleConfigService;
+
+    @Resource
     private ApprovalRecordsMapper approvalRecordsMapper;
 
     // ==================== 查询列表 ====================
@@ -426,7 +429,9 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         if (dto.getFirstApproverId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "一级审批人不能为空");
         }
-        if (!StringUtils.hasText(dto.getFileIds()) || "[]".equals(dto.getFileIds().trim())) {
+        boolean requireMaterials = businessRuleConfigService.booleanValue(
+                ApprovalBizType.INSPECTION.getExt(), "require_materials", true);
+        if (requireMaterials && (!StringUtils.hasText(dto.getFileIds()) || "[]".equals(dto.getFileIds().trim()))) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请上传验收材料");
         }
 

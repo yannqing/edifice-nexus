@@ -93,6 +93,8 @@ export default function BusinessRuleConfigPage() {
   const [enabled, setEnabled] = useState("all");
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState<SaveBusinessRuleConfigParams>(emptyForm());
+  const [deleteTarget, setDeleteTarget] = useState<BusinessRuleConfigVo | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -198,12 +200,18 @@ export default function BusinessRuleConfigPage() {
     }
   };
 
-  const handleDelete = async (item: BusinessRuleConfigVo) => {
-    if (!window.confirm(`确定删除业务规则「${item.ruleName}」吗？`)) return;
-    const res = await deleteBusinessRuleConfig(item.ruleConfigId);
-    if (res.code === ResponseCode.SUCCESS) {
-      toast.success("已删除");
-      fetchList();
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      const res = await deleteBusinessRuleConfig(deleteTarget.ruleConfigId);
+      if (res.code === ResponseCode.SUCCESS) {
+        toast.success("已删除");
+        setDeleteTarget(null);
+        fetchList();
+      }
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -298,7 +306,7 @@ export default function BusinessRuleConfigPage() {
                       <Button size="sm" variant="outline" onClick={() => handleToggle(item)}>
                         {item.enabled === 1 ? "停用" : "启用"}
                       </Button>
-                      <Button size="sm" variant="outline" className="text-rose-600" onClick={() => handleDelete(item)}>
+                      <Button size="sm" variant="outline" className="text-rose-600" onClick={() => setDeleteTarget(item)}>
                         <Trash2 className="w-4 h-4 mr-1" /> 删除
                       </Button>
                     </div>
@@ -423,6 +431,27 @@ export default function BusinessRuleConfigPage() {
             <Button disabled={saving} onClick={handleSave}>
               {saving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
               保存
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && !deleteLoading && setDeleteTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>删除业务规则</DialogTitle>
+            <DialogDescription>
+              删除后该规则不再参与业务校验，相关业务会使用代码默认值。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="p-3 bg-rose-50 border border-rose-100 rounded-lg text-sm text-rose-700">
+            确定删除「{deleteTarget?.ruleName}」吗？
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
+            <Button variant="outline" disabled={deleteLoading} onClick={() => setDeleteTarget(null)}>取消</Button>
+            <Button className="bg-rose-600 hover:bg-rose-700" disabled={deleteLoading} onClick={confirmDelete}>
+              {deleteLoading && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+              确认删除
             </Button>
           </div>
         </DialogContent>

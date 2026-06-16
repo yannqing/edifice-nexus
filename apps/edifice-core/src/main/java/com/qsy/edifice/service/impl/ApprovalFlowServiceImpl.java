@@ -5,12 +5,15 @@ import com.qsy.edifice.domain.dto.ApproveDto;
 import com.qsy.edifice.domain.dto.SubmitApprovalDto;
 import com.qsy.edifice.domain.entity.ApprovalRecords;
 import com.qsy.edifice.domain.entity.SysUser;
+import com.qsy.edifice.domain.vo.ApprovalFlowConfigVo;
+import com.qsy.edifice.domain.vo.ApprovalFlowNodeVo;
 import com.qsy.edifice.domain.vo.ApprovalRecordVo;
 import com.qsy.edifice.enums.ApprovalBizType;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.ApprovalRecordsMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
+import com.qsy.edifice.service.ApprovalFlowConfigService;
 import com.qsy.edifice.service.ApprovalFlowService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -43,21 +46,26 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
     @Resource
     private SysUserMapper sysUserMapper;
 
+    @Resource
+    private ApprovalFlowConfigService approvalFlowConfigService;
+
     // ==================== 提交 ====================
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ApprovalRecords submit(SubmitApprovalDto dto, Long applyUserId) {
         if (dto == null || !StringUtils.hasText(dto.getBizType())
-                || dto.getBizId() == null || dto.getFirstApproverId() == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "业务类型 / 业务id / 第一审批人不能为空");
+                || dto.getBizId() == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "业务类型和业务id不能为空");
         }
         ApprovalBizType bt = ApprovalBizType.fromExt(dto.getBizType());
         if (bt == null) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "未知业务类型：" + dto.getBizType());
         }
-        validateApprover(dto.getFirstApproverId(),
-                applyUserId == null ? Collections.emptySet() : Set.of(applyUserId));
+        ApprovalFlowConfigVo config = approvalFlowConfigService.getEnabledByBizType(bt.getExt());
+        ApprovalFlowNodeVo firstNode = nodeAt(config, 1);
+        Long firstApproverId = resolveApproverForNode(config, firstNode, dto.getFirstApproverId());
+        validateApprover(firstApproverId, applyUserId == null ? Collections.emptySet() : Set.of(applyUserId));
         // 同一业务已有待审核节点，禁止重复提交
         ApprovalRecords current = getCurrentPending(bt, dto.getBizId());
         if (current != null) {
@@ -69,7 +77,7 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
                 .approvalRecordType(bt.getCode())
                 .bizTypeExt(bt.getExt())
                 .inspectionFormId(dto.getBizId())
-                .approver(dto.getFirstApproverId())
+                .approver(firstApproverId)
                 .applyUserId(applyUserId)
                 .approvalDescription(dto.getDescription())
                 .inspectionFormStatus(STATUS_PENDING)
@@ -83,7 +91,7 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "该业务已在审批中，请勿重复提交");
         }
         log.info("审批提交 bizType={} bizId={} 申请人={} 首审={} recordId={}",
-                bt.getExt(), dto.getBizId(), applyUserId, dto.getFirstApproverId(),
+                bt.getExt(), dto.getBizId(), applyUserId, firstApproverId,
                 record.getApprovalRecordId());
         return record;
     }
@@ -112,21 +120,23 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
         if (bt == null) bt = ApprovalBizType.fromCode(record.getApprovalRecordType());
 
         boolean rejected = !Boolean.TRUE.equals(dto.getPass());
-        if (!rejected && dto.getNextApproverId() != null) {
+        ApprovalFlowConfigVo config = approvalFlowConfigService.getEnabledByBizType(bt == null ? null : bt.getExt());
+        Long effectiveNextApproverId = rejected ? null : resolveNextApprover(config, record, dto.getNextApproverId());
+        if (!rejected && effectiveNextApproverId != null) {
             Set<Long> previousApprovers = queryChain(bt, record.getInspectionFormId()).stream()
                     .map(ApprovalRecordVo::getApprover)
                     .filter(Objects::nonNull)
                     .collect(Collectors.toSet());
             if (record.getApplyUserId() != null) previousApprovers.add(record.getApplyUserId());
-            validateApprover(dto.getNextApproverId(), previousApprovers);
+            validateApprover(effectiveNextApproverId, previousApprovers);
         }
         // 更新当前节点
         record.setInspectionFormStatus(rejected ? STATUS_REJECTED : STATUS_APPROVED);
         if (StringUtils.hasText(dto.getComment())) {
             record.setApprovalDescription(dto.getComment());
         }
-        if (!rejected && dto.getNextApproverId() != null) {
-            record.setNextApproverId(dto.getNextApproverId());
+        if (!rejected && effectiveNextApproverId != null) {
+            record.setNextApproverId(effectiveNextApproverId);
         }
         record.setUpdatedTime(LocalDateTime.now());
         if (approvalRecordsMapper.updatePendingResult(record) != 1) {
@@ -142,12 +152,12 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
         }
 
         // 通过 + 还有下级 → 创建下一级节点
-        if (dto.getNextApproverId() != null) {
+        if (effectiveNextApproverId != null) {
             ApprovalRecords next = ApprovalRecords.builder()
                     .approvalRecordType(record.getApprovalRecordType())
                     .bizTypeExt(record.getBizTypeExt())
                     .inspectionFormId(record.getInspectionFormId())
-                    .approver(dto.getNextApproverId())
+                    .approver(effectiveNextApproverId)
                     .applyUserId(record.getApplyUserId())
                     .approvalDescription(null)
                     .inspectionFormStatus(STATUS_PENDING)
@@ -158,7 +168,7 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
             approvalRecordsMapper.insert(next);
             log.info("审批通过并转下一级 bizType={} bizId={} 当前={} 下一级审批={} nextRecordId={}",
                     record.getBizTypeExt(), record.getInspectionFormId(),
-                    record.getApprovalRecordId(), dto.getNextApproverId(), next.getApprovalRecordId());
+                    record.getApprovalRecordId(), effectiveNextApproverId, next.getApprovalRecordId());
             return new ApprovalResult(record.getApprovalRecordId(), bt,
                     record.getInspectionFormId(), false, false, next.getApprovalRecordId());
         }
@@ -295,6 +305,71 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
         }
         if (previousApprovers.contains(userId)) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "申请人不能审批自己的流程，且审批人不能在审批链中重复出现");
+        }
+    }
+
+    private ApprovalFlowNodeVo nodeAt(ApprovalFlowConfigVo config, int level) {
+        if (config == null || config.getNodes() == null) return null;
+        return config.getNodes().stream()
+                .filter(node -> Integer.valueOf(level).equals(node.getNodeOrder()))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private Long resolveNextApprover(ApprovalFlowConfigVo config, ApprovalRecords record, Long requestedNextApproverId) {
+        if (config == null) return requestedNextApproverId;
+        int currentLevel = record.getApprovalLevel() == null ? 1 : record.getApprovalLevel();
+        ApprovalFlowNodeVo currentNode = nodeAt(config, currentLevel);
+        ApprovalFlowNodeVo nextNode = nodeAt(config, currentLevel + 1);
+        if (nextNode == null) {
+            if (requestedNextApproverId != null) {
+                throw new BusinessException(ErrorType.ARGS_INVALID, "流程配置中没有下一级审批节点");
+            }
+            return null;
+        }
+        boolean canFinishHere = currentNode != null && Integer.valueOf(1).equals(currentNode.getAllowTerminate());
+        if (requestedNextApproverId == null && canFinishHere) {
+            return null;
+        }
+        return resolveApproverForNode(config, nextNode, requestedNextApproverId);
+    }
+
+    private Long resolveApproverForNode(ApprovalFlowConfigVo config, ApprovalFlowNodeVo node, Long requestedApproverId) {
+        if (node == null) {
+            if (requestedApproverId == null) {
+                throw new BusinessException(ErrorType.ARGS_NOT_NULL, "审批人不能为空");
+            }
+            return requestedApproverId;
+        }
+        String sourceType = node.getApproverSourceType();
+        if ("user".equals(sourceType)) {
+            return parseUserId(node.getApproverSourceId(), node.getNodeName());
+        }
+        if ("starter_select".equals(sourceType)) {
+            if (config != null && !Integer.valueOf(1).equals(config.getAllowStarterSelectNext())) {
+                throw new BusinessException(ErrorType.OPERATION_FAILED,
+                        "流程配置不允许自选审批人，请为节点[" + node.getNodeName() + "]配置固定审批人");
+            }
+            if (requestedApproverId == null) {
+                throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择节点[" + node.getNodeName() + "]的审批人");
+            }
+            return requestedApproverId;
+        }
+        if (requestedApproverId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL,
+                    "节点[" + node.getNodeName() + "]为角色/岗位来源，当前版本请指定具体审批人");
+        }
+        return requestedApproverId;
+    }
+
+    private Long parseUserId(String value, String nodeName) {
+        if (!StringUtils.hasText(value)) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "节点[" + nodeName + "]未配置审批用户");
+        }
+        try {
+            return Long.parseLong(value.trim());
+        } catch (NumberFormatException ex) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "节点[" + nodeName + "]审批用户ID不合法");
         }
     }
 }

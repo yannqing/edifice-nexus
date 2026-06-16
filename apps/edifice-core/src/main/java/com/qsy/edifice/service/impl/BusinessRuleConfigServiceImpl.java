@@ -120,6 +120,29 @@ public class BusinessRuleConfigServiceImpl implements BusinessRuleConfigService 
                 .toList();
     }
 
+    @Override
+    public boolean booleanValue(String bizType, String ruleKey, boolean defaultValue) {
+        BusinessRuleConfig rule = enabledRule(bizType, ruleKey);
+        if (rule == null || !StringUtils.hasText(rule.getRuleValue())) return defaultValue;
+        return Boolean.parseBoolean(rule.getRuleValue().trim());
+    }
+
+    @Override
+    public String stringValue(String bizType, String ruleKey, String defaultValue) {
+        BusinessRuleConfig rule = enabledRule(bizType, ruleKey);
+        if (rule == null || rule.getRuleValue() == null) return defaultValue;
+        return rule.getRuleValue();
+    }
+
+    private BusinessRuleConfig enabledRule(String bizType, String ruleKey) {
+        if (!StringUtils.hasText(bizType) || !StringUtils.hasText(ruleKey)) return null;
+        return businessRuleConfigMapper.selectOne(new LambdaQueryWrapper<BusinessRuleConfig>()
+                .eq(BusinessRuleConfig::getBizType, bizType)
+                .eq(BusinessRuleConfig::getRuleKey, ruleKey)
+                .eq(BusinessRuleConfig::getEnabled, 1)
+                .last("LIMIT 1"));
+    }
+
     private BusinessRuleConfig find(Long id) {
         if (id == null) throw new BusinessException(ErrorType.ARGS_NOT_NULL, "规则配置ID不能为空");
         BusinessRuleConfig entity = businessRuleConfigMapper.selectById(id);

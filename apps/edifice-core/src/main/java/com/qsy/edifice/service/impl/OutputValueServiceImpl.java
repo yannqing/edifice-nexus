@@ -6,6 +6,7 @@ import com.qsy.edifice.domain.dto.CreateOutputValueDto;
 import com.qsy.edifice.domain.entity.*;
 import com.qsy.edifice.domain.excel.OutputValueExcelData;
 import com.qsy.edifice.domain.vo.OutputValueVo;
+import com.qsy.edifice.enums.ApprovalBizType;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.OutputValueDistributionMapper;
@@ -104,6 +105,9 @@ public class OutputValueServiceImpl implements OutputValueService {
     @Resource
     private ContractService contractService;
 
+    @Resource
+    private BusinessRuleConfigService businessRuleConfigService;
+
     // ==================== 查询 ====================
 
     @Override
@@ -150,7 +154,9 @@ public class OutputValueServiceImpl implements OutputValueService {
         if (total.signum() == 0) {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "本阶段产值为 0，请检查合同金额和阶段产值比例");
         }
-        if (total.signum() < 0) {
+        boolean allowNegativeOutput = businessRuleConfigService.booleanValue(
+                ApprovalBizType.OUTPUT.getExt(), "allow_negative_output", false);
+        if (total.signum() < 0 && !allowNegativeOutput) {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "本阶段产值不能为负，请检查合同金额和阶段产值比例");
         }
 
@@ -287,7 +293,9 @@ public class OutputValueServiceImpl implements OutputValueService {
         if (stage == null || !projectId.equals(stage.getProjectId())) {
             throw new BusinessException(ErrorType.STAGE_NOT_FOUND);
         }
-        if (!OUTPUT_VALUE_ALLOWED_STAGE_STATUSES.contains(stage.getStageStatus())) {
+        boolean requireStageInspectionPassed = businessRuleConfigService.booleanValue(
+                ApprovalBizType.OUTPUT.getExt(), "require_stage_inspection_passed", true);
+        if (requireStageInspectionPassed && !OUTPUT_VALUE_ALLOWED_STAGE_STATUSES.contains(stage.getStageStatus())) {
             throw new BusinessException(ErrorType.STAGE_STATUS_INVALID,
                     "只有已完成阶段才能创建产值分配单，当前阶段[" + stage.getStageName() + "]状态不允许");
         }
