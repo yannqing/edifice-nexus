@@ -83,11 +83,6 @@ public class OperationAuditAspect {
             return true;
         }
 
-        // 审计日志属于敏感数据，查看行为本身也需要留痕。
-        if (path.startsWith("/audit-logs/")) {
-            return false;
-        }
-
         String method = request.getMethod();
         if ("GET".equalsIgnoreCase(method)
                 || "HEAD".equalsIgnoreCase(method)
