@@ -4,7 +4,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.qsy.edifice.common.Code;
 import com.qsy.edifice.domain.common.BaseResponse;
+import com.qsy.edifice.domain.dto.CreateApprovalCcDto;
 import com.qsy.edifice.domain.dto.GetTodoCenterListDto;
+import com.qsy.edifice.domain.dto.UrgeApprovalDto;
+import com.qsy.edifice.domain.dto.WithdrawApprovalDto;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.domain.vo.TodoCenterDetailVo;
 import com.qsy.edifice.domain.vo.TodoCenterItemVo;
@@ -19,6 +22,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -55,6 +60,13 @@ public class TodoCenterController {
         return ResultUtils.success(Code.SUCCESS, todoCenterService.processed(userId(request), dto));
     }
 
+    @GetMapping("/cc")
+    @Operation(summary = "抄送我的")
+    public BaseResponse<Page<TodoCenterItemVo>> cc(GetTodoCenterListDto dto, HttpServletRequest request)
+            throws JsonProcessingException {
+        return ResultUtils.success(Code.SUCCESS, todoCenterService.cc(userId(request), dto));
+    }
+
     @GetMapping("/{recordId}")
     @Operation(summary = "待办详情")
     public BaseResponse<TodoCenterDetailVo> detail(@PathVariable Long recordId, HttpServletRequest request)
@@ -66,6 +78,30 @@ public class TodoCenterController {
     @Operation(summary = "待办统计")
     public BaseResponse<TodoCenterStatsVo> statistics(HttpServletRequest request) throws JsonProcessingException {
         return ResultUtils.success(Code.SUCCESS, todoCenterService.statistics(userId(request)));
+    }
+
+    @PostMapping("/cc")
+    @Operation(summary = "创建审批抄送")
+    public BaseResponse<Boolean> createCc(@RequestBody CreateApprovalCcDto dto, HttpServletRequest request)
+            throws JsonProcessingException {
+        todoCenterService.createCc(userId(request), dto);
+        return ResultUtils.success(Code.SUCCESS, true, "抄送成功");
+    }
+
+    @PostMapping("/urge")
+    @Operation(summary = "催办审批")
+    public BaseResponse<Boolean> urge(@RequestBody UrgeApprovalDto dto, HttpServletRequest request)
+            throws JsonProcessingException {
+        todoCenterService.urge(userId(request), dto);
+        return ResultUtils.success(Code.SUCCESS, true, "催办成功");
+    }
+
+    @PostMapping("/withdraw")
+    @Operation(summary = "撤回审批")
+    public BaseResponse<Boolean> withdraw(@RequestBody WithdrawApprovalDto dto, HttpServletRequest request)
+            throws JsonProcessingException {
+        todoCenterService.withdraw(userId(request), dto);
+        return ResultUtils.success(Code.SUCCESS, true, "撤回成功");
     }
 
     private Long userId(HttpServletRequest request) throws JsonProcessingException {

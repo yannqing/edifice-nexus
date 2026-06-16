@@ -3,7 +3,10 @@ package com.qsy.edifice.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.qsy.edifice.domain.dto.CreateApprovalCcDto;
 import com.qsy.edifice.domain.dto.GetTodoCenterListDto;
+import com.qsy.edifice.domain.dto.UrgeApprovalDto;
+import com.qsy.edifice.domain.dto.WithdrawApprovalDto;
 import com.qsy.edifice.domain.entity.*;
 import com.qsy.edifice.domain.vo.TodoCenterDetailVo;
 import com.qsy.edifice.domain.vo.TodoCenterItemVo;
@@ -16,6 +19,7 @@ import com.qsy.edifice.service.ApprovalFlowService;
 import com.qsy.edifice.service.TodoCenterService;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
@@ -62,6 +66,15 @@ public class TodoCenterServiceImpl implements TodoCenterService {
     private ProjectMapper projectMapper;
 
     @Resource
+    private ProjectStageMapper projectStageMapper;
+
+    @Resource
+    private ApprovalCcMapper approvalCcMapper;
+
+    @Resource
+    private ApprovalUrgeMapper approvalUrgeMapper;
+
+    @Resource
     private ApprovalFlowService approvalFlowService;
 
     @Override
@@ -94,6 +107,33 @@ public class TodoCenterServiceImpl implements TodoCenterService {
     }
 
     @Override
+    public Page<TodoCenterItemVo> cc(Long userId, GetTodoCenterListDto dto) {
+        if (userId == null) return emptyPage(dto);
+        List<ApprovalCc> ccRows = approvalCcMapper.selectList(new LambdaQueryWrapper<ApprovalCc>()
+                .eq(ApprovalCc::getCcUserId, userId)
+                .orderByDesc(ApprovalCc::getCreatedTime));
+        if (ccRows.isEmpty()) return emptyPage(dto);
+        Set<Long> recordIds = ccRows.stream().map(ApprovalCc::getRecordId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, ApprovalRecords> records = recordIds.isEmpty() ? Map.of()
+                : approvalRecordsMapper.selectBatchIds(recordIds).stream()
+                .collect(Collectors.toMap(ApprovalRecords::getApprovalRecordId, Function.identity(), (left, right) -> left));
+        List<ApprovalRecords> recordList = new ArrayList<>(records.values());
+        Map<String, String> businessNames = resolveBusinessNames(recordList);
+        Map<Long, String> userNames = resolveUserNames(userIds(recordList));
+        List<TodoCenterItemVo> items = new ArrayList<>();
+        for (ApprovalCc cc : ccRows) {
+            ApprovalRecords record = records.get(cc.getRecordId());
+            if (record == null) continue;
+            TodoCenterItemVo item = buildItem(record, record, businessNames, userNames, false,
+                    statusOf(record), statusLabel(statusOf(record)));
+            item.setCreatedTime(cc.getCreatedTime());
+            item.setUpdatedTime(cc.getCreatedTime());
+            items.add(item);
+        }
+        return page(items, dto);
+    }
+
+    @Override
     public TodoCenterDetailVo detail(Long userId, Long recordId) {
         if (userId == null || recordId == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "审批记录id不能为空");
@@ -109,6 +149,13 @@ public class TodoCenterServiceImpl implements TodoCenterService {
         List<ApprovalRecords> chain = queryChainRecords(type, record.getInspectionFormId());
         boolean visible = chain.stream().anyMatch(item -> userId.equals(item.getApprover())
                 || userId.equals(item.getApplyUserId()));
+        if (!visible) {
+            Long ccVisible = approvalCcMapper.selectCount(new LambdaQueryWrapper<ApprovalCc>()
+                    .eq(ApprovalCc::getCcUserId, userId)
+                    .eq(ApprovalCc::getBizTypeExt, type.getExt())
+                    .eq(ApprovalCc::getBizId, record.getInspectionFormId()));
+            visible = ccVisible != null && ccVisible > 0;
+        }
         if (!visible) {
             throw new BusinessException(ErrorType.NO_AUTH_ERROR, "无权查看该待办详情");
         }
@@ -141,6 +188,8 @@ public class TodoCenterServiceImpl implements TodoCenterService {
         Long processedCount = approvalRecordsMapper.selectCount(new LambdaQueryWrapper<ApprovalRecords>()
                 .eq(ApprovalRecords::getApprover, userId)
                 .in(ApprovalRecords::getInspectionFormStatus, STATUS_APPROVED, STATUS_REJECTED));
+        Long ccCount = approvalCcMapper.selectCount(new LambdaQueryWrapper<ApprovalCc>()
+                .eq(ApprovalCc::getCcUserId, userId));
         Long todayPendingCount = approvalRecordsMapper.selectCount(new LambdaQueryWrapper<ApprovalRecords>()
                 .eq(ApprovalRecords::getApprover, userId)
                 .eq(ApprovalRecords::getInspectionFormStatus, STATUS_PENDING)
@@ -150,9 +199,114 @@ public class TodoCenterServiceImpl implements TodoCenterService {
                 .pendingCount(pendingCount)
                 .initiatedCount(initiatedCount)
                 .processedCount(processedCount)
-                .ccCount(0L)
+                .ccCount(ccCount)
                 .todayPendingCount(todayPendingCount)
                 .build();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void createCc(Long userId, CreateApprovalCcDto dto) {
+        if (userId == null || dto == null || dto.getRecordId() == null
+                || dto.getCcUserIds() == null || dto.getCcUserIds().isEmpty()) {
+            return;
+        }
+        ApprovalRecords record = approvalRecordsMapper.selectById(dto.getRecordId());
+        if (record == null) return;
+        ApprovalBizType type = resolveBizType(record);
+        if (type == null || record.getInspectionFormId() == null) return;
+        ensureParticipant(userId, type, record.getInspectionFormId());
+
+        Set<Long> targetIds = dto.getCcUserIds().stream()
+                .filter(Objects::nonNull)
+                .filter(id -> !id.equals(userId))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (targetIds.isEmpty()) return;
+
+        String comment = StringUtils.hasText(dto.getComment()) ? dto.getComment().trim() : null;
+        for (Long targetId : targetIds) {
+            SysUser user = sysUserMapper.selectById(targetId);
+            if (user == null || !Integer.valueOf(1).equals(user.getStatus())
+                    || Integer.valueOf(0).equals(user.getEmploymentStatus())) {
+                continue;
+            }
+            Long exists = approvalCcMapper.selectCount(new LambdaQueryWrapper<ApprovalCc>()
+                    .eq(ApprovalCc::getCcUserId, targetId)
+                    .eq(ApprovalCc::getBizTypeExt, type.getExt())
+                    .eq(ApprovalCc::getBizId, record.getInspectionFormId()));
+            if (exists != null && exists > 0) continue;
+            approvalCcMapper.insert(ApprovalCc.builder()
+                    .recordId(record.getApprovalRecordId())
+                    .bizTypeExt(type.getExt())
+                    .bizId(record.getInspectionFormId())
+                    .ccUserId(targetId)
+                    .fromUserId(userId)
+                    .comment(comment)
+                    .build());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void urge(Long userId, UrgeApprovalDto dto) {
+        if (userId == null || dto == null || dto.getRecordId() == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "审批记录id不能为空");
+        }
+        ApprovalRecords record = pendingRecord(dto.getRecordId());
+        ApprovalBizType type = resolveBizType(record);
+        if (type == null || record.getInspectionFormId() == null) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "审批业务信息不完整");
+        }
+        if (!userId.equals(record.getApplyUserId())) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只有流程发起人可以催办");
+        }
+        LocalDateTime oneHourAgo = LocalDateTime.now().minusHours(1);
+        Long recentCount = approvalUrgeMapper.selectCount(new LambdaQueryWrapper<ApprovalUrge>()
+                .eq(ApprovalUrge::getFromUserId, userId)
+                .eq(ApprovalUrge::getRecordId, record.getApprovalRecordId())
+                .ge(ApprovalUrge::getCreatedTime, oneHourAgo));
+        if (recentCount != null && recentCount > 0) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "已催办，请稍后再试");
+        }
+        approvalUrgeMapper.insert(ApprovalUrge.builder()
+                .recordId(record.getApprovalRecordId())
+                .bizTypeExt(type.getExt())
+                .bizId(record.getInspectionFormId())
+                .fromUserId(userId)
+                .toUserId(record.getApprover())
+                .comment(StringUtils.hasText(dto.getComment()) ? dto.getComment().trim() : null)
+                .build());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void withdraw(Long userId, WithdrawApprovalDto dto) {
+        if (userId == null || dto == null || dto.getRecordId() == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "审批记录id不能为空");
+        }
+        ApprovalRecords record = pendingRecord(dto.getRecordId());
+        if (!userId.equals(record.getApplyUserId())) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只有流程发起人可以撤回");
+        }
+        ApprovalBizType type = resolveBizType(record);
+        if (type == null || record.getInspectionFormId() == null) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "审批业务信息不完整");
+        }
+        String reason = StringUtils.hasText(dto.getReason()) ? dto.getReason().trim() : "申请人撤回";
+
+        if (type == ApprovalBizType.FILE) {
+            withdrawProjectFile(record, reason);
+            return;
+        }
+
+        record.setInspectionFormStatus(STATUS_REJECTED);
+        record.setApprovalDescription(reason);
+        record.setNextApproverId(null);
+        record.setUpdatedTime(LocalDateTime.now());
+        if (approvalRecordsMapper.updatePendingResult(record) != 1) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "该审批已被处理，请刷新后重试");
+        }
+        updateBusinessAfterWithdraw(type, record.getInspectionFormId());
     }
 
     private Set<String> initiatedBusinessKeys(Long userId) {
@@ -165,6 +319,93 @@ public class TodoCenterServiceImpl implements TodoCenterService {
                 .map(this::businessKey)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private ApprovalRecords pendingRecord(Long recordId) {
+        ApprovalRecords record = approvalRecordsMapper.selectById(recordId);
+        if (record == null) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "审批记录不存在");
+        }
+        if (!Integer.valueOf(STATUS_PENDING).equals(record.getInspectionFormStatus())) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "当前审批已被处理，请刷新后重试");
+        }
+        return record;
+    }
+
+    private void ensureParticipant(Long userId, ApprovalBizType type, Long bizId) {
+        List<ApprovalRecords> chain = queryChainRecords(type, bizId);
+        boolean visible = chain.stream().anyMatch(record -> userId.equals(record.getApprover())
+                || userId.equals(record.getApplyUserId()));
+        if (!visible) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "无权操作该审批");
+        }
+    }
+
+    private void withdrawProjectFile(ApprovalRecords record, String reason) {
+        ProjectFiles file = projectFilesMapper.selectById(record.getInspectionFormId());
+        if (file == null) {
+            throw new BusinessException(ErrorType.FILE_NOT_FOUND, "项目文件不存在");
+        }
+        record.setInspectionFormStatus(STATUS_REJECTED);
+        record.setApprovalDescription(reason);
+        record.setNextApproverId(null);
+        record.setUpdatedTime(LocalDateTime.now());
+        if (approvalRecordsMapper.updatePendingResult(record) != 1) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "该审批已被处理，请刷新后重试");
+        }
+        file.setApprovalStatus(3);
+        file.setCurrentRecordId(null);
+        projectFilesMapper.updateById(file);
+        projectFilesMapper.deleteById(file.getProjectFileId());
+    }
+
+    private void updateBusinessAfterWithdraw(ApprovalBizType type, Long bizId) {
+        switch (type) {
+            case INSPECTION -> {
+                InspectionForm form = inspectionFormMapper.selectById(bizId);
+                if (form == null) {
+                    throw new BusinessException(ErrorType.INSPECTION_FORM_NOT_FOUND);
+                }
+                form.setInspectionFormStatus(4);
+                inspectionFormMapper.updateById(form);
+                ProjectStage stage = form.getProjectStageId() == null ? null
+                        : projectStageMapper.selectById(form.getProjectStageId());
+                if (stage != null && Integer.valueOf(2).equals(stage.getStageStatus())) {
+                    stage.setStageStatus(1);
+                    projectStageMapper.updateById(stage);
+                }
+            }
+            case BID -> {
+                Bid bid = bidMapper.selectById(bizId);
+                if (bid == null) {
+                    throw new BusinessException(ErrorType.BID_NOT_FOUND);
+                }
+                bid.setApprovalStatus(3);
+                bid.setCurrentRecordId(null);
+                bidMapper.updateById(bid);
+            }
+            case ACCEPTANCE -> {
+                ProjectAcceptance acceptance = projectAcceptanceMapper.selectById(bizId);
+                if (acceptance == null) {
+                    throw new BusinessException(ErrorType.ACCEPTANCE_NOT_FOUND);
+                }
+                acceptance.setStatus(3);
+                acceptance.setCurrentRecordId(null);
+                projectAcceptanceMapper.updateById(acceptance);
+            }
+            case OA_APPLICATION -> {
+                OaApplication application = oaApplicationMapper.selectById(bizId);
+                if (application == null) {
+                    throw new BusinessException(ErrorType.OPERATION_FAILED, "申请不存在");
+                }
+                application.setStatus(4);
+                application.setCurrentRecordId(null);
+                oaApplicationMapper.updateById(application);
+            }
+            case OUTPUT, TIMESHEET ->
+                    throw new BusinessException(ErrorType.OPERATION_FAILED, "该业务暂不支持统一撤回，请到原业务页面处理");
+            default -> throw new BusinessException(ErrorType.OPERATION_FAILED, "该审批类型暂不支持撤回");
+        }
     }
 
     private List<TodoCenterItemVo> buildRecordItems(List<ApprovalRecords> records, boolean pendingAction) {

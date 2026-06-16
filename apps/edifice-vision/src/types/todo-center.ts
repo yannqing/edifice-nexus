@@ -41,3 +41,19 @@ export interface GetTodoCenterListParams {
   current?: number;
   pageSize?: number;
 }
+
+export interface CreateApprovalCcParams {
+  recordId: string;
+  ccUserIds: string[];
+  comment?: string;
+}
+
+export interface UrgeApprovalParams {
+  recordId: string;
+  comment?: string;
+}
+
+export interface WithdrawApprovalParams {
+  recordId: string;
+  reason?: string;
+}

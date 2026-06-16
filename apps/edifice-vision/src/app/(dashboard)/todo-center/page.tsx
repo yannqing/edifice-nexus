@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  BellRing,
   CheckCircle2,
   Check,
   ChevronLeft,
@@ -12,6 +13,7 @@ import {
   Eye,
   Inbox,
   Loader2,
+  RotateCcw,
   Search,
   Send,
   UserRoundCheck,
@@ -36,7 +38,14 @@ import { approveBid } from "@/services/bid";
 import { approveOaApplication } from "@/services/oa";
 import { approveProjectFile } from "@/services/project-file";
 import { getUserList } from "@/services/project";
-import { getTodoCenterDetail, getTodoCenterList, getTodoCenterStats } from "@/services/todo-center";
+import {
+  createApprovalCc,
+  getTodoCenterDetail,
+  getTodoCenterList,
+  getTodoCenterStats,
+  urgeApproval,
+  withdrawApproval,
+} from "@/services/todo-center";
 import { ResponseCode } from "@/types/api";
 import type { ApprovalRecordVo } from "@/types/approval";
 import type { UserListItem } from "@/types/project";
@@ -76,6 +85,7 @@ const statusStyles: Record<number, string> = {
 };
 
 const directApprovalBizTypes = new Set(["inspection", "file", "bid", "acceptance", "oa_application"]);
+const withdrawSupportedBizTypes = new Set(["inspection", "file", "bid", "acceptance", "oa_application"]);
 
 function formatTime(value?: string | null) {
   return value?.replace("T", " ").slice(0, 16) || "-";
@@ -110,9 +120,13 @@ export default function TodoCenterPage() {
   const [approveOpen, setApproveOpen] = useState(false);
   const [approveItem, setApproveItem] = useState<TodoCenterItem | null>(null);
   const [nextApproverId, setNextApproverId] = useState("");
+  const [ccUserIds, setCcUserIds] = useState<string[]>([]);
   const [comment, setComment] = useState("");
   const [terminateHere, setTerminateHere] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [withdrawItem, setWithdrawItem] = useState<TodoCenterItem | null>(null);
+  const [withdrawReason, setWithdrawReason] = useState("");
+  const [withdrawing, setWithdrawing] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -134,12 +148,6 @@ export default function TodoCenterPage() {
   }, []);
 
   const fetchList = useCallback(async (signal?: AbortSignal) => {
-    if (activeTab === "cc") {
-      setItems([]);
-      setTotal(0);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     try {
       const res = await getTodoCenterList(
@@ -211,6 +219,7 @@ export default function TodoCenterPage() {
     }
     setApproveItem(item);
     setNextApproverId("");
+    setCcUserIds([]);
     setComment("");
     setTerminateHere(false);
     setApproveOpen(true);
@@ -226,6 +235,47 @@ export default function TodoCenterPage() {
     if (submitting) return;
     setApproveOpen(false);
     setApproveItem(null);
+    setCcUserIds([]);
+  };
+
+  const handleUrge = async (item: TodoCenterItem) => {
+    try {
+      const res = await urgeApproval({ recordId: item.todoId });
+      if (res.code === ResponseCode.SUCCESS) {
+        toast.success("已发送催办提醒");
+        window.dispatchEvent(new Event("message-center:updated"));
+      }
+    } catch {
+      // request interceptor shows the business error.
+    }
+  };
+
+  const openWithdraw = (item: TodoCenterItem) => {
+    setWithdrawItem(item);
+    setWithdrawReason("");
+  };
+
+  const handleWithdraw = async () => {
+    if (!withdrawItem) return;
+    setWithdrawing(true);
+    try {
+      const res = await withdrawApproval({
+        recordId: withdrawItem.todoId,
+        reason: withdrawReason.trim() || undefined,
+      });
+      if (res.code === ResponseCode.SUCCESS) {
+        toast.success("已撤回审批");
+        setWithdrawItem(null);
+        setWithdrawReason("");
+        refreshAll();
+        if (detailOpen && detail?.item.todoId === withdrawItem.todoId) {
+          setDetailOpen(false);
+          setDetail(null);
+        }
+      }
+    } finally {
+      setWithdrawing(false);
+    }
   };
 
   const approveDefaultTerminate = Boolean(
@@ -269,9 +319,24 @@ export default function TodoCenterPage() {
               : await approveOaApplication(common);
 
       if (res.code === ResponseCode.SUCCESS) {
+        if (ccUserIds.length > 0) {
+          try {
+            const ccRes = await createApprovalCc({
+              recordId: approveItem.todoId,
+              ccUserIds,
+              comment: comment.trim() || undefined,
+            });
+            if (ccRes.code !== ResponseCode.SUCCESS) {
+              toast.error("审批已提交，但抄送写入失败");
+            }
+          } catch {
+            toast.error("审批已提交，但抄送写入失败");
+          }
+        }
         toast.success(pass ? "审批通过" : "已驳回");
         setApproveOpen(false);
         setApproveItem(null);
+        setCcUserIds([]);
         refreshAll();
         if (detailOpen && detail?.item.todoId === approveItem.todoId) {
           setDetailOpen(false);
@@ -326,7 +391,7 @@ export default function TodoCenterPage() {
             <Eye className="w-5 h-5 text-slate-500" />
           </div>
           <div className="text-2xl font-semibold text-slate-900 mt-2">{stats.ccCount}</div>
-          <div className="text-xs text-slate-400 mt-1">预留抄送入口</div>
+          <div className="text-xs text-slate-400 mt-1">审批流转抄送</div>
         </div>
       </div>
 
@@ -452,6 +517,25 @@ export default function TodoCenterPage() {
                           查看
                         </Button>
                       )}
+                      {activeTab === "initiated" && item.status === 0 && (
+                        <>
+                          <Button size="sm" variant="outline" onClick={() => handleUrge(item)}>
+                            <BellRing className="w-4 h-4 mr-1" />
+                            催办
+                          </Button>
+                          {withdrawSupportedBizTypes.has(item.bizType ?? "") && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-rose-600 hover:text-rose-700"
+                              onClick={() => openWithdraw(item)}
+                            >
+                              <RotateCcw className="w-4 h-4 mr-1" />
+                              撤回
+                            </Button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -507,6 +591,24 @@ export default function TodoCenterPage() {
                   <Button onClick={() => openApproval(detail.item)}>
                     审批
                   </Button>
+                )}
+                {activeTab === "initiated" && detail.item.status === 0 && (
+                  <>
+                    <Button variant="outline" onClick={() => handleUrge(detail.item)}>
+                      <BellRing className="w-4 h-4 mr-1" />
+                      催办
+                    </Button>
+                    {withdrawSupportedBizTypes.has(detail.item.bizType ?? "") && (
+                      <Button
+                        variant="outline"
+                        className="text-rose-600 hover:text-rose-700"
+                        onClick={() => openWithdraw(detail.item)}
+                      >
+                        <RotateCcw className="w-4 h-4 mr-1" />
+                        撤回
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -577,6 +679,30 @@ export default function TodoCenterPage() {
                 placeholder="请输入审批意见或驳回原因"
               />
             </div>
+
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">
+                抄送人
+              </label>
+              <select
+                multiple
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-24"
+                value={ccUserIds}
+                onChange={(event) => {
+                  const selected = Array.from(event.target.selectedOptions).map((option) => option.value);
+                  setCcUserIds(selected);
+                }}
+              >
+                {users
+                  .filter((user) => String(user.userId) !== approveItem?.applyUserId)
+                  .map((user) => (
+                    <option key={user.userId} value={user.userId}>
+                      {user.realName || user.username}
+                    </option>
+                  ))}
+              </select>
+              <p className="text-xs text-slate-400 mt-1">可按住 Command / Ctrl 多选</p>
+            </div>
           </div>
 
           <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-slate-100">
@@ -587,6 +713,41 @@ export default function TodoCenterPage() {
             <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleApprove(true)} disabled={submitting}>
               {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Check className="w-4 h-4 mr-1" />}
               通过
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(withdrawItem)} onOpenChange={(open) => !open && !withdrawing && setWithdrawItem(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>撤回审批</DialogTitle>
+            <DialogDescription>
+              撤回后当前审批节点会结束，业务单据会回到可重新提交或已撤回状态。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="p-3 bg-rose-50 border border-rose-100 rounded-lg text-sm text-rose-700">
+              此操作会影响当前审批流程，请确认是否撤回：{withdrawItem?.bizName || withdrawItem?.title}
+            </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">撤回原因</label>
+              <textarea
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={3}
+                value={withdrawReason}
+                onChange={(event) => setWithdrawReason(event.target.value)}
+                placeholder="可选，默认记录为申请人撤回"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-slate-100">
+            <Button variant="outline" disabled={withdrawing} onClick={() => setWithdrawItem(null)}>
+              取消
+            </Button>
+            <Button className="bg-rose-600 hover:bg-rose-700" disabled={withdrawing} onClick={handleWithdraw}>
+              {withdrawing && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
+              确认撤回
             </Button>
           </div>
         </DialogContent>

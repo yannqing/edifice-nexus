@@ -1,11 +1,14 @@
-import { get } from "@/lib/request";
+import { get, post } from "@/lib/request";
 import type { BaseResponse } from "@/types/api";
 import type {
+  CreateApprovalCcParams,
   GetTodoCenterListParams,
   TodoCenterDetail,
   TodoCenterItem,
   TodoCenterStats,
   TodoCenterTab,
+  UrgeApprovalParams,
+  WithdrawApprovalParams,
 } from "@/types/todo-center";
 
 interface PageResult<T> {
@@ -27,7 +30,7 @@ function toQuery(params?: GetTodoCenterListParams) {
 }
 
 export function getTodoCenterList(
-  tab: Exclude<TodoCenterTab, "cc">,
+  tab: TodoCenterTab,
   params?: GetTodoCenterListParams,
   signal?: AbortSignal
 ): Promise<BaseResponse<PageResult<TodoCenterItem>>> {
@@ -46,4 +49,16 @@ export function getTodoCenterDetail(
   signal?: AbortSignal
 ): Promise<BaseResponse<TodoCenterDetail>> {
   return get<TodoCenterDetail>(`/todo-center/${recordId}`, { signal });
+}
+
+export function createApprovalCc(params: CreateApprovalCcParams): Promise<BaseResponse<boolean>> {
+  return post<boolean>("/todo-center/cc", { body: params });
+}
+
+export function urgeApproval(params: UrgeApprovalParams): Promise<BaseResponse<boolean>> {
+  return post<boolean>("/todo-center/urge", { body: params });
+}
+
+export function withdrawApproval(params: WithdrawApprovalParams): Promise<BaseResponse<boolean>> {
+  return post<boolean>("/todo-center/withdraw", { body: params });
 }

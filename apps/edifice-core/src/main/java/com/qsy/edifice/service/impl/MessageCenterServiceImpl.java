@@ -25,9 +25,16 @@ public class MessageCenterServiceImpl implements MessageCenterService {
     private static final String SOURCE_ANNOUNCEMENT = "announcement";
     private static final String SOURCE_APPROVAL = "approval";
     private static final String SOURCE_APPROVAL_RESULT = "approval_result";
+    private static final String SOURCE_APPROVAL_URGE = "approval_urge";
 
     @Resource
     private ApprovalRecordsMapper approvalRecordsMapper;
+
+    @Resource
+    private ApprovalUrgeMapper approvalUrgeMapper;
+
+    @Resource
+    private SysUserMapper sysUserMapper;
 
     @Resource
     private AnnouncementMapper announcementMapper;
@@ -139,9 +146,25 @@ public class MessageCenterServiceImpl implements MessageCenterService {
                         .or()
                         .notIn(ApprovalRecords::getApprovalDescription, "申请人撤回", "上传人撤销"))
                 .orderByDesc(ApprovalRecords::getUpdatedTime));
+        List<ApprovalUrge> urges = approvalUrgeMapper.selectList(new LambdaQueryWrapper<ApprovalUrge>()
+                .eq(ApprovalUrge::getToUserId, userId)
+                .orderByDesc(ApprovalUrge::getCreatedTime));
+        Set<Long> urgedRecordIds = urges.stream()
+                .map(ApprovalUrge::getRecordId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, ApprovalRecords> urgedRecords = urgedRecordIds.isEmpty()
+                ? Map.of()
+                : approvalRecordsMapper.selectBatchIds(urgedRecordIds).stream()
+                .collect(Collectors.toMap(ApprovalRecords::getApprovalRecordId, Function.identity(), (left, right) -> left));
         List<ApprovalRecords> allApprovalRecords = new ArrayList<>(approvals);
         allApprovalRecords.addAll(approvalResults);
+        allApprovalRecords.addAll(urgedRecords.values());
         Map<String, String> businessNames = resolveBusinessNames(allApprovalRecords);
+        Map<Long, String> urgeFromUserNames = resolveUserNames(urges.stream()
+                .map(ApprovalUrge::getFromUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet()));
 
         for (ApprovalRecords record : approvals) {
             String businessName = businessName(record, businessNames);
@@ -178,6 +201,27 @@ public class MessageCenterServiceImpl implements MessageCenterService {
                     .sourceType(SOURCE_APPROVAL_RESULT)
                     .sourceId(record.getApprovalRecordId())
                     .createdTime(record.getUpdatedTime() != null ? record.getUpdatedTime() : record.getCreatedTime())
+                    .build());
+        }
+
+        for (ApprovalUrge urge : urges) {
+            ApprovalRecords record = urgedRecords.get(urge.getRecordId());
+            String businessName = record == null ? "审批事项" : businessName(record, businessNames);
+            String fromUserName = urgeFromUserNames.getOrDefault(urge.getFromUserId(), "申请人");
+            String sourceKey = key(SOURCE_APPROVAL_URGE, urge.getUrgeId());
+            String comment = StringUtils.hasText(urge.getComment()) ? "：" + urge.getComment().trim() : "";
+            messages.add(MessageCenterItemVo.builder()
+                    .messageKey(sourceKey)
+                    .category("approval")
+                    .categoryLabel("催办提醒")
+                    .title(businessName + "催办提醒")
+                    .content(fromUserName + "催您尽快处理审批" + comment)
+                    .link(record == null ? "/todo-center" : linkFor(record, true))
+                    .priority(2)
+                    .read(readKeys.contains(sourceKey))
+                    .sourceType(SOURCE_APPROVAL_URGE)
+                    .sourceId(urge.getUrgeId())
+                    .createdTime(urge.getCreatedTime())
                     .build());
         }
 
@@ -234,6 +278,10 @@ public class MessageCenterServiceImpl implements MessageCenterService {
                                 .or()
                                 .notIn(ApprovalRecords::getApprovalDescription, "申请人撤回", "上传人撤销")))
                 .forEach(record -> sources.add(new MessageSource(SOURCE_APPROVAL_RESULT, record.getApprovalRecordId())));
+        approvalUrgeMapper.selectList(new LambdaQueryWrapper<ApprovalUrge>()
+                        .select(ApprovalUrge::getUrgeId)
+                        .eq(ApprovalUrge::getToUserId, userId))
+                .forEach(urge -> sources.add(new MessageSource(SOURCE_APPROVAL_URGE, urge.getUrgeId())));
         announcementMapper.selectList(new LambdaQueryWrapper<Announcement>()
                         .select(Announcement::getAnnouncementId)
                         .eq(Announcement::getStatus, 1)
@@ -345,6 +393,19 @@ public class MessageCenterServiceImpl implements MessageCenterService {
 
     private String displayName(String label, String name) {
         return StringUtils.hasText(name) ? label + "「" + name + "」" : label;
+    }
+
+    private Map<Long, String> resolveUserNames(Set<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) return Map.of();
+        return sysUserMapper.selectBatchIds(userIds).stream()
+                .filter(user -> user.getUserId() != null)
+                .collect(Collectors.toMap(SysUser::getUserId, this::displayUserName, (left, right) -> left));
+    }
+
+    private String displayUserName(SysUser user) {
+        if (StringUtils.hasText(user.getRealName())) return user.getRealName();
+        if (StringUtils.hasText(user.getUsername())) return user.getUsername();
+        return String.valueOf(user.getUserId());
     }
 
     private record MessageSource(String sourceType, Long sourceId) {
