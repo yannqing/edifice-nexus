@@ -6,7 +6,9 @@ import com.qsy.edifice.domain.dto.UpdateContractDto;
 import com.qsy.edifice.domain.entity.Contract;
 import com.qsy.edifice.domain.vo.ContractChangeLogVo;
 import com.qsy.edifice.domain.vo.ContractListVo;
+import jakarta.servlet.http.HttpServletResponse;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -69,6 +71,13 @@ public interface ContractService {
      * @return 变更日志
      */
     List<ContractChangeLogVo> getContractChangeLogs(Long contractId);
+
+    /**
+     * 导出合同管理列表
+     * @param dto 查询条件
+     * @param response HTTP 响应
+     */
+    void exportContracts(GetContractListDto dto, HttpServletResponse response) throws IOException;
 
     /**
      * 保存合同

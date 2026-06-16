@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,6 +25,8 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.io.IOException;
 
 @Tag(name = "项目归档")
 @RestController
@@ -53,6 +56,12 @@ public class ProjectArchiveController {
     @Operation(summary = "项目归档详情", description = "聚合项目、合同、阶段、验工、产值、回款和项目文件")
     public BaseResponse<ProjectArchiveDetailVo> detail(@PathVariable("id") Long projectId) {
         return ResultUtils.success(Code.SUCCESS, projectService.getProjectArchiveDetail(projectId));
+    }
+
+    @GetMapping("/package/{id}")
+    @Operation(summary = "下载项目归档资料包", description = "打包下载合同、项目文件、验工材料等归档资料")
+    public void packageDownload(@PathVariable("id") Long projectId, HttpServletResponse response) throws IOException {
+        projectService.exportProjectArchivePackage(projectId, response);
     }
 
     @PutMapping("/archive/{id}")

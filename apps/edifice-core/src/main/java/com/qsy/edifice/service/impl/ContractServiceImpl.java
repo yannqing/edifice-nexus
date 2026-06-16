@@ -1,5 +1,6 @@
 package com.qsy.edifice.service.impl;
 
+import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.GetContractListDto;
@@ -9,6 +10,7 @@ import com.qsy.edifice.domain.entity.ContractChangeLog;
 import com.qsy.edifice.domain.entity.Files;
 import com.qsy.edifice.domain.entity.Project;
 import com.qsy.edifice.domain.entity.SysUser;
+import com.qsy.edifice.domain.excel.ContractExcelData;
 import com.qsy.edifice.domain.vo.ContractChangeLogVo;
 import com.qsy.edifice.domain.vo.ContractListVo;
 import com.qsy.edifice.domain.vo.FilesVo;
@@ -21,17 +23,23 @@ import com.qsy.edifice.mapper.ProjectMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
 import com.qsy.edifice.service.ContractService;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
@@ -59,6 +67,17 @@ public class ContractServiceImpl implements ContractService {
 
     @Resource
     private SysUserMapper sysUserMapper;
+
+    private static final DateTimeFormatter EXPORT_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final Map<Integer, String> CONTRACT_TYPE_LABELS = Map.of(
+            0, "基本收费", 1, "基本+效益"
+    );
+    private static final Map<Integer, String> BENEFIT_STATUS_LABELS = Map.of(
+            0, "预计中", 1, "已最终确认"
+    );
+    private static final Map<Integer, String> PROJECT_STATUS_LABELS = Map.of(
+            0, "未开始", 1, "进行中", 2, "待验收", 3, "验收中", 4, "已结束"
+    );
 
     @Override
     public Contract getContractById(Long contractId) {
@@ -92,30 +111,7 @@ public class ContractServiceImpl implements ContractService {
         Integer current = dto.getCurrent() == null || dto.getCurrent() < 1 ? 1 : dto.getCurrent();
         Integer pageSize = dto.getPageSize() == null || dto.getPageSize() < 1 ? 10 : dto.getPageSize();
 
-        LambdaQueryWrapper<Contract> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(dto.getProjectId() != null, Contract::getProjectId, dto.getProjectId());
-        wrapper.eq(dto.getContractType() != null, Contract::getContractType, dto.getContractType());
-
-        if (StringUtils.hasText(dto.getKeywords())) {
-            String keyword = dto.getKeywords().trim();
-            List<Long> projectIds = projectMapper.selectList(new LambdaQueryWrapper<Project>()
-                            .and(w -> w.like(Project::getProjectName, keyword)
-                                    .or()
-                                    .like(Project::getProjectCode, keyword)))
-                    .stream()
-                    .map(Project::getProjectId)
-                    .collect(Collectors.toList());
-            wrapper.and(w -> {
-                w.like(Contract::getContractName, keyword)
-                        .or()
-                        .like(Contract::getContractCode, keyword);
-                if (!projectIds.isEmpty()) {
-                    w.or().in(Contract::getProjectId, projectIds);
-                }
-            });
-        }
-
-        wrapper.orderByDesc(Contract::getUpdatedTime).orderByDesc(Contract::getCreatedTime);
+        LambdaQueryWrapper<Contract> wrapper = buildContractQuery(dto);
         Page<Contract> page = contractMapper.selectPage(new Page<>(current, pageSize), wrapper);
         Page<ContractListVo> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
         voPage.setRecords(page.getRecords().stream().map(this::convertToListVo).collect(Collectors.toList()));
@@ -204,6 +200,21 @@ public class ContractServiceImpl implements ContractService {
     }
 
     @Override
+    public void exportContracts(GetContractListDto dto, HttpServletResponse response) throws IOException {
+        GetContractListDto query = dto == null ? new GetContractListDto() : dto;
+        List<ContractListVo> contracts = contractMapper.selectList(buildContractQuery(query)).stream()
+                .map(this::convertToListVo)
+                .collect(Collectors.toList());
+        List<ContractExcelData> rows = contracts.stream()
+                .map(this::toExcelData)
+                .collect(Collectors.toList());
+        setExcelResponseHeader(response, "合同数据");
+        EasyExcel.write(response.getOutputStream(), ContractExcelData.class)
+                .sheet("合同管理")
+                .doWrite(rows);
+    }
+
+    @Override
     public boolean saveContract(Contract contract) {
         return contractMapper.insert(contract) > 0;
     }
@@ -249,6 +260,64 @@ public class ContractServiceImpl implements ContractService {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList()));
         return vo;
+    }
+
+    private LambdaQueryWrapper<Contract> buildContractQuery(GetContractListDto dto) {
+        LambdaQueryWrapper<Contract> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(dto.getProjectId() != null, Contract::getProjectId, dto.getProjectId());
+        wrapper.eq(dto.getContractType() != null, Contract::getContractType, dto.getContractType());
+
+        if (StringUtils.hasText(dto.getKeywords())) {
+            String keyword = dto.getKeywords().trim();
+            List<Long> projectIds = projectMapper.selectList(new LambdaQueryWrapper<Project>()
+                            .and(w -> w.like(Project::getProjectName, keyword)
+                                    .or()
+                                    .like(Project::getProjectCode, keyword)))
+                    .stream()
+                    .map(Project::getProjectId)
+                    .collect(Collectors.toList());
+            wrapper.and(w -> {
+                w.like(Contract::getContractName, keyword)
+                        .or()
+                        .like(Contract::getContractCode, keyword);
+                if (!projectIds.isEmpty()) {
+                    w.or().in(Contract::getProjectId, projectIds);
+                }
+            });
+        }
+        wrapper.orderByDesc(Contract::getUpdatedTime).orderByDesc(Contract::getCreatedTime);
+        return wrapper;
+    }
+
+    private ContractExcelData toExcelData(ContractListVo item) {
+        return ContractExcelData.builder()
+                .contractName(item.getContractName())
+                .contractCode(item.getContractCode())
+                .contractType(CONTRACT_TYPE_LABELS.getOrDefault(item.getContractType(), "未知"))
+                .contractAmount(item.getContractAmount())
+                .baseAmount(item.getBaseAmount())
+                .benefitAmount(item.getBenefitAmount())
+                .benefitStatus(BENEFIT_STATUS_LABELS.getOrDefault(item.getBenefitStatus(), "-"))
+                .projectName(item.getProjectName())
+                .projectCode(item.getProjectCode())
+                .projectStatus(PROJECT_STATUS_LABELS.getOrDefault(item.getProjectStatus(), "-"))
+                .signingDate(formatTime(item.getSigningDate()))
+                .preStartDate(formatTime(item.getPreStartDate()))
+                .preEndDate(formatTime(item.getPreEndDate()))
+                .benefitRules(item.getBenefitRules())
+                .build();
+    }
+
+    private String formatTime(LocalDateTime value) {
+        return value == null ? "" : EXPORT_TIME_FMT.format(value);
+    }
+
+    private void setExcelResponseHeader(HttpServletResponse response, String fileName) {
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        response.setCharacterEncoding("utf-8");
+        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+        response.setHeader("Content-Disposition", "attachment;filename=" + encodedFileName + ".xlsx");
+        response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
     }
 
     private <T> void recordChange(List<ContractChangeLog> logs,

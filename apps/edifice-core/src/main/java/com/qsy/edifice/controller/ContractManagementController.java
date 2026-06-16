@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.io.IOException;
 
 @Tag(name = "合同管理")
 @RestController
@@ -43,6 +45,12 @@ public class ContractManagementController {
     @Operation(summary = "合同管理列表", description = "分页查询合同，并返回关联项目基础信息")
     public BaseResponse<Page<ContractListVo>> list(GetContractListDto dto) {
         return ResultUtils.success(Code.SUCCESS, contractService.getContractList(dto));
+    }
+
+    @GetMapping("/export")
+    @Operation(summary = "导出合同", description = "按当前筛选条件导出合同 Excel")
+    public void export(GetContractListDto dto, HttpServletResponse response) throws IOException {
+        contractService.exportContracts(dto, response);
     }
 
     @GetMapping("/{id}")

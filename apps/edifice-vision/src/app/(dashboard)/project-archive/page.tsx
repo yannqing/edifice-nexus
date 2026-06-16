@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Download,
   Eye,
   FileText,
   Loader2,
@@ -30,6 +31,7 @@ import { isAbortError } from "@/lib/request";
 import { cn } from "@/lib/utils";
 import {
   archiveProjectWithRemark,
+  downloadProjectArchivePackage,
   getArchivableProjects,
   getArchivedProjects,
   getProjectArchiveDetail,
@@ -84,6 +86,7 @@ export default function ProjectArchivePage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState<ProjectArchiveDetailVo | null>(null);
+  const [downloadLoading, setDownloadLoading] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -158,6 +161,18 @@ export default function ProjectArchivePage() {
       }
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const handleDownloadPackage = async (projectId: string) => {
+    setDownloadLoading(projectId);
+    try {
+      await downloadProjectArchivePackage(projectId);
+      toast.success("归档资料包已开始下载");
+    } catch {
+      toast.error("下载失败，请稍后重试");
+    } finally {
+      setDownloadLoading(null);
     }
   };
 
@@ -254,6 +269,17 @@ export default function ProjectArchivePage() {
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="sm" onClick={() => openDetail(item)}>
                         <Eye className="w-4 h-4 mr-1" /> 详情
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDownloadPackage(item.projectId)}
+                        disabled={downloadLoading === item.projectId}
+                      >
+                        {downloadLoading === item.projectId
+                          ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          : <Download className="w-4 h-4 mr-1" />}
+                        下载
                       </Button>
                       <Button
                         variant={isArchivedTab ? "outline" : "default"}
@@ -358,6 +384,18 @@ export default function ProjectArchivePage() {
           )}
           {!detailLoading && detail && (
             <div className="space-y-5">
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => handleDownloadPackage(detail.project.projectId)}
+                  disabled={downloadLoading === detail.project.projectId}
+                >
+                  {downloadLoading === detail.project.projectId
+                    ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    : <Download className="w-4 h-4 mr-2" />}
+                  下载归档资料包
+                </Button>
+              </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 <SummaryCard label="合同金额" value={formatMoney(detail.summary.contractAmount)} />
                 <SummaryCard label="已发放产值" value={formatMoney(detail.summary.paidOutputAmount)} />

@@ -14,6 +14,7 @@ import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.CollectionRecordMapper;
 import com.qsy.edifice.mapper.ContractBenefitRevisionMapper;
+import com.qsy.edifice.mapper.FilesMapper;
 import com.qsy.edifice.mapper.InspectionFormMapper;
 import com.qsy.edifice.mapper.OutputValueMapper;
 import com.qsy.edifice.mapper.ProjectFilesMapper;
@@ -21,14 +22,21 @@ import com.qsy.edifice.mapper.ProjectMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
 import com.qsy.edifice.service.*;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -40,6 +48,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 /**
  * 项目服务实现类
@@ -73,6 +83,9 @@ public class ProjectServiceImpl implements ProjectService {
     private ProjectFilesMapper projectFilesMapper;
 
     @Resource
+    private FilesMapper filesMapper;
+
+    @Resource
     private ProjectFilesService projectFilesService;
 
     @Resource
@@ -89,6 +102,12 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Resource
     private JdbcTemplate jdbcTemplate;
+
+    @Value("${file.upload-common-url}")
+    private String uploadCommonPath;
+
+    @Value("${file.upload-prefix-url}")
+    private String uploadPrefixPath;
 
     @Override
     public Project getProjectById(Long projectId) {
@@ -714,6 +733,55 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public void exportProjectArchivePackage(Long projectId, HttpServletResponse response) throws IOException {
+        if (projectId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目ID不能为空");
+        }
+        Project project = projectMapper.selectById(projectId);
+        if (project == null) {
+            throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
+        }
+
+        ProjectArchiveDetailVo detail = getProjectArchiveDetail(projectId);
+        String fileName = sanitizeFileName(project.getProjectName() + "-" + project.getProjectCode() + "-归档资料");
+        setZipResponseHeader(response, fileName);
+
+        Set<String> usedEntryNames = new HashSet<>();
+        try (ZipOutputStream zip = new ZipOutputStream(response.getOutputStream(), StandardCharsets.UTF_8)) {
+            addTextEntry(zip, usedEntryNames, "00-归档说明.txt", buildArchiveReadme(detail));
+
+            Contract contract = contractService.getContractByProjectId(projectId);
+            if (contract != null) {
+                addFileEntry(zip, usedEntryNames, "合同文件/主合同", contract.getContractFile());
+                List<Long> attachmentIds = parseFileIds(contract.getContractOtherFiles());
+                for (int i = 0; i < attachmentIds.size(); i++) {
+                    addFileEntry(zip, usedEntryNames, "合同文件/附件-" + (i + 1), attachmentIds.get(i));
+                }
+            }
+
+            List<ProjectFiles> projectFileRows = projectFilesMapper.selectList(new LambdaQueryWrapper<ProjectFiles>()
+                    .eq(ProjectFiles::getProjectId, String.valueOf(projectId))
+                    .orderByAsc(ProjectFiles::getCreatedTime));
+            for (ProjectFiles projectFile : projectFileRows) {
+                String label = StringUtils.hasText(projectFile.getFileName()) ? projectFile.getFileName() : "项目文件";
+                addFileEntry(zip, usedEntryNames, "项目文件/" + label, projectFile.getFileId());
+            }
+
+            List<InspectionForm> inspectionForms = inspectionFormMapper.selectList(new LambdaQueryWrapper<InspectionForm>()
+                    .eq(InspectionForm::getProjectId, String.valueOf(projectId))
+                    .orderByAsc(InspectionForm::getCreatedTime));
+            for (InspectionForm form : inspectionForms) {
+                List<Long> materialIds = parseFileIds(form.getFileIds());
+                for (int i = 0; i < materialIds.size(); i++) {
+                    String code = StringUtils.hasText(form.getInspectionFormCode()) ? form.getInspectionFormCode() : "验工单";
+                    addFileEntry(zip, usedEntryNames, "验工材料/" + code + "/材料-" + (i + 1), materialIds.get(i));
+                }
+            }
+            zip.finish();
+        }
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void archiveProject(Long projectId, Long operatorId, String archiveRemark) {
         if (projectId == null) {
@@ -828,6 +896,147 @@ public class ProjectServiceImpl implements ProjectService {
         summary.setPaidOutputAmount(sumOutput(outputValues, 3));
         summary.setTotalCollectionAmount(sumCollection(collectionRecords));
         return summary;
+    }
+
+    private void addTextEntry(ZipOutputStream zip, Set<String> usedEntryNames, String entryName, String content) throws IOException {
+        String normalized = nextZipEntryName(usedEntryNames, entryName);
+        zip.putNextEntry(new ZipEntry(normalized));
+        zip.write(content.getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
+    }
+
+    private void addFileEntry(ZipOutputStream zip, Set<String> usedEntryNames, String baseEntryName, Long fileId) throws IOException {
+        if (fileId == null) {
+            return;
+        }
+        com.qsy.edifice.domain.entity.Files file = filesMapper.selectById(fileId);
+        if (file == null || !StringUtils.hasText(file.getFilePath())) {
+            return;
+        }
+        Path physicalPath = resolvePhysicalFilePath(file);
+        if (physicalPath == null || !java.nio.file.Files.exists(physicalPath) || !java.nio.file.Files.isRegularFile(physicalPath)) {
+            log.warn("归档打包跳过缺失文件 fileId={} path={}", fileId, physicalPath);
+            return;
+        }
+        String displayName = StringUtils.hasText(file.getDisplayName()) ? file.getDisplayName() : file.getFileName();
+        String extension = StringUtils.hasText(file.getFileExtension()) ? "." + file.getFileExtension() : "";
+        String entryName = sanitizeZipPath(baseEntryName);
+        if (!entryName.toLowerCase().endsWith(extension.toLowerCase())) {
+            entryName = entryName + extension;
+        }
+        if (StringUtils.hasText(displayName) && !baseEntryName.contains("/附件-") && !baseEntryName.contains("/材料-")) {
+            int slash = entryName.lastIndexOf('/');
+            String prefix = slash >= 0 ? entryName.substring(0, slash + 1) : "";
+            entryName = prefix + sanitizeFileName(displayName);
+        }
+        entryName = nextZipEntryName(usedEntryNames, entryName);
+        zip.putNextEntry(new ZipEntry(entryName));
+        java.nio.file.Files.copy(physicalPath, zip);
+        zip.closeEntry();
+    }
+
+    private Path resolvePhysicalFilePath(com.qsy.edifice.domain.entity.Files file) {
+        if (!StringUtils.hasText(file.getFilePath())) {
+            return null;
+        }
+        String relativePath = file.getFilePath().replace(uploadPrefixPath, "");
+        return Paths.get(uploadCommonPath + relativePath);
+    }
+
+    private String nextZipEntryName(Set<String> usedEntryNames, String rawName) {
+        String name = sanitizeZipPath(rawName);
+        if (!usedEntryNames.contains(name)) {
+            usedEntryNames.add(name);
+            return name;
+        }
+        int dot = name.lastIndexOf('.');
+        String base = dot > 0 ? name.substring(0, dot) : name;
+        String ext = dot > 0 ? name.substring(dot) : "";
+        int index = 2;
+        while (usedEntryNames.contains(base + "-" + index + ext)) {
+            index++;
+        }
+        String next = base + "-" + index + ext;
+        usedEntryNames.add(next);
+        return next;
+    }
+
+    private List<Long> parseFileIds(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return Collections.emptyList();
+        }
+        List<Long> ids = new ArrayList<>();
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\d+").matcher(raw);
+        while (matcher.find()) {
+            try {
+                ids.add(Long.parseLong(matcher.group()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return ids;
+    }
+
+    private String buildArchiveReadme(ProjectArchiveDetailVo detail) {
+        ProjectDetailVo project = detail.getProject();
+        ProjectArchiveDetailVo.ArchiveSummaryVo summary = detail.getSummary();
+        return """
+                项目归档资料包
+
+                项目名称：%s
+                项目编号：%s
+                项目类型：%s
+                归档时间：%s
+                归档人：%s
+                归档备注：%s
+
+                合同金额：%s
+                阶段完成：%s/%s
+                验工单数量：%s
+                产值单数量：%s
+                已发放产值：%s
+                回款记录数量：%s
+                累计回款：%s
+                项目文件数量：%s
+                """.formatted(
+                project.getProjectName(),
+                project.getProjectCode(),
+                project.getProjectType() == null ? "-" : project.getProjectType().getProjectTypeName(),
+                detail.getArchive().getArchiveTime() == null ? "-" : detail.getArchive().getArchiveTime(),
+                detail.getArchive().getArchiveUserName() == null ? "-" : detail.getArchive().getArchiveUserName(),
+                detail.getArchive().getArchiveRemark() == null ? "-" : detail.getArchive().getArchiveRemark(),
+                summary.getContractAmount(),
+                summary.getCompletedStageCount(),
+                summary.getStageCount(),
+                summary.getInspectionCount(),
+                summary.getOutputValueCount(),
+                summary.getPaidOutputAmount(),
+                summary.getCollectionCount(),
+                summary.getTotalCollectionAmount(),
+                summary.getProjectFileCount()
+        );
+    }
+
+    private String sanitizeZipPath(String rawName) {
+        String cleaned = rawName == null ? "未命名文件" : rawName;
+        cleaned = cleaned.replace("\\", "/").replaceAll("/+", "/");
+        return java.util.Arrays.stream(cleaned.split("/"))
+                .filter(StringUtils::hasText)
+                .map(this::sanitizeFileName)
+                .collect(Collectors.joining("/"));
+    }
+
+    private String sanitizeFileName(String rawName) {
+        String cleaned = rawName == null ? "未命名文件" : rawName.trim();
+        cleaned = cleaned.replaceAll("[\\\\/:*?\"<>|]", "_");
+        return StringUtils.hasText(cleaned) ? cleaned : "未命名文件";
+    }
+
+    private void setZipResponseHeader(HttpServletResponse response, String fileName) {
+        response.setContentType("application/zip");
+        response.setCharacterEncoding("utf-8");
+        String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+        response.setHeader("Content-Disposition", "attachment;filename=" + encodedFileName + ".zip");
+        response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
     }
 
     private List<ProjectArchiveDetailVo.ArchiveChecklistItemVo> buildArchiveChecklist(

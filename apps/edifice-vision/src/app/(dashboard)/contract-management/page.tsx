@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
+  Download,
   FileText,
   Loader2,
   Pencil,
@@ -25,6 +26,7 @@ import { AttachmentFileActions } from "@/components/file/attachment-file-list";
 import { isAbortError } from "@/lib/request";
 import { cn } from "@/lib/utils";
 import {
+  exportContractExcel,
   getContractChangeLogs,
   getContractList,
   updateContractInfo,
@@ -98,6 +100,7 @@ export default function ContractManagementPage() {
   const [changeLogs, setChangeLogs] = useState<ContractChangeLogVo[]>([]);
   const [changeLogsLoading, setChangeLogsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -189,6 +192,21 @@ export default function ContractManagementPage() {
     }
   };
 
+  const handleExport = async () => {
+    setExportLoading(true);
+    try {
+      await exportContractExcel({
+        keywords: debouncedKeyword || undefined,
+        contractType: contractType === "all" ? undefined : Number(contractType),
+      });
+      toast.success("导出成功");
+    } catch {
+      toast.error("导出失败，请稍后重试");
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   return (
     <div className="p-4 md:p-8 space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -196,6 +214,14 @@ export default function ContractManagementPage() {
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">合同管理</h1>
           <p className="text-slate-500 text-sm mt-1">集中查看和维护项目合同基础信息</p>
         </div>
+        <Button
+          onClick={handleExport}
+          disabled={exportLoading}
+          className="bg-blue-600 hover:bg-blue-700"
+        >
+          {exportLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+          导出 Excel
+        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

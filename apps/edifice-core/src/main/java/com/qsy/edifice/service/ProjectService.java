@@ -12,7 +12,9 @@ import com.qsy.edifice.domain.vo.ProjectArchiveVo;
 import com.qsy.edifice.domain.vo.ProjectArchiveDetailVo;
 import com.qsy.edifice.domain.vo.ProjectListVo;
 import com.qsy.edifice.domain.vo.ProjectStatisticsVo;
+import jakarta.servlet.http.HttpServletResponse;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -153,6 +155,13 @@ public interface ProjectService {
      * @return 归档详情
      */
     ProjectArchiveDetailVo getProjectArchiveDetail(Long projectId);
+
+    /**
+     * 下载项目归档资料包
+     * @param projectId 项目id
+     * @param response HTTP 响应
+     */
+    void exportProjectArchivePackage(Long projectId, HttpServletResponse response) throws IOException;
 
     /**
      * 归档项目
