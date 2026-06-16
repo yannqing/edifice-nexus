@@ -4,10 +4,15 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Archive,
   ArchiveRestore,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  FileText,
   Loader2,
   Search,
+  TriangleAlert,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -20,16 +25,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TablePageSkeleton } from "@/components/ui/skeleton";
+import { AttachmentFileActions } from "@/components/file/attachment-file-list";
 import { isAbortError } from "@/lib/request";
 import { cn } from "@/lib/utils";
 import {
   archiveProjectWithRemark,
   getArchivableProjects,
   getArchivedProjects,
+  getProjectArchiveDetail,
   unarchiveProject,
 } from "@/services/project-archive";
 import { ResponseCode } from "@/types/api";
-import type { ProjectArchiveVo } from "@/types/project-archive";
+import { INSPECTION_STATUS_MAP } from "@/types/inspection";
+import { OUTPUT_VALUE_STATUS_MAP } from "@/types/output-value";
+import { PROJECT_FILE_STATUS_MAP } from "@/types/project-file";
+import type { ArchiveChecklistItemVo, ProjectArchiveDetailVo, ProjectArchiveVo } from "@/types/project-archive";
 
 const PAGE_SIZE = 10;
 
@@ -48,6 +58,18 @@ function formatDate(value?: string | null) {
   return value?.replace("T", " ").slice(0, 16) || "-";
 }
 
+const checklistStyles: Record<string, string> = {
+  pass: "bg-emerald-100 text-emerald-700",
+  warning: "bg-amber-100 text-amber-700",
+  fail: "bg-rose-100 text-rose-700",
+};
+
+function checklistIcon(status: string) {
+  if (status === "pass") return <CheckCircle2 className="w-4 h-4" />;
+  if (status === "fail") return <XCircle className="w-4 h-4" />;
+  return <TriangleAlert className="w-4 h-4" />;
+}
+
 export default function ProjectArchivePage() {
   const [activeTab, setActiveTab] = useState<ArchiveTab>("ready");
   const [items, setItems] = useState<ProjectArchiveVo[]>([]);
@@ -59,6 +81,9 @@ export default function ProjectArchivePage() {
   const [actionTarget, setActionTarget] = useState<ProjectArchiveVo | null>(null);
   const [archiveRemark, setArchiveRemark] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detail, setDetail] = useState<ProjectArchiveDetailVo | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -119,6 +144,20 @@ export default function ProjectArchivePage() {
       }
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const openDetail = async (item: ProjectArchiveVo) => {
+    setDetailOpen(true);
+    setDetail(null);
+    setDetailLoading(true);
+    try {
+      const res = await getProjectArchiveDetail(item.projectId);
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setDetail(res.data);
+      }
+    } finally {
+      setDetailLoading(false);
     }
   };
 
@@ -212,23 +251,28 @@ export default function ProjectArchivePage() {
                     <div className="text-xs mt-1">结束：{formatDate(item.projectEndTime)}</div>
                   </td>
                   <td className="px-5 py-4 text-right">
-                    <Button
-                      variant={isArchivedTab ? "outline" : "default"}
-                      size="sm"
-                      disabled={!isArchivedTab && !item.archiveReady}
-                      onClick={() => {
-                        setActionTarget(item);
-                        setArchiveRemark(item.archiveRemark || "");
-                      }}
-                      className={isArchivedTab ? "" : "bg-blue-600 hover:bg-blue-700"}
-                    >
-                      {isArchivedTab ? (
-                        <ArchiveRestore className="w-4 h-4 mr-1" />
-                      ) : (
-                        <Archive className="w-4 h-4 mr-1" />
-                      )}
-                      {isArchivedTab ? "取消归档" : "归档"}
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => openDetail(item)}>
+                        <Eye className="w-4 h-4 mr-1" /> 详情
+                      </Button>
+                      <Button
+                        variant={isArchivedTab ? "outline" : "default"}
+                        size="sm"
+                        disabled={!isArchivedTab && !item.archiveReady}
+                        onClick={() => {
+                          setActionTarget(item);
+                          setArchiveRemark(item.archiveRemark || "");
+                        }}
+                        className={isArchivedTab ? "" : "bg-blue-600 hover:bg-blue-700"}
+                      >
+                        {isArchivedTab ? (
+                          <ArchiveRestore className="w-4 h-4 mr-1" />
+                        ) : (
+                          <Archive className="w-4 h-4 mr-1" />
+                        )}
+                        {isArchivedTab ? "取消归档" : "归档"}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -298,6 +342,149 @@ export default function ProjectArchivePage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="sm:max-w-5xl">
+          <DialogHeader>
+            <DialogTitle>归档详情</DialogTitle>
+            <DialogDescription>
+              {detail?.project.projectName ?? "加载项目归档资料"}
+            </DialogDescription>
+          </DialogHeader>
+          {detailLoading && (
+            <div className="py-12 flex items-center justify-center text-slate-400">
+              <Loader2 className="w-5 h-5 mr-2 animate-spin" /> 加载中...
+            </div>
+          )}
+          {!detailLoading && detail && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <SummaryCard label="合同金额" value={formatMoney(detail.summary.contractAmount)} />
+                <SummaryCard label="已发放产值" value={formatMoney(detail.summary.paidOutputAmount)} />
+                <SummaryCard label="累计回款" value={formatMoney(detail.summary.totalCollectionAmount)} />
+                <SummaryCard label="项目文件" value={`${detail.summary.projectFileCount ?? 0} 个`} />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <section className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+                  <h3 className="font-semibold text-slate-800 mb-3">归档清单</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {detail.checklist.map((item) => (
+                      <ChecklistItem key={item.itemKey} item={item} />
+                    ))}
+                  </div>
+                </section>
+                <section className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+                  <h3 className="font-semibold text-slate-800 mb-3">归档信息</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <Info label="项目编号" value={detail.project.projectCode} />
+                    <Info label="项目类型" value={detail.project.projectType?.projectTypeName ?? "-"} />
+                    <Info label="归档时间" value={formatDate(detail.archive.archiveTime)} />
+                    <Info label="归档人" value={detail.archive.archiveUserName || "-"} />
+                    <Info label="归档备注" value={detail.archive.archiveRemark || "-"} wide />
+                  </div>
+                </section>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <ArchiveTable title="验工单" empty="暂无验工单">
+                  {detail.inspections.map((item) => (
+                    <div key={item.inspectionFormId} className="flex items-center justify-between gap-3 rounded-lg bg-white border border-slate-100 px-3 py-2">
+                      <div>
+                        <div className="font-medium text-slate-700">{item.inspectionFormCode}</div>
+                        <div className="text-xs text-slate-400 mt-1">{item.stageName || "-"} · {item.applyUserName || "未知申请人"}</div>
+                      </div>
+                      <Badge variant="secondary">{INSPECTION_STATUS_MAP[item.inspectionFormStatus] ?? "未知"}</Badge>
+                    </div>
+                  ))}
+                </ArchiveTable>
+
+                <ArchiveTable title="产值分配" empty="暂无产值单">
+                  {detail.outputValues.map((item) => (
+                    <div key={item.outputValueId} className="flex items-center justify-between gap-3 rounded-lg bg-white border border-slate-100 px-3 py-2">
+                      <div>
+                        <div className="font-medium text-slate-700">{item.stageName || "-"} · {item.quarter || "-"}</div>
+                        <div className="text-xs text-slate-400 mt-1">{formatMoney(item.totalAmount)} · 发放：{formatDate(item.paidTime)}</div>
+                      </div>
+                      <Badge variant="secondary">{OUTPUT_VALUE_STATUS_MAP[item.status] ?? "未知"}</Badge>
+                    </div>
+                  ))}
+                </ArchiveTable>
+
+                <ArchiveTable title="回款记录" empty="暂无回款记录">
+                  {detail.collections.map((item) => (
+                    <div key={item.collectionRecordId} className="flex items-center justify-between gap-3 rounded-lg bg-white border border-slate-100 px-3 py-2">
+                      <div>
+                        <div className="font-medium text-slate-700">{formatMoney(item.amount)}</div>
+                        <div className="text-xs text-slate-400 mt-1">{item.stageName || "未关联阶段"} · {item.collectDate || "-"}</div>
+                      </div>
+                      <div className="text-xs text-slate-400">{item.recordUserName || "-"}</div>
+                    </div>
+                  ))}
+                </ArchiveTable>
+
+                <ArchiveTable title="项目文件" empty="暂无项目文件">
+                  {detail.projectFiles.map((item) => (
+                    <div key={item.projectFileId} className="flex items-center justify-between gap-3 rounded-lg bg-white border border-slate-100 px-3 py-2">
+                      <div className="flex items-start gap-2 min-w-0">
+                        <FileText className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                          <div className="font-medium text-slate-700 truncate">{item.fileName || "未命名文件"}</div>
+                          <div className="text-xs text-slate-400 mt-1">{item.stageName || "-"} · {PROJECT_FILE_STATUS_MAP[item.approvalStatus] ?? "未知"}</div>
+                        </div>
+                      </div>
+                      {item.fileId && <AttachmentFileActions fileId={item.fileId} fileName={item.fileName || "项目文件"} />}
+                    </div>
+                  ))}
+                </ArchiveTable>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function SummaryCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-100 bg-white p-4">
+      <div className="text-xs text-slate-400">{label}</div>
+      <div className="text-lg font-semibold text-slate-800 mt-1">{value}</div>
+    </div>
+  );
+}
+
+function ChecklistItem({ item }: { item: ArchiveChecklistItemVo }) {
+  return (
+    <div className="rounded-lg bg-white border border-slate-100 p-3">
+      <div className="flex items-center gap-2">
+        <Badge className={cn("gap-1 hover:bg-inherit", checklistStyles[item.status] ?? checklistStyles.warning)}>
+          {checklistIcon(item.status)} {item.itemName}
+        </Badge>
+      </div>
+      <div className="text-xs text-slate-500 mt-2">{item.description}</div>
+    </div>
+  );
+}
+
+function Info({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
+  return (
+    <div className={cn("rounded-lg bg-white border border-slate-100 p-3", wide && "sm:col-span-2")}>
+      <div className="text-xs text-slate-400">{label}</div>
+      <div className="text-sm text-slate-700 mt-1 break-all">{value}</div>
+    </div>
+  );
+}
+
+function ArchiveTable({ title, empty, children }: { title: string; empty: string; children: React.ReactNode[] }) {
+  const rows = Array.isArray(children) ? children.filter(Boolean) : [];
+  return (
+    <section className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+      <h3 className="font-semibold text-slate-800 mb-3">{title}</h3>
+      <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+        {rows.length > 0 ? rows : <div className="text-sm text-slate-400 py-6 text-center">{empty}</div>}
+      </div>
+    </section>
   );
 }

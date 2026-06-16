@@ -2,6 +2,7 @@ import { get, put } from "@/lib/request";
 import type { BaseResponse } from "@/types/api";
 import type {
   GetProjectArchiveListParams,
+  ProjectArchiveDetailVo,
   ProjectArchivePageResult,
 } from "@/types/project-archive";
 
@@ -32,6 +33,13 @@ export async function getArchivedProjects(
     params: toQuery(params),
     signal,
   });
+}
+
+export async function getProjectArchiveDetail(
+  projectId: string,
+  signal?: AbortSignal
+): Promise<BaseResponse<ProjectArchiveDetailVo>> {
+  return get<ProjectArchiveDetailVo>(`/project-archive/detail/${projectId}`, { signal });
 }
 
 export async function archiveProject(projectId: string): Promise<BaseResponse<boolean>> {

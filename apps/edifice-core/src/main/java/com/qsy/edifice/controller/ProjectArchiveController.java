@@ -7,6 +7,7 @@ import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.dto.ArchiveProjectDto;
 import com.qsy.edifice.domain.dto.GetProjectArchiveListDto;
 import com.qsy.edifice.domain.entity.SysUser;
+import com.qsy.edifice.domain.vo.ProjectArchiveDetailVo;
 import com.qsy.edifice.domain.vo.ProjectArchiveVo;
 import com.qsy.edifice.service.ProjectService;
 import com.qsy.edifice.utils.JwtUtils;
@@ -46,6 +47,12 @@ public class ProjectArchiveController {
     @Operation(summary = "已归档项目列表", description = "查询已归档项目")
     public BaseResponse<Page<ProjectArchiveVo>> archived(GetProjectArchiveListDto dto) {
         return ResultUtils.success(Code.SUCCESS, projectService.getArchivedProjectPage(dto));
+    }
+
+    @GetMapping("/detail/{id}")
+    @Operation(summary = "项目归档详情", description = "聚合项目、合同、阶段、验工、产值、回款和项目文件")
+    public BaseResponse<ProjectArchiveDetailVo> detail(@PathVariable("id") Long projectId) {
+        return ResultUtils.success(Code.SUCCESS, projectService.getProjectArchiveDetail(projectId));
     }
 
     @PutMapping("/archive/{id}")

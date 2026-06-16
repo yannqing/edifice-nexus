@@ -12,7 +12,10 @@ import com.qsy.edifice.domain.vo.*;
 import com.qsy.edifice.enums.ApprovalBizType;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
+import com.qsy.edifice.mapper.CollectionRecordMapper;
 import com.qsy.edifice.mapper.ContractBenefitRevisionMapper;
+import com.qsy.edifice.mapper.InspectionFormMapper;
+import com.qsy.edifice.mapper.OutputValueMapper;
 import com.qsy.edifice.mapper.ProjectFilesMapper;
 import com.qsy.edifice.mapper.ProjectMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
@@ -68,6 +71,18 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Resource
     private ProjectFilesMapper projectFilesMapper;
+
+    @Resource
+    private ProjectFilesService projectFilesService;
+
+    @Resource
+    private InspectionFormMapper inspectionFormMapper;
+
+    @Resource
+    private OutputValueMapper outputValueMapper;
+
+    @Resource
+    private CollectionRecordMapper collectionRecordMapper;
 
     @Resource
     private ContractBenefitRevisionMapper contractBenefitRevisionMapper;
@@ -659,6 +674,46 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public ProjectArchiveDetailVo getProjectArchiveDetail(Long projectId) {
+        if (projectId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目ID不能为空");
+        }
+        Project project = projectMapper.selectById(projectId);
+        if (project == null) {
+            throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
+        }
+
+        ProjectDetailVo projectDetail = convertToDetailVo(project);
+        ProjectArchiveVo archiveVo = convertToArchiveVo(project);
+        List<ProjectStage> stages = projectStageService.getProjectStagesByProjectId(projectId);
+        Map<Long, ProjectStage> stageMap = (stages == null ? Collections.<ProjectStage>emptyList() : stages).stream()
+                .collect(Collectors.toMap(ProjectStage::getProjectStageId, stage -> stage, (a, b) -> a));
+
+        List<InspectionForm> inspectionForms = inspectionFormMapper.selectList(new LambdaQueryWrapper<InspectionForm>()
+                .eq(InspectionForm::getProjectId, String.valueOf(projectId))
+                .orderByDesc(InspectionForm::getCreatedTime));
+        List<OutputValue> outputValues = outputValueMapper.selectList(new LambdaQueryWrapper<OutputValue>()
+                .eq(OutputValue::getProjectId, projectId)
+                .orderByDesc(OutputValue::getCreatedTime));
+        List<CollectionRecord> collectionRecords = collectionRecordMapper.selectList(new LambdaQueryWrapper<CollectionRecord>()
+                .eq(CollectionRecord::getProjectId, projectId)
+                .orderByDesc(CollectionRecord::getCollectDate)
+                .orderByDesc(CollectionRecord::getCreatedTime));
+        List<ProjectFileVo> projectFiles = projectFilesService.listProjectFiles(projectId, null, null);
+
+        ProjectArchiveDetailVo detail = new ProjectArchiveDetailVo();
+        detail.setProject(projectDetail);
+        detail.setArchive(archiveVo);
+        detail.setInspections(toArchiveInspections(inspectionForms, stageMap));
+        detail.setOutputValues(toArchiveOutputValues(outputValues, stageMap));
+        detail.setCollections(toArchiveCollections(collectionRecords, stageMap));
+        detail.setProjectFiles(projectFiles);
+        detail.setSummary(buildArchiveSummary(archiveVo, inspectionForms, outputValues, collectionRecords, projectFiles));
+        detail.setChecklist(buildArchiveChecklist(projectDetail, archiveVo, inspectionForms, outputValues, collectionRecords, projectFiles));
+        return detail;
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void archiveProject(Long projectId, Long operatorId, String archiveRemark) {
         if (projectId == null) {
@@ -753,6 +808,160 @@ public class ProjectServiceImpl implements ProjectService {
         Page<ProjectArchiveVo> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
         voPage.setRecords(page.getRecords().stream().map(this::convertToArchiveVo).collect(Collectors.toList()));
         return voPage;
+    }
+
+    private ProjectArchiveDetailVo.ArchiveSummaryVo buildArchiveSummary(
+            ProjectArchiveVo archiveVo,
+            List<InspectionForm> inspectionForms,
+            List<OutputValue> outputValues,
+            List<CollectionRecord> collectionRecords,
+            List<ProjectFileVo> projectFiles) {
+        ProjectArchiveDetailVo.ArchiveSummaryVo summary = new ProjectArchiveDetailVo.ArchiveSummaryVo();
+        summary.setContractAmount(archiveVo.getContractAmount() == null ? BigDecimal.ZERO : archiveVo.getContractAmount());
+        summary.setStageCount(archiveVo.getTotalStageCount());
+        summary.setCompletedStageCount(archiveVo.getCompletedStageCount());
+        summary.setInspectionCount(inspectionForms == null ? 0 : inspectionForms.size());
+        summary.setOutputValueCount(outputValues == null ? 0 : outputValues.size());
+        summary.setCollectionCount(collectionRecords == null ? 0 : collectionRecords.size());
+        summary.setProjectFileCount(projectFiles == null ? 0 : projectFiles.size());
+        summary.setTotalOutputAmount(sumOutput(outputValues, null));
+        summary.setPaidOutputAmount(sumOutput(outputValues, 3));
+        summary.setTotalCollectionAmount(sumCollection(collectionRecords));
+        return summary;
+    }
+
+    private List<ProjectArchiveDetailVo.ArchiveChecklistItemVo> buildArchiveChecklist(
+            ProjectDetailVo projectDetail,
+            ProjectArchiveVo archiveVo,
+            List<InspectionForm> inspectionForms,
+            List<OutputValue> outputValues,
+            List<CollectionRecord> collectionRecords,
+            List<ProjectFileVo> projectFiles) {
+        List<ProjectArchiveDetailVo.ArchiveChecklistItemVo> checklist = new ArrayList<>();
+        boolean hasContract = projectDetail.getContract() != null;
+        boolean hasContractFile = hasContract && projectDetail.getContract().getContractFile() != null;
+        boolean stagesDone = archiveVo.getTotalStageCount() != null
+                && archiveVo.getTotalStageCount() > 0
+                && Objects.equals(archiveVo.getCompletedStageCount(), archiveVo.getTotalStageCount());
+        boolean hasPendingInspection = inspectionForms != null && inspectionForms.stream()
+                .anyMatch(form -> form.getInspectionFormStatus() != null
+                        && (form.getInspectionFormStatus() == 0 || form.getInspectionFormStatus() == 1));
+        boolean allInspectionPassed = inspectionForms != null && !inspectionForms.isEmpty()
+                && inspectionForms.stream().allMatch(form -> Objects.equals(form.getInspectionFormStatus(), 3));
+        boolean hasOutput = outputValues != null && !outputValues.isEmpty();
+        boolean hasPaidOutput = outputValues != null && outputValues.stream().anyMatch(output -> Objects.equals(output.getStatus(), 3));
+        BigDecimal collectionAmount = sumCollection(collectionRecords);
+        BigDecimal contractAmount = archiveVo.getContractAmount() == null ? BigDecimal.ZERO : archiveVo.getContractAmount();
+        boolean collectionCovered = contractAmount.signum() > 0 && collectionAmount.compareTo(contractAmount) >= 0;
+        boolean hasFiles = projectFiles != null && !projectFiles.isEmpty();
+
+        checklist.add(checkItem("contract", "合同信息", hasContract ? "pass" : "fail",
+                hasContract ? "已关联项目合同" : "项目未关联合同"));
+        checklist.add(checkItem("contract_file", "合同文件", hasContractFile ? "pass" : "warning",
+                hasContractFile ? "已上传合同主文件" : "未发现合同主文件"));
+        checklist.add(checkItem("stages", "阶段完成", stagesDone ? "pass" : "fail",
+                "已完成 " + archiveVo.getCompletedStageCount() + " / " + archiveVo.getTotalStageCount() + " 个阶段"));
+        checklist.add(checkItem("inspection", "验工单", !hasPendingInspection && allInspectionPassed ? "pass" : hasPendingInspection ? "fail" : "warning",
+                hasPendingInspection ? "存在待处理验工单" : allInspectionPassed ? "验工单均已通过" : "未发现已通过验工单"));
+        checklist.add(checkItem("output", "产值分配", hasPaidOutput ? "pass" : hasOutput ? "warning" : "warning",
+                hasPaidOutput ? "存在已发放产值" : hasOutput ? "存在未完成发放的产值单" : "未发现产值分配单"));
+        checklist.add(checkItem("collection", "回款记录", collectionCovered ? "pass" : collectionAmount.signum() > 0 ? "warning" : "warning",
+                collectionCovered ? "累计回款已覆盖合同金额" : "累计回款：" + collectionAmount.stripTrailingZeros().toPlainString()));
+        checklist.add(checkItem("project_files", "项目文件", hasFiles ? "pass" : "warning",
+                hasFiles ? "项目文件 " + projectFiles.size() + " 个" : "未发现项目文件"));
+        return checklist;
+    }
+
+    private ProjectArchiveDetailVo.ArchiveChecklistItemVo checkItem(String key, String name, String status, String description) {
+        return new ProjectArchiveDetailVo.ArchiveChecklistItemVo(key, name, status, description);
+    }
+
+    private List<ProjectArchiveDetailVo.ArchiveInspectionVo> toArchiveInspections(
+            List<InspectionForm> inspectionForms,
+            Map<Long, ProjectStage> stageMap) {
+        if (inspectionForms == null || inspectionForms.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return inspectionForms.stream().map(form -> {
+            ProjectArchiveDetailVo.ArchiveInspectionVo vo = new ProjectArchiveDetailVo.ArchiveInspectionVo();
+            vo.setInspectionFormId(form.getInspectionFormId());
+            vo.setInspectionFormCode(form.getInspectionFormCode());
+            vo.setProjectStageId(form.getProjectStageId());
+            ProjectStage stage = form.getProjectStageId() == null ? null : stageMap.get(form.getProjectStageId());
+            vo.setStageName(stage == null ? null : stage.getStageName());
+            vo.setInspectionFormStatus(form.getInspectionFormStatus());
+            if (form.getApplyUserId() != null) {
+                SysUser user = sysUserMapper.selectById(form.getApplyUserId());
+                vo.setApplyUserName(user == null ? null : StringUtils.hasText(user.getRealName()) ? user.getRealName() : user.getUsername());
+            }
+            vo.setCreatedTime(form.getCreatedTime());
+            return vo;
+        }).collect(Collectors.toList());
+    }
+
+    private List<ProjectArchiveDetailVo.ArchiveOutputValueVo> toArchiveOutputValues(
+            List<OutputValue> outputValues,
+            Map<Long, ProjectStage> stageMap) {
+        if (outputValues == null || outputValues.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return outputValues.stream().map(output -> {
+            ProjectArchiveDetailVo.ArchiveOutputValueVo vo = new ProjectArchiveDetailVo.ArchiveOutputValueVo();
+            vo.setOutputValueId(output.getOutputValueId());
+            vo.setProjectStageId(output.getProjectStageId());
+            ProjectStage stage = output.getProjectStageId() == null ? null : stageMap.get(output.getProjectStageId());
+            vo.setStageName(stage == null ? null : stage.getStageName());
+            vo.setQuarter(output.getQuarter());
+            vo.setTotalAmount(output.getTotalAmount());
+            vo.setStatus(output.getStatus());
+            vo.setSubmitTime(output.getSubmitTime());
+            vo.setPaidTime(output.getPaidTime());
+            return vo;
+        }).collect(Collectors.toList());
+    }
+
+    private List<ProjectArchiveDetailVo.ArchiveCollectionVo> toArchiveCollections(
+            List<CollectionRecord> collectionRecords,
+            Map<Long, ProjectStage> stageMap) {
+        if (collectionRecords == null || collectionRecords.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return collectionRecords.stream().map(record -> {
+            ProjectArchiveDetailVo.ArchiveCollectionVo vo = new ProjectArchiveDetailVo.ArchiveCollectionVo();
+            vo.setCollectionRecordId(record.getCollectionRecordId());
+            vo.setProjectStageId(record.getProjectStageId());
+            ProjectStage stage = record.getProjectStageId() == null ? null : stageMap.get(record.getProjectStageId());
+            vo.setStageName(stage == null ? null : stage.getStageName());
+            vo.setAmount(record.getAmount());
+            vo.setCollectDate(record.getCollectDate());
+            vo.setRemark(record.getRemark());
+            if (record.getRecordUserId() != null) {
+                SysUser user = sysUserMapper.selectById(record.getRecordUserId());
+                vo.setRecordUserName(user == null ? null : StringUtils.hasText(user.getRealName()) ? user.getRealName() : user.getUsername());
+            }
+            return vo;
+        }).collect(Collectors.toList());
+    }
+
+    private BigDecimal sumOutput(List<OutputValue> outputValues, Integer status) {
+        if (outputValues == null || outputValues.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        return outputValues.stream()
+                .filter(output -> status == null || Objects.equals(output.getStatus(), status))
+                .map(OutputValue::getTotalAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private BigDecimal sumCollection(List<CollectionRecord> collectionRecords) {
+        if (collectionRecords == null || collectionRecords.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        return collectionRecords.stream()
+                .map(CollectionRecord::getAmount)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private ProjectArchiveVo convertToArchiveVo(Project project) {

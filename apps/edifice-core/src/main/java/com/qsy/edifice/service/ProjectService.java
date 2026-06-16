@@ -9,6 +9,7 @@ import com.qsy.edifice.domain.dto.UpdateProjectDto;
 import com.qsy.edifice.domain.entity.Project;
 import com.qsy.edifice.domain.vo.ProjectDetailVo;
 import com.qsy.edifice.domain.vo.ProjectArchiveVo;
+import com.qsy.edifice.domain.vo.ProjectArchiveDetailVo;
 import com.qsy.edifice.domain.vo.ProjectListVo;
 import com.qsy.edifice.domain.vo.ProjectStatisticsVo;
 
@@ -145,6 +146,13 @@ public interface ProjectService {
      * @return 分页结果
      */
     Page<ProjectArchiveVo> getArchivedProjectPage(GetProjectArchiveListDto dto);
+
+    /**
+     * 查询项目归档详情
+     * @param projectId 项目id
+     * @return 归档详情
+     */
+    ProjectArchiveDetailVo getProjectArchiveDetail(Long projectId);
 
     /**
      * 归档项目
