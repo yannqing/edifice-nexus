@@ -42,6 +42,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -401,6 +402,11 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public Page<ProjectListVo> getLifecycleProjectPage(GetAllProjectListDto dto) {
+        return getAllProjectPage(dto);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createProject(CreateProjectDto dto, Long userId) {
         // 1. 参数校验
@@ -638,6 +644,52 @@ public class ProjectServiceImpl implements ProjectService {
             throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
         }
         return convertToDetailVo(project);
+    }
+
+    @Override
+    public ProjectLifecycleVo getProjectLifecycleDetail(Long projectId) {
+        if (projectId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目ID不能为空");
+        }
+        Project project = projectMapper.selectById(projectId);
+        if (project == null) {
+            throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
+        }
+
+        ProjectDetailVo projectDetail = convertToDetailVo(project);
+        ProjectArchiveVo archiveVo = convertToArchiveVo(project);
+        List<ProjectStage> stages = projectStageService.getProjectStagesByProjectId(projectId);
+        if (stages == null) {
+            stages = Collections.emptyList();
+        }
+        Map<Long, ProjectStage> stageMap = stages.stream()
+                .filter(stage -> stage.getProjectStageId() != null)
+                .collect(Collectors.toMap(ProjectStage::getProjectStageId, stage -> stage, (a, b) -> a));
+
+        List<InspectionForm> inspectionForms = inspectionFormMapper.selectList(new LambdaQueryWrapper<InspectionForm>()
+                .eq(InspectionForm::getProjectId, String.valueOf(projectId))
+                .orderByDesc(InspectionForm::getCreatedTime));
+        List<OutputValue> outputValues = outputValueMapper.selectList(new LambdaQueryWrapper<OutputValue>()
+                .eq(OutputValue::getProjectId, projectId)
+                .orderByDesc(OutputValue::getCreatedTime));
+        List<CollectionRecord> collectionRecords = collectionRecordMapper.selectList(new LambdaQueryWrapper<CollectionRecord>()
+                .eq(CollectionRecord::getProjectId, projectId)
+                .orderByDesc(CollectionRecord::getCollectDate)
+                .orderByDesc(CollectionRecord::getCreatedTime));
+        List<ProjectFileVo> projectFiles = projectFilesService.listProjectFiles(projectId, null, null);
+
+        ProjectLifecycleVo vo = new ProjectLifecycleVo();
+        vo.setProject(projectDetail);
+        vo.setArchive(archiveVo);
+        vo.setSummary(buildArchiveSummary(archiveVo, inspectionForms, outputValues, collectionRecords, projectFiles));
+        vo.setStages(toLifecycleStages(stages, inspectionForms, outputValues, collectionRecords, projectFiles));
+        vo.setEvents(buildLifecycleEvents(project, stages, inspectionForms, outputValues, collectionRecords, projectFiles, stageMap));
+        vo.setRecentFiles(projectFiles == null ? Collections.emptyList() : projectFiles.stream()
+                .sorted(Comparator.comparing(ProjectFileVo::getUpdatedTime,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(8)
+                .collect(Collectors.toList()));
+        return vo;
     }
 
     @Override
@@ -1150,6 +1202,302 @@ public class ProjectServiceImpl implements ProjectService {
             }
             return vo;
         }).collect(Collectors.toList());
+    }
+
+    private List<ProjectLifecycleVo.LifecycleStageVo> toLifecycleStages(
+            List<ProjectStage> stages,
+            List<InspectionForm> inspectionForms,
+            List<OutputValue> outputValues,
+            List<CollectionRecord> collectionRecords,
+            List<ProjectFileVo> projectFiles) {
+        if (stages == null || stages.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<Long, List<InspectionForm>> inspectionsByStage = (inspectionForms == null ? Collections.<InspectionForm>emptyList() : inspectionForms)
+                .stream()
+                .filter(item -> item.getProjectStageId() != null)
+                .collect(Collectors.groupingBy(InspectionForm::getProjectStageId));
+        Map<Long, List<OutputValue>> outputByStage = (outputValues == null ? Collections.<OutputValue>emptyList() : outputValues)
+                .stream()
+                .filter(item -> item.getProjectStageId() != null)
+                .collect(Collectors.groupingBy(OutputValue::getProjectStageId));
+        Map<Long, List<CollectionRecord>> collectionByStage = (collectionRecords == null ? Collections.<CollectionRecord>emptyList() : collectionRecords)
+                .stream()
+                .filter(item -> item.getProjectStageId() != null)
+                .collect(Collectors.groupingBy(CollectionRecord::getProjectStageId));
+        Map<Long, List<ProjectFileVo>> fileByStage = (projectFiles == null ? Collections.<ProjectFileVo>emptyList() : projectFiles)
+                .stream()
+                .filter(item -> item.getProjectStageId() != null)
+                .collect(Collectors.groupingBy(ProjectFileVo::getProjectStageId));
+
+        return stages.stream().map(stage -> {
+            Long stageId = stage.getProjectStageId();
+            List<InspectionForm> stageInspections = inspectionsByStage.getOrDefault(stageId, Collections.emptyList());
+            List<OutputValue> stageOutputs = outputByStage.getOrDefault(stageId, Collections.emptyList());
+            List<CollectionRecord> stageCollections = collectionByStage.getOrDefault(stageId, Collections.emptyList());
+            List<ProjectFileVo> stageFiles = fileByStage.getOrDefault(stageId, Collections.emptyList());
+
+            ProjectLifecycleVo.LifecycleStageVo vo = new ProjectLifecycleVo.LifecycleStageVo();
+            vo.setProjectStageId(stageId);
+            vo.setStageName(stage.getStageName());
+            vo.setStageStatus(stage.getStageStatus());
+            vo.setStageOutput(stage.getStageOutput());
+            vo.setBenefitInclusionRatio(stage.getBenefitInclusionRatio());
+            vo.setInspectionCount(stageInspections.size());
+            vo.setLatestInspectionStatus(stageInspections.stream()
+                    .sorted(Comparator.comparing(InspectionForm::getUpdatedTime,
+                            Comparator.nullsLast(Comparator.reverseOrder())))
+                    .map(InspectionForm::getInspectionFormStatus)
+                    .findFirst()
+                    .orElse(null));
+            vo.setOutputValueCount(stageOutputs.size());
+            vo.setPaidOutputAmount(sumOutput(stageOutputs, 3));
+            vo.setCollectionAmount(sumCollection(stageCollections));
+            vo.setProjectFileCount(stageFiles.size());
+            vo.setLatestActivityTime(latestTime(
+                    stage.getUpdatedTime(),
+                    latestUpdatedTime(stageInspections),
+                    latestUpdatedTime(stageOutputs),
+                    latestUpdatedTime(stageCollections),
+                    latestUpdatedTime(stageFiles)
+            ));
+            return vo;
+        }).collect(Collectors.toList());
+    }
+
+    private List<ProjectLifecycleVo.LifecycleEventVo> buildLifecycleEvents(
+            Project project,
+            List<ProjectStage> stages,
+            List<InspectionForm> inspectionForms,
+            List<OutputValue> outputValues,
+            List<CollectionRecord> collectionRecords,
+            List<ProjectFileVo> projectFiles,
+            Map<Long, ProjectStage> stageMap) {
+        List<ProjectLifecycleVo.LifecycleEventVo> events = new ArrayList<>();
+        events.add(lifecycleEvent(
+                "project:" + project.getProjectId() + ":created",
+                "project",
+                "立项",
+                "项目已创建",
+                project.getProjectName(),
+                project.getProjectStatus(),
+                null,
+                "/all-projects?detailId=" + project.getProjectId(),
+                project.getCreatedTime()
+        ));
+
+        for (ProjectStage stage : stages == null ? Collections.<ProjectStage>emptyList() : stages) {
+            events.add(lifecycleEvent(
+                    "stage:" + stage.getProjectStageId(),
+                    "stage",
+                    "阶段",
+                    "阶段：" + stage.getStageName(),
+                    "当前状态：" + stageStatusLabel(stage.getStageStatus()),
+                    stage.getStageStatus(),
+                    null,
+                    "/project-lifecycle?projectId=" + project.getProjectId(),
+                    stage.getUpdatedTime() == null ? stage.getCreatedTime() : stage.getUpdatedTime()
+            ));
+        }
+
+        for (InspectionForm form : inspectionForms == null ? Collections.<InspectionForm>emptyList() : inspectionForms) {
+            SysUser applyUser = form.getApplyUserId() == null ? null : sysUserMapper.selectById(form.getApplyUserId());
+            ProjectStage stage = form.getProjectStageId() == null ? null : stageMap.get(form.getProjectStageId());
+            events.add(lifecycleEvent(
+                    "inspection:" + form.getInspectionFormId(),
+                    "inspection",
+                    "验工",
+                    "验工单：" + nullableText(form.getInspectionFormCode(), "-"),
+                    (stage == null ? "" : "阶段：" + stage.getStageName() + " · ") + inspectionStatusLabel(form.getInspectionFormStatus()),
+                    form.getInspectionFormStatus(),
+                    displayUserName(applyUser),
+                    "/inspection-approval?detailId=" + form.getInspectionFormId(),
+                    form.getUpdatedTime() == null ? form.getCreatedTime() : form.getUpdatedTime()
+            ));
+        }
+
+        for (OutputValue output : outputValues == null ? Collections.<OutputValue>emptyList() : outputValues) {
+            ProjectStage stage = output.getProjectStageId() == null ? null : stageMap.get(output.getProjectStageId());
+            events.add(lifecycleEvent(
+                    "output:" + output.getOutputValueId(),
+                    "output",
+                    "产值",
+                    "产值分配：" + nullableText(output.getQuarter(), "-"),
+                    (stage == null ? "" : "阶段：" + stage.getStageName() + " · ") + outputStatusLabel(output.getStatus()),
+                    output.getStatus(),
+                    null,
+                    "/output-value?detailId=" + output.getOutputValueId(),
+                    output.getPaidTime() != null ? output.getPaidTime()
+                            : output.getApprovedTime() != null ? output.getApprovedTime()
+                            : output.getSubmitTime() != null ? output.getSubmitTime()
+                            : output.getUpdatedTime()
+            ));
+        }
+
+        for (CollectionRecord record : collectionRecords == null ? Collections.<CollectionRecord>emptyList() : collectionRecords) {
+            SysUser recordUser = record.getRecordUserId() == null ? null : sysUserMapper.selectById(record.getRecordUserId());
+            ProjectStage stage = record.getProjectStageId() == null ? null : stageMap.get(record.getProjectStageId());
+            events.add(lifecycleEvent(
+                    "collection:" + record.getCollectionRecordId(),
+                    "collection",
+                    "回款",
+                    "回款记录",
+                    (stage == null ? "未关联阶段" : "阶段：" + stage.getStageName()) + " · 金额：" + moneyText(record.getAmount()),
+                    null,
+                    displayUserName(recordUser),
+                    "/collection",
+                    record.getCreatedTime()
+            ));
+        }
+
+        for (ProjectFileVo file : projectFiles == null ? Collections.<ProjectFileVo>emptyList() : projectFiles) {
+            events.add(lifecycleEvent(
+                    "file:" + file.getProjectFileId(),
+                    "file",
+                    "文件",
+                    "项目文件：" + nullableText(file.getFileName(), "-"),
+                    nullableText(file.getStageName(), "未关联阶段") + " · " + fileStatusLabel(file.getApprovalStatus()),
+                    file.getApprovalStatus(),
+                    file.getUploadUserName(),
+                    "/project-files/approval?detailId=" + file.getProjectFileId(),
+                    file.getUpdatedTime() == null ? file.getCreatedTime() : file.getUpdatedTime()
+            ));
+        }
+
+        if (Objects.equals(project.getArchiveStatus(), ARCHIVE_STATUS_ARCHIVED)) {
+            SysUser archiveUser = project.getArchiveUserId() == null ? null : sysUserMapper.selectById(project.getArchiveUserId());
+            events.add(lifecycleEvent(
+                    "archive:" + project.getProjectId(),
+                    "archive",
+                    "归档",
+                    "项目已归档",
+                    nullableText(project.getArchiveRemark(), "项目生命周期已完成"),
+                    project.getArchiveStatus(),
+                    displayUserName(archiveUser),
+                    "/project-archive",
+                    project.getArchiveTime()
+            ));
+        }
+
+        return events.stream()
+                .filter(event -> event.getOccurredTime() != null)
+                .sorted(Comparator.comparing(ProjectLifecycleVo.LifecycleEventVo::getOccurredTime,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(100)
+                .collect(Collectors.toList());
+    }
+
+    private ProjectLifecycleVo.LifecycleEventVo lifecycleEvent(
+            String eventId,
+            String eventType,
+            String eventTypeLabel,
+            String title,
+            String content,
+            Integer status,
+            String operatorName,
+            String link,
+            LocalDateTime occurredTime) {
+        ProjectLifecycleVo.LifecycleEventVo vo = new ProjectLifecycleVo.LifecycleEventVo();
+        vo.setEventId(eventId);
+        vo.setEventType(eventType);
+        vo.setEventTypeLabel(eventTypeLabel);
+        vo.setTitle(title);
+        vo.setContent(content);
+        vo.setStatus(status);
+        vo.setOperatorName(operatorName);
+        vo.setLink(link);
+        vo.setOccurredTime(occurredTime);
+        return vo;
+    }
+
+    private <T> LocalDateTime latestUpdatedTime(List<T> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return null;
+        }
+        return rows.stream()
+                .map(row -> {
+                    if (row instanceof InspectionForm form) return form.getUpdatedTime();
+                    if (row instanceof OutputValue output) return output.getUpdatedTime();
+                    if (row instanceof CollectionRecord record) return record.getUpdatedTime();
+                    if (row instanceof ProjectFileVo file) return file.getUpdatedTime();
+                    return null;
+                })
+                .filter(Objects::nonNull)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+    }
+
+    private LocalDateTime latestTime(LocalDateTime... values) {
+        return java.util.Arrays.stream(values)
+                .filter(Objects::nonNull)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+    }
+
+    private String stageStatusLabel(Integer status) {
+        if (status == null) return "未知";
+        return switch (status) {
+            case 0 -> "未开始";
+            case 1 -> "进行中";
+            case 2 -> "待验收";
+            case 3 -> "已验收";
+            case 4 -> "已驳回";
+            case 5 -> "待分配";
+            case 6 -> "已完成";
+            default -> "未知";
+        };
+    }
+
+    private String inspectionStatusLabel(Integer status) {
+        if (status == null) return "未知";
+        return switch (status) {
+            case 0 -> "待审核";
+            case 1 -> "审核中";
+            case 2 -> "已驳回";
+            case 3 -> "已通过";
+            case 4 -> "草稿";
+            default -> "未知";
+        };
+    }
+
+    private String outputStatusLabel(Integer status) {
+        if (status == null) return "未知";
+        return switch (status) {
+            case 0 -> "待确认";
+            case 1 -> "待审核";
+            case 2 -> "已审批";
+            case 3 -> "已发放";
+            default -> "未知";
+        };
+    }
+
+    private String fileStatusLabel(Integer status) {
+        if (status == null) return "未知";
+        return switch (status) {
+            case 0 -> "待提交";
+            case 1 -> "审批中";
+            case 2 -> "通过";
+            case 3 -> "驳回";
+            default -> "未知";
+        };
+    }
+
+    private String displayUserName(SysUser user) {
+        if (user == null) return null;
+        if (StringUtils.hasText(user.getRealName())) return user.getRealName();
+        if (StringUtils.hasText(user.getUsername())) return user.getUsername();
+        return String.valueOf(user.getUserId());
+    }
+
+    private String nullableText(String value, String fallback) {
+        return StringUtils.hasText(value) ? value : fallback;
+    }
+
+    private String moneyText(BigDecimal value) {
+        if (value == null) {
+            return "0";
+        }
+        return value.stripTrailingZeros().toPlainString();
     }
 
     private BigDecimal sumOutput(List<OutputValue> outputValues, Integer status) {

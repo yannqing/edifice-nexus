@@ -12,6 +12,7 @@ import com.qsy.edifice.domain.entity.ProjectStageTemplate;
 import com.qsy.edifice.domain.entity.ProjectType;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.domain.vo.ProjectDetailVo;
+import com.qsy.edifice.domain.vo.ProjectLifecycleVo;
 import com.qsy.edifice.domain.vo.ProjectListVo;
 import com.qsy.edifice.domain.vo.ProjectStatisticsVo;
 import com.qsy.edifice.service.ProjectExcelService;
@@ -105,6 +106,21 @@ public class ProjectController {
     public BaseResponse<Page<ProjectListVo>> getAllProjects(GetAllProjectListDto dto) {
         Page<ProjectListVo> result = projectService.getAllProjectPage(dto);
         return ResultUtils.success(Code.SUCCESS, result);
+    }
+
+    @GetMapping("/lifecycle/list")
+    @Operation(summary = "项目生命周期可选项目", description = "分页 + 条件查询生命周期看板可查看项目")
+    @PreAuthorize("hasAuthority('menu:project-lifecycle') or hasRole('SUPER_ADMIN')")
+    public BaseResponse<Page<ProjectListVo>> getLifecycleProjects(GetAllProjectListDto dto) {
+        Page<ProjectListVo> result = projectService.getLifecycleProjectPage(dto);
+        return ResultUtils.success(Code.SUCCESS, result);
+    }
+
+    @GetMapping("/lifecycle/{id}")
+    @Operation(summary = "项目生命周期详情", description = "聚合项目从立项到归档的阶段、验工、产值、回款和文件动态")
+    @PreAuthorize("hasAuthority('menu:project-lifecycle') or hasRole('SUPER_ADMIN')")
+    public BaseResponse<ProjectLifecycleVo> getProjectLifecycle(@PathVariable("id") Long projectId) {
+        return ResultUtils.success(Code.SUCCESS, projectService.getProjectLifecycleDetail(projectId));
     }
 
     @GetMapping("/mine/statistics")

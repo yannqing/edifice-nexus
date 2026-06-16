@@ -11,6 +11,7 @@ import com.qsy.edifice.domain.vo.ProjectDetailVo;
 import com.qsy.edifice.domain.vo.ProjectArchiveVo;
 import com.qsy.edifice.domain.vo.ProjectArchiveDetailVo;
 import com.qsy.edifice.domain.vo.ProjectListVo;
+import com.qsy.edifice.domain.vo.ProjectLifecycleVo;
 import com.qsy.edifice.domain.vo.ProjectStatisticsVo;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -101,6 +102,13 @@ public interface ProjectService {
     Page<ProjectListVo> getAllProjectPage(GetAllProjectListDto dto);
 
     /**
+     * 分页查询项目生命周期看板可选项目
+     * @param dto 查询条件
+     * @return 分页结果
+     */
+    Page<ProjectListVo> getLifecycleProjectPage(GetAllProjectListDto dto);
+
+    /**
      * 分页查询本人参与的项目列表
      * @param userId 用户id
      * @param dto 查询条件
@@ -114,6 +122,13 @@ public interface ProjectService {
      * @return 项目详情
      */
     ProjectDetailVo getProjectDetailById(Long projectId);
+
+    /**
+     * 查询项目生命周期看板详情
+     * @param projectId 项目id
+     * @return 生命周期聚合详情
+     */
+    ProjectLifecycleVo getProjectLifecycleDetail(Long projectId);
 
     /**
      * 检查项目是否存在

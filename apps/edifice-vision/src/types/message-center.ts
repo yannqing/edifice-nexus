@@ -1,6 +1,6 @@
 export interface MessageCenterItem {
   messageKey: string;
-  category: "approval" | "result" | "announcement";
+  category: "approval" | "result" | "announcement" | "project";
   categoryLabel: string;
   title: string;
   content?: string | null;

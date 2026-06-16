@@ -26,6 +26,8 @@ public class MessageCenterServiceImpl implements MessageCenterService {
     private static final String SOURCE_APPROVAL = "approval";
     private static final String SOURCE_APPROVAL_RESULT = "approval_result";
     private static final String SOURCE_APPROVAL_URGE = "approval_urge";
+    private static final String SOURCE_PROJECT_MEMBER = "project_member";
+    private static final String SOURCE_PROJECT_ARCHIVE = "project_archive";
 
     @Resource
     private ApprovalRecordsMapper approvalRecordsMapper;
@@ -65,6 +67,9 @@ public class MessageCenterServiceImpl implements MessageCenterService {
 
     @Resource
     private ProjectMapper projectMapper;
+
+    @Resource
+    private ProjectMemberMapper projectMemberMapper;
 
     @Override
     public Page<MessageCenterItemVo> list(Long userId, GetMessageCenterListDto dto) {
@@ -225,6 +230,52 @@ public class MessageCenterServiceImpl implements MessageCenterService {
                     .build());
         }
 
+        List<ProjectMember> projectMembers = projectMemberMapper.selectByUserId(userId);
+        Set<Long> memberProjectIds = (projectMembers == null ? Collections.<ProjectMember>emptyList() : projectMembers).stream()
+                .map(ProjectMember::getProjectId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, Project> memberProjects = memberProjectIds.isEmpty()
+                ? Map.of()
+                : projectMapper.selectBatchIds(memberProjectIds).stream()
+                .filter(project -> project.getProjectId() != null)
+                .collect(Collectors.toMap(Project::getProjectId, Function.identity(), (left, right) -> left));
+        for (ProjectMember member : projectMembers == null ? Collections.<ProjectMember>emptyList() : projectMembers) {
+            Project project = memberProjects.get(member.getProjectId());
+            if (project == null) continue;
+            String sourceKey = key(SOURCE_PROJECT_MEMBER, member.getProjectMemberId());
+            messages.add(MessageCenterItemVo.builder()
+                    .messageKey(sourceKey)
+                    .category("project")
+                    .categoryLabel("项目动态")
+                    .title("您已加入项目「" + project.getProjectName() + "」")
+                    .content("项目编号：" + nullableText(project.getProjectCode(), "-") + "，角色：" + projectRoleLabel(member.getProjectRole()))
+                    .link("/project-lifecycle?projectId=" + project.getProjectId())
+                    .priority(0)
+                    .read(readKeys.contains(sourceKey))
+                    .sourceType(SOURCE_PROJECT_MEMBER)
+                    .sourceId(member.getProjectMemberId())
+                    .createdTime(member.getCreatedTime())
+                    .build());
+        }
+        for (Project project : memberProjects.values()) {
+            if (!Objects.equals(project.getArchiveStatus(), 1)) continue;
+            String sourceKey = key(SOURCE_PROJECT_ARCHIVE, project.getProjectId());
+            messages.add(MessageCenterItemVo.builder()
+                    .messageKey(sourceKey)
+                    .category("project")
+                    .categoryLabel("项目归档")
+                    .title("项目「" + project.getProjectName() + "」已归档")
+                    .content(StringUtils.hasText(project.getArchiveRemark()) ? project.getArchiveRemark() : "项目生命周期已完成")
+                    .link("/project-lifecycle?projectId=" + project.getProjectId())
+                    .priority(1)
+                    .read(readKeys.contains(sourceKey))
+                    .sourceType(SOURCE_PROJECT_ARCHIVE)
+                    .sourceId(project.getProjectId())
+                    .createdTime(project.getArchiveTime() == null ? project.getUpdatedTime() : project.getArchiveTime())
+                    .build());
+        }
+
         List<Announcement> announcements = announcementMapper.selectList(new LambdaQueryWrapper<Announcement>()
                 .eq(Announcement::getStatus, 1)
                 .and(w -> w.isNull(Announcement::getExpireTime).or().ge(Announcement::getExpireTime, LocalDateTime.now()))
@@ -282,6 +333,17 @@ public class MessageCenterServiceImpl implements MessageCenterService {
                         .select(ApprovalUrge::getUrgeId)
                         .eq(ApprovalUrge::getToUserId, userId))
                 .forEach(urge -> sources.add(new MessageSource(SOURCE_APPROVAL_URGE, urge.getUrgeId())));
+        List<ProjectMember> projectMembers = projectMemberMapper.selectByUserId(userId);
+        Set<Long> projectIds = (projectMembers == null ? Collections.<ProjectMember>emptyList() : projectMembers).stream()
+                .peek(member -> sources.add(new MessageSource(SOURCE_PROJECT_MEMBER, member.getProjectMemberId())))
+                .map(ProjectMember::getProjectId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (!projectIds.isEmpty()) {
+            projectMapper.selectBatchIds(projectIds).stream()
+                    .filter(project -> Objects.equals(project.getArchiveStatus(), 1))
+                    .forEach(project -> sources.add(new MessageSource(SOURCE_PROJECT_ARCHIVE, project.getProjectId())));
+        }
         announcementMapper.selectList(new LambdaQueryWrapper<Announcement>()
                         .select(Announcement::getAnnouncementId)
                         .eq(Announcement::getStatus, 1)
@@ -393,6 +455,16 @@ public class MessageCenterServiceImpl implements MessageCenterService {
 
     private String displayName(String label, String name) {
         return StringUtils.hasText(name) ? label + "「" + name + "」" : label;
+    }
+
+    private String nullableText(String value, String fallback) {
+        return StringUtils.hasText(value) ? value : fallback;
+    }
+
+    private String projectRoleLabel(Long roleId) {
+        if (Objects.equals(roleId, 101L)) return "项目经理";
+        if (Objects.equals(roleId, 102L)) return "项目成员";
+        return "项目成员";
     }
 
     private Map<Long, String> resolveUserNames(Set<Long> userIds) {

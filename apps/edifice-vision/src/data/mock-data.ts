@@ -261,6 +261,13 @@ export const navigationConfig: NavSection[] = [
         permissionCode: "menu:all-projects",
       },
       {
+        id: "project-lifecycle",
+        label: "项目生命周期",
+        icon: "GitBranch",
+        href: "/project-lifecycle",
+        permissionCode: "menu:project-lifecycle",
+      },
+      {
         id: "inspection-management",
         label: "验工单管理",
         icon: "FileText",
