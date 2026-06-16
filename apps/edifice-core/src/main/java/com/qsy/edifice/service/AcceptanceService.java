@@ -29,7 +29,7 @@ public interface AcceptanceService {
     List<AcceptanceVo> list(Long projectId, Integer acceptanceType, Integer status, String keyword);
 
     /** 详情 + 审批链 */
-    AcceptanceVo getDetail(Long acceptanceId);
+    AcceptanceVo getDetail(Long acceptanceId, Long userId, boolean canViewAll);
 
     /** 我的待审 */
     List<AcceptanceVo> listMyPending(Long userId);

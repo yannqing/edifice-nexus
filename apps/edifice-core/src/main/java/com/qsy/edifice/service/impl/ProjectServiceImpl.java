@@ -644,15 +644,21 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public ProjectDetailVo getProjectDetailById(Long projectId) {
+    public ProjectDetailVo getProjectDetailById(Long projectId, Long userId, boolean canViewAll) {
         //1.参数校验
         if (projectId == null) {
            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
+        }
+        if (!canViewAll && userId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "用户ID不能为空");
         }
         // 2. 查询项目基本信息
         Project project = projectMapper.selectById(projectId);
         if (project == null) {
             throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
+        }
+        if (!canViewAll && projectMemberService.getProjectMemberByProjectIdAndUserId(projectId, userId) == null) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "无权查看该项目详情");
         }
         return convertToDetailVo(project);
     }

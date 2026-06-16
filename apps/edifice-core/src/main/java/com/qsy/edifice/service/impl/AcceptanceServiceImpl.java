@@ -168,9 +168,12 @@ public class AcceptanceServiceImpl implements AcceptanceService {
     }
 
     @Override
-    public AcceptanceVo getDetail(Long acceptanceId) {
+    public AcceptanceVo getDetail(Long acceptanceId, Long userId, boolean canViewAll) {
         ProjectAcceptance entity = acceptanceMapper.selectById(acceptanceId);
         if (entity == null) throw new BusinessException(ErrorType.ACCEPTANCE_NOT_FOUND);
+        if (!canViewAll && !canViewAcceptance(entity, userId)) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "无权查看该验收单");
+        }
         return toVos(Collections.singletonList(entity), true).get(0);
     }
 
@@ -194,6 +197,21 @@ public class AcceptanceServiceImpl implements AcceptanceService {
                 .filter(m -> ROLE_MANAGER_ID.equals(m.getProjectRole()))
                 .map(ProjectMember::getUserId)
                 .findFirst().orElse(null);
+    }
+
+    private boolean canViewAcceptance(ProjectAcceptance entity, Long userId) {
+        if (entity == null || userId == null) {
+            return false;
+        }
+        if (Objects.equals(entity.getApplyUserId(), userId)) {
+            return true;
+        }
+        if (entity.getProjectId() != null
+                && projectMemberService.getProjectMemberByProjectIdAndUserId(entity.getProjectId(), userId) != null) {
+            return true;
+        }
+        return approvalFlowService.queryChain(ApprovalBizType.ACCEPTANCE, entity.getAcceptanceId()).stream()
+                .anyMatch(record -> Objects.equals(record.getApprover(), userId));
     }
 
     private List<AcceptanceVo> toVos(List<ProjectAcceptance> list, boolean withChain) {

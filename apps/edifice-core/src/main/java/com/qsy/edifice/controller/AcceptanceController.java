@@ -15,6 +15,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -38,6 +41,7 @@ public class AcceptanceController {
     @PostMapping("/create")
     @Operation(summary = "创建验收单并提交审批",
             description = "acceptanceType: 0-过程 / 1-成果 / 2-阶段性；阶段性验收必须选阶段")
+    @PreAuthorize("hasAuthority('menu:oa-applications') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Long> create(@RequestBody CreateAcceptanceDto dto,
                                      HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
@@ -49,6 +53,7 @@ public class AcceptanceController {
     @PostMapping("/approve")
     @Operation(summary = "审批（通过 / 驳回）",
             description = "通过 + nextApproverId 非空时流转下一级；否则视为终审")
+    @PreAuthorize("isAuthenticated()")
     public BaseResponse<Boolean> approve(@RequestBody ApproveDto dto,
                                          HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
@@ -60,6 +65,7 @@ public class AcceptanceController {
     @GetMapping("/list")
     @Operation(summary = "验收单列表",
             description = "支持 projectId / acceptanceType / status / keyword 过滤")
+    @PreAuthorize("hasAuthority('menu:oa-applications') or hasRole('SUPER_ADMIN')")
     public BaseResponse<List<AcceptanceVo>> list(
             @RequestParam(value = "projectId", required = false) Long projectId,
             @RequestParam(value = "acceptanceType", required = false) Integer acceptanceType,
@@ -71,16 +77,32 @@ public class AcceptanceController {
 
     @GetMapping("/{id}")
     @Operation(summary = "验收单详情（含审批链）")
-    public BaseResponse<AcceptanceVo> detail(@PathVariable("id") Long id) {
-        return ResultUtils.success(Code.SUCCESS, acceptanceService.getDetail(id));
+    @PreAuthorize("isAuthenticated()")
+    public BaseResponse<AcceptanceVo> detail(@PathVariable("id") Long id,
+                                             HttpServletRequest request) throws JsonProcessingException {
+        SysUser loginUser = jwtUtils.getUserFromToken(request.getHeader("token"));
+        return ResultUtils.success(Code.SUCCESS,
+                acceptanceService.getDetail(id, loginUser.getUserId(), canViewAllAcceptance()));
     }
 
     @GetMapping("/my-pending")
     @Operation(summary = "我的待审验收单")
+    @PreAuthorize("isAuthenticated()")
     public BaseResponse<List<AcceptanceVo>> myPending(HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);
         return ResultUtils.success(Code.SUCCESS,
                 acceptanceService.listMyPending(loginUser.getUserId()));
+    }
+
+    private boolean canViewAllAcceptance() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream().anyMatch(authority ->
+                "menu:oa-applications".equals(authority.getAuthority())
+                        || "menu:all-projects".equals(authority.getAuthority())
+                        || "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
     }
 }

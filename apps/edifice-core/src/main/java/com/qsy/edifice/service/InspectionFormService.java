@@ -46,6 +46,8 @@ public interface InspectionFormService {
      */
     InspectionFormDetailVo getInspectionById(Long id);
 
+    InspectionFormDetailVo getInspectionById(Long id, Long userId, boolean canViewAll);
+
     /**
      * 验工单数据总览
      * @param applyUserId 可空；非空时仅统计该用户提交的验工单

@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -24,6 +25,7 @@ import java.util.Map;
 @Tag(name = "绩效还原")
 @RestController
 @RequestMapping("/performance/restore")
+@PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
 public class PerformanceRestoreController {
 
     @Resource

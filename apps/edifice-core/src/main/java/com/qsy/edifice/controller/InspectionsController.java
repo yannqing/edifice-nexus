@@ -21,6 +21,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -65,8 +67,12 @@ public class InspectionsController {
 
     @GetMapping("/{id}")
     @Operation(summary = "根据id查看验工单详情")
-    public BaseResponse<InspectionFormDetailVo> getInspectionById(@PathVariable Long id) {
-        InspectionFormDetailVo result = inspectionFormService.getInspectionById(id);
+    @PreAuthorize("isAuthenticated()")
+    public BaseResponse<InspectionFormDetailVo> getInspectionById(@PathVariable Long id,
+                                                                  HttpServletRequest request) throws JsonProcessingException {
+        SysUser loginUser = jwtUtils.getUserFromToken(request.getHeader("token"));
+        InspectionFormDetailVo result = inspectionFormService.getInspectionById(
+                id, loginUser.getUserId(), canViewAllInspections());
         return ResultUtils.success(Code.SUCCESS, result);
     }
 
@@ -112,6 +118,7 @@ public class InspectionsController {
 
     @PutMapping("/approval")
     @Operation(summary = "审批验工单", description = "审批人通过或驳回验工单")
+    @PreAuthorize("isAuthenticated()")
     public BaseResponse<Boolean> approvalInspection(@RequestBody ApprovalInspectionDto dto, HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);
@@ -141,5 +148,16 @@ public class InspectionsController {
         SysUser loginUser = jwtUtils.getUserFromToken(token);
         dto.setApplyUserId(loginUser.getUserId());
         inspectionFormService.exportInspections(dto, response);
+    }
+
+    private boolean canViewAllInspections() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream().anyMatch(authority ->
+                "menu:inspection-management".equals(authority.getAuthority())
+                        || "menu:all-projects".equals(authority.getAuthority())
+                        || "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
     }
 }

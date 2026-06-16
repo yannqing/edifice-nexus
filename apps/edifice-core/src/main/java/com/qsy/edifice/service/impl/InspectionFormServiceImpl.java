@@ -81,6 +81,9 @@ public class InspectionFormServiceImpl implements InspectionFormService {
     private ProjectService projectService;
 
     @Resource
+    private ProjectMemberService projectMemberService;
+
+    @Resource
     private ProjectTypeService projectTypeService;
 
     @Resource
@@ -353,6 +356,36 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         }
 
         return vo;
+    }
+
+    @Override
+    public InspectionFormDetailVo getInspectionById(Long id, Long userId, boolean canViewAll) {
+        if (id == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
+        }
+        InspectionForm form = inspectionFormMapper.selectById(id);
+        if (form == null) {
+            return null;
+        }
+        if (!canViewAll && !canViewInspection(form, userId)) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "无权查看该验工单");
+        }
+        return getInspectionById(id);
+    }
+
+    private boolean canViewInspection(InspectionForm form, Long userId) {
+        if (form == null || userId == null) {
+            return false;
+        }
+        if (Objects.equals(form.getApplyUserId(), userId)) {
+            return true;
+        }
+        Long projectId = parseProjectId(form.getProjectId());
+        if (projectId != null && projectMemberService.getProjectMemberByProjectIdAndUserId(projectId, userId) != null) {
+            return true;
+        }
+        return approvalFlowService.queryChain(ApprovalBizType.INSPECTION, form.getInspectionFormId()).stream()
+                .anyMatch(record -> Objects.equals(record.getApprover(), userId));
     }
 
     // ==================== 统计总览 ====================

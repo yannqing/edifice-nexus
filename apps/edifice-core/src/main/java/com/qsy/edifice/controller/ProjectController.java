@@ -153,7 +153,9 @@ public class ProjectController {
     @GetMapping("/details/{id}")
     @Operation(summary = "根据id查询项目详情", description = "查看项目详情信息")
     public BaseResponse<ProjectDetailVo> getProjectDetailById(@PathVariable("id") Long projectId, HttpServletRequest request) throws JsonProcessingException {
-        ProjectDetailVo result = projectService.getProjectDetailById(projectId);
+        SysUser loginUser = jwtUtils.getUserFromToken(request.getHeader("token"));
+        ProjectDetailVo result = projectService.getProjectDetailById(
+                projectId, loginUser.getUserId(), canViewAllProjectDetails());
 
         if (result == null) {
             boolean projectExists = projectService.checkProjectExists(projectId);
@@ -228,6 +230,19 @@ public class ProjectController {
         return authentication.getAuthorities().stream().anyMatch(authority ->
                 "menu:project-lifecycle".equals(authority.getAuthority())
                         || "menu:all-projects".equals(authority.getAuthority())
+                        || "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
+    }
+
+    private boolean canViewAllProjectDetails() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream().anyMatch(authority ->
+                "menu:all-projects".equals(authority.getAuthority())
+                        || "menu:contract-management".equals(authority.getAuthority())
+                        || "menu:project-archive".equals(authority.getAuthority())
+                        || "menu:project-lifecycle".equals(authority.getAuthority())
                         || "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
     }
 }

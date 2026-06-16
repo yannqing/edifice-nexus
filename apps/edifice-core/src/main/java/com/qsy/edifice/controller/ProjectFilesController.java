@@ -16,6 +16,8 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -44,6 +46,7 @@ public class ProjectFilesController {
     @PostMapping("/create")
     @Operation(summary = "创建项目文件并提交审批",
             description = "先通过 /file/upload/* 拿到 fileId，再调用此接口归档并进入三级审批链")
+    @PreAuthorize("hasAuthority('menu:my-projects') or hasAuthority('menu:project-files-approval') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Long> create(@RequestBody CreateProjectFileDto dto,
                                      HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
@@ -66,6 +69,7 @@ public class ProjectFilesController {
 
     @PostMapping("/{id}/cancel")
     @Operation(summary = "撤销项目文件", description = "上传人可撤销审批中的项目文件")
+    @PreAuthorize("isAuthenticated()")
     public BaseResponse<Boolean> cancel(@PathVariable("id") Long id,
                                         HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
@@ -76,19 +80,26 @@ public class ProjectFilesController {
 
     @GetMapping("/list")
     @Operation(summary = "项目文件列表", description = "支持按 projectId / approvalStatus / keyword 过滤")
+    @PreAuthorize("isAuthenticated()")
     public BaseResponse<List<ProjectFileVo>> list(
             @RequestParam(value = "projectId", required = false) Long projectId,
             @RequestParam(value = "approvalStatus", required = false) Integer approvalStatus,
-            @RequestParam(value = "keyword", required = false) String keyword) {
+            @RequestParam(value = "keyword", required = false) String keyword,
+            HttpServletRequest request) throws JsonProcessingException {
+        SysUser loginUser = jwtUtils.getUserFromToken(request.getHeader("token"));
         return ResultUtils.success(Code.SUCCESS,
-                projectFilesService.listProjectFiles(projectId, approvalStatus, keyword));
+                projectFilesService.listProjectFiles(projectId, approvalStatus, keyword,
+                        loginUser.getUserId(), canViewAllProjectFiles()));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("isAuthenticated()")
     @Operation(summary = "项目文件详情（含审批链）")
-    public BaseResponse<ProjectFileVo> detail(@PathVariable("id") Long id) {
-        return ResultUtils.success(Code.SUCCESS, projectFilesService.getDetail(id));
+    public BaseResponse<ProjectFileVo> detail(@PathVariable("id") Long id,
+                                              HttpServletRequest request) throws JsonProcessingException {
+        SysUser loginUser = jwtUtils.getUserFromToken(request.getHeader("token"));
+        return ResultUtils.success(Code.SUCCESS,
+                projectFilesService.getDetail(id, loginUser.getUserId(), canViewAllProjectFiles()));
     }
 
     @GetMapping("/my-pending")
@@ -99,5 +110,16 @@ public class ProjectFilesController {
         SysUser loginUser = jwtUtils.getUserFromToken(token);
         return ResultUtils.success(Code.SUCCESS,
                 projectFilesService.listMyPending(loginUser.getUserId()));
+    }
+
+    private boolean canViewAllProjectFiles() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream().anyMatch(authority ->
+                "menu:project-files-approval".equals(authority.getAuthority())
+                        || "menu:all-projects".equals(authority.getAuthority())
+                        || "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
     }
 }

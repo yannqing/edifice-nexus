@@ -21,6 +21,15 @@ const PROJECT_DETAIL_PATHS = new Set([
   "/project-lifecycle",
 ]);
 
+const HIDDEN_ROUTE_PERMISSIONS: Record<string, string> = {
+  "/acceptance": "menu:oa-applications",
+  "/performance-restore": "menu:all-projects",
+};
+
+const PUBLIC_DASHBOARD_PATHS = new Set([
+  "/profile",
+]);
+
 export function PermissionRouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -34,6 +43,11 @@ export function PermissionRouteGuard({ children }: { children: React.ReactNode }
         item.href === pathname || (item.href !== "/" && pathname.startsWith(`${item.href}/`))
       );
   }, [pathname]);
+  const hiddenPermissionCode = useMemo(() => {
+    return Object.entries(HIDDEN_ROUTE_PERMISSIONS)
+      .sort(([a], [b]) => b.length - a.length)
+      .find(([path]) => pathname === path || pathname.startsWith(`${path}/`))?.[1];
+  }, [pathname]);
 
   const messageDetailAccess = isHydrated
     && typeof window !== "undefined"
@@ -43,9 +57,13 @@ export function PermissionRouteGuard({ children }: { children: React.ReactNode }
     && typeof window !== "undefined"
     && PROJECT_DETAIL_PATHS.has(pathname)
     && new URLSearchParams(window.location.search).has("projectId");
-  const allowed = messageDetailAccess
+  const configuredPermissionCode = matchedItem?.permissionCode ?? hiddenPermissionCode;
+  const allowed = PUBLIC_DASHBOARD_PATHS.has(pathname)
+    || messageDetailAccess
     || projectDetailAccess
-    || hasPermission(permissions, matchedItem?.permissionCode, roles);
+    || (configuredPermissionCode
+      ? hasPermission(permissions, configuredPermissionCode, roles)
+      : false);
 
   useEffect(() => {
     if (!isHydrated || !isAuthenticated || !accessToken) return;

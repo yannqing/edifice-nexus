@@ -121,7 +121,7 @@ public interface ProjectService {
      * @param projectId 项目id
      * @return 项目详情
      */
-    ProjectDetailVo getProjectDetailById(Long projectId);
+    ProjectDetailVo getProjectDetailById(Long projectId, Long userId, boolean canViewAll);
 
     /**
      * 查询项目生命周期看板详情

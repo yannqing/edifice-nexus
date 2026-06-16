@@ -20,6 +20,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -118,6 +120,10 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
         }
         if (filesMapper.selectById(dto.getFileId()) == null) {
             throw new BusinessException(ErrorType.FILE_NOT_FOUND);
+        }
+        if (!hasProjectFileManageAuthority()
+                && projectMemberService.getProjectMemberByProjectIdAndUserId(dto.getProjectId(), uploadUserId) == null) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只有项目成员可以上传项目文件");
         }
 
         Long firstApproverId = dto.getFirstApproverId();
@@ -243,10 +249,35 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
     }
 
     @Override
+    public List<ProjectFileVo> listProjectFiles(Long projectId, Integer approvalStatus, String keyword, Long userId, boolean canViewAll) {
+        List<ProjectFileVo> list = listProjectFiles(projectId, approvalStatus, keyword);
+        if (canViewAll) {
+            return list;
+        }
+        if (userId == null) {
+            return Collections.emptyList();
+        }
+        return list.stream()
+                .filter(item -> canViewProjectFile(item, userId))
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public ProjectFileVo getDetail(Long projectFileId) {
         ProjectFiles entity = projectFilesMapper.selectById(projectFileId);
         if (entity == null) throw new BusinessException(ErrorType.FILE_NOT_FOUND, "项目文件不存在");
         return toVos(Collections.singletonList(entity), true).get(0);
+    }
+
+    @Override
+    public ProjectFileVo getDetail(Long projectFileId, Long userId, boolean canViewAll) {
+        ProjectFiles entity = projectFilesMapper.selectById(projectFileId);
+        if (entity == null) throw new BusinessException(ErrorType.FILE_NOT_FOUND, "项目文件不存在");
+        ProjectFileVo vo = toVos(Collections.singletonList(entity), true).get(0);
+        if (!canViewAll && !canViewProjectFile(vo, userId)) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "无权查看该项目文件");
+        }
+        return vo;
     }
 
     @Override
@@ -273,6 +304,33 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
                 .map(ProjectMember::getUserId)
                 .findFirst()
                 .orElse(null);
+    }
+
+    private boolean canViewProjectFile(ProjectFileVo file, Long userId) {
+        if (file == null || userId == null) {
+            return false;
+        }
+        if (Objects.equals(file.getUploadUserId(), userId)) {
+            return true;
+        }
+        if (file.getProjectId() != null
+                && projectMemberService.getProjectMemberByProjectIdAndUserId(file.getProjectId(), userId) != null) {
+            return true;
+        }
+        return (file.getApprovalChain() == null ? Collections.<ApprovalRecordVo>emptyList() : file.getApprovalChain())
+                .stream()
+                .anyMatch(record -> Objects.equals(record.getApprover(), userId));
+    }
+
+    private boolean hasProjectFileManageAuthority() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || authentication.getAuthorities() == null) {
+            return false;
+        }
+        return authentication.getAuthorities().stream().anyMatch(authority ->
+                "menu:project-files-approval".equals(authority.getAuthority())
+                        || "menu:all-projects".equals(authority.getAuthority())
+                        || "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
     }
 
     private List<ProjectFileVo> toVos(List<ProjectFiles> list, boolean withChain) {

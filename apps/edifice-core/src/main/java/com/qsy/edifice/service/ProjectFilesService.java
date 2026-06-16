@@ -63,10 +63,14 @@ public interface ProjectFilesService {
      */
     List<ProjectFileVo> listProjectFiles(Long projectId, Integer approvalStatus, String keyword);
 
+    List<ProjectFileVo> listProjectFiles(Long projectId, Integer approvalStatus, String keyword, Long userId, boolean canViewAll);
+
     /**
      * 详情 + 审批链
      */
     ProjectFileVo getDetail(Long projectFileId);
+
+    ProjectFileVo getDetail(Long projectFileId, Long userId, boolean canViewAll);
 
     /**
      * 我的待审：当前登录用户的所有"审批中且当前节点 approver = 我"的项目文件
