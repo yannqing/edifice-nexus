@@ -90,6 +90,7 @@ public class BidController {
     }
 
     @PostMapping("/approve")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "审批（通过 / 驳回）")
     public BaseResponse<Boolean> approve(@RequestBody ApproveDto dto,
                                          HttpServletRequest request) throws JsonProcessingException {
@@ -111,12 +112,15 @@ public class BidController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('menu:bids') or hasRole('SUPER_ADMIN') or "
+            + "@approvalFlowServiceImpl.isParticipant('bid', #id, authentication.principal.sysUser.userId)")
     @Operation(summary = "投标详情（含附件 + 审批链）")
     public BaseResponse<BidVo> detail(@PathVariable("id") Long id) {
         return ResultUtils.success(Code.SUCCESS, bidService.getDetail(id));
     }
 
     @GetMapping("/my-pending")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "我的待审投标")
     public BaseResponse<List<BidVo>> myPending(HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");

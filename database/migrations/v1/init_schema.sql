@@ -180,6 +180,7 @@ create table approval_records
     approval_record_type  tinyint                            not null comment '审批类型：0-项目文件上传/1-验工审批/2-产值分配审批/3-工时填写',
     inspection_form_id    bigint                             not null comment '对应业务id',
     approver              bigint                             not null comment '审批人id',
+    apply_user_id         bigint                             null     comment '审批流程发起人id',
     approval_description  varchar(1024)                      null     comment '审批说明',
     inspection_form_status tinyint                           null     comment '审批状态：0-待审核/1-已通过/2-已拒绝',
     approval_level        tinyint        default 1           not null comment '审批层级（1/2/3...）',
@@ -189,7 +190,18 @@ create table approval_records
     created_time          datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updated_time          datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
     is_delete             tinyint  default 0                 not null comment '逻辑删除',
+    pending_business_key  varchar(128) generated always as (
+        case
+            when inspection_form_status = 0 and is_delete = 0
+                then concat(coalesce(biz_type_ext, concat('code:', approval_record_type)), ':', inspection_form_id)
+            else null
+        end
+    ) stored comment '待审批业务唯一键',
+    unique key uk_ar_pending_business (pending_business_key),
     key idx_ar_biz (biz_type_ext),
+    key idx_ar_apply_user (apply_user_id),
+    key idx_ar_approver_status (approver, inspection_form_status),
+    key idx_ar_apply_status_time (apply_user_id, inspection_form_status, updated_time),
     key idx_ar_next (next_approver_id),
     key idx_ar_parent (parent_record_id)
 )

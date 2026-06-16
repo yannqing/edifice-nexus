@@ -199,6 +199,13 @@ export const navigationConfig: NavSection[] = [
         href: "/",
         permissionCode: "menu:workbench",
       },
+      {
+        id: "message-center",
+        label: "消息中心",
+        icon: "Bell",
+        href: "/message-center",
+        permissionCode: "menu:message-center",
+      },
     ],
   },
   {
@@ -334,6 +341,13 @@ export const navigationConfig: NavSection[] = [
         icon: "Megaphone",
         href: "/announcement-management",
         permissionCode: "menu:announcement-management",
+      },
+      {
+        id: "audit-logs",
+        label: "操作审计",
+        icon: "History",
+        href: "/audit-logs",
+        permissionCode: "menu:audit-logs",
       },
     ],
   },

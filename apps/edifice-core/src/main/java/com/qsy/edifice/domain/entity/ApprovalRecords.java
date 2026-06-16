@@ -50,6 +50,13 @@ public class ApprovalRecords implements Serializable {
     private Long approver;
 
     /**
+     * 审批流程发起人id；整条审批链保持一致。
+     */
+    @TableField("apply_user_id")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long applyUserId;
+
+    /**
      * 审批说明
      */
     @TableField("approval_description")

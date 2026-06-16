@@ -8,6 +8,7 @@
         <result column="approval_record_type" property="approvalRecordType" jdbcType="TINYINT"/>
         <result column="inspection_form_id" property="inspectionFormId" jdbcType="BIGINT"/>
         <result column="approver" property="approver" jdbcType="BIGINT"/>
+        <result column="apply_user_id" property="applyUserId" jdbcType="BIGINT"/>
         <result column="approval_description" property="approvalDescription" jdbcType="VARCHAR"/>
         <result column="inspection_form_status" property="inspectionFormStatus" jdbcType="TINYINT"/>
         <result column="approval_level" property="approvalLevel" jdbcType="TINYINT"/>
@@ -21,7 +22,7 @@
 
     <!-- 基础字段列表 -->
     <sql id="Base_Column_List">
-        approval_record_id, approval_record_type, inspection_form_id, approver,
+        approval_record_id, approval_record_type, inspection_form_id, approver, apply_user_id,
         approval_description, inspection_form_status, approval_level,
         next_approver_id, parent_record_id, biz_type_ext,
         created_time, updated_time, is_delete
@@ -67,4 +68,15 @@
           AND is_delete = 0
         ORDER BY created_time ASC, approval_record_id ASC
     </select>
+
+    <update id="updatePendingResult">
+        UPDATE approval_records
+        SET inspection_form_status = #{inspectionFormStatus},
+            approval_description = #{approvalDescription},
+            next_approver_id = #{nextApproverId},
+            updated_time = #{updatedTime}
+        WHERE approval_record_id = #{approvalRecordId}
+          AND inspection_form_status = 0
+          AND is_delete = 0
+    </update>
 </mapper>

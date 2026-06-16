@@ -16,6 +16,7 @@ declare (strict_types = 1);
 namespace app\home\controller;
 
 use app\base\BaseController;
+use app\common\service\EdificeSync;
 use app\home\model\AdminLog;
 use app\user\validate\AdminCheck;
 use Firebase\JWT\JWT;
@@ -413,6 +414,10 @@ class Index extends BaseController
             $param = get_params();
             $uid = $this->uid;
             Db::name('Admin')->where(['id' => $uid])->strict(false)->field(true)->update($param);
+            $syncResult = EdificeSync::syncAdmin((int)$uid);
+            if (!$syncResult['ok']) {
+                return to_assign(0, '操作成功，edifice 即时同步失败，将由定时任务补偿：' . $syncResult['message']);
+            }
             return to_assign();
         }
 		else{
@@ -449,6 +454,10 @@ class Index extends BaseController
 				'update_time' => time(),
 			];
             Db::name('Admin')->where(['id' => $uid])->strict(false)->field(true)->update($data);
+            $syncResult = EdificeSync::syncAdmin((int)$uid);
+            if (!$syncResult['ok']) {
+                return to_assign(0, '操作成功，edifice 即时同步失败，将由定时任务补偿：' . $syncResult['message']);
+            }
             return to_assign();
         }
 		else{

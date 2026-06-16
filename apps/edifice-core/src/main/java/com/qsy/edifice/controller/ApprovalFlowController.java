@@ -19,6 +19,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -43,6 +44,7 @@ public class ApprovalFlowController {
     private JwtUtils jwtUtils;
 
     @PostMapping("/submit")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     @Operation(summary = "提交审批",
             description = "创建第一条待审核节点；同一业务存在未结束审批时拒绝重复提交")
     public BaseResponse<Long> submit(@RequestBody SubmitApprovalDto dto,
@@ -54,6 +56,7 @@ public class ApprovalFlowController {
     }
 
     @PostMapping("/approve")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     @Operation(summary = "审批（通过 / 驳回）",
             description = "通过且 nextApproverId 非空时级联创建下一级；不传 nextApproverId 视为终审")
     public BaseResponse<ApprovalFlowService.ApprovalResult> approve(
@@ -66,6 +69,7 @@ public class ApprovalFlowController {
     }
 
     @GetMapping("/chain")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     @Operation(summary = "查询审批链", description = "按时间升序返回该业务的全部审批记录")
     public BaseResponse<List<ApprovalRecordVo>> chain(
             @RequestParam("bizType") String bizType,
@@ -78,6 +82,7 @@ public class ApprovalFlowController {
     }
 
     @GetMapping("/current-pending")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     @Operation(summary = "查询当前待审核节点",
             description = "业务侧调用此接口判断是否已提交、当前审批人是谁")
     public BaseResponse<ApprovalRecordVo> currentPending(

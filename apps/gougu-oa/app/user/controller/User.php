@@ -313,7 +313,7 @@ class User extends BaseController
                 }
             }
         }
-        return to_assign(0, '操作成功');
+        return $this->syncAdminsAfterSave(array_column($list, 'id'));
     }
 
     //重置密码
@@ -334,6 +334,10 @@ class User extends BaseController
         ];
         if (Db::name('Admin')->update($data) !== false) {
             add_log('reset', $id);
+            $syncResult = EdificeSync::syncAdmin((int)$id);
+            if (!$syncResult['ok']) {
+                return to_assign(0, '操作成功，edifice 即时同步失败，将由定时任务补偿：' . $syncResult['message']);
+            }
             return to_assign(0, '操作成功');
         } else {
             return to_assign(1, '操作失败');
@@ -353,10 +357,32 @@ class User extends BaseController
         ];
         if (Db::name('Admin')->update($data) !== false) {
             add_log('delete', $id);
+            $syncResult = EdificeSync::syncAdmin((int)$id);
+            if (!$syncResult['ok']) {
+                return to_assign(0, '操作成功，edifice 即时同步失败，将由定时任务补偿：' . $syncResult['message']);
+            }
             return to_assign(0, '操作成功');
         } else {
             return to_assign(1, '操作失败');
         }
+    }
+
+    private function syncAdminsAfterSave(array $adminIds, string $successMessage = '操作成功')
+    {
+        $adminIds = array_values(array_unique(array_filter(array_map('intval', $adminIds), static function ($id) {
+            return $id > 0;
+        })));
+        $failures = [];
+        foreach ($adminIds as $adminId) {
+            $syncResult = EdificeSync::syncAdmin($adminId);
+            if (!$syncResult['ok']) {
+                $failures[] = $adminId . ':' . $syncResult['message'];
+            }
+        }
+        if (!empty($failures)) {
+            return to_assign(0, $successMessage . '，edifice 即时同步失败，将由定时任务补偿：' . implode('；', $failures));
+        }
+        return to_assign(0, $successMessage);
     }
 
     //管理员操作日志

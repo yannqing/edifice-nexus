@@ -27,7 +27,7 @@ public interface ApprovalFlowService {
      * 提交审批：创建第一条待审核节点。
      *
      * @param dto          {@link SubmitApprovalDto}
-     * @param applyUserId  提交人（仅记入 description，不落独立字段）
+     * @param applyUserId  提交人（写入整条审批链，用于结果通知和追踪）
      * @return 新建的审批记录
      */
     ApprovalRecords submit(SubmitApprovalDto dto, Long applyUserId);

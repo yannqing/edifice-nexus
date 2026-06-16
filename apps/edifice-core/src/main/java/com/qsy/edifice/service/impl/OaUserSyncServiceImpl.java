@@ -49,7 +49,8 @@ public class OaUserSyncServiceImpl implements OaUserSyncService {
     private static final Set<String> DEFAULT_EDIFICE_PERMISSION_CODES = Set.of(
             "menu:workbench",
             "menu:my-projects",
-            "menu:performance"
+            "menu:performance",
+            "menu:message-center"
     );
 
     @Resource

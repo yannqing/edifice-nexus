@@ -46,7 +46,7 @@ class EdificeSync
         $baseUrl = rtrim((string)env('EDIFICE_SYNC_BASE_URL', self::DEFAULT_BASE_URL), '/');
         $url = $baseUrl . $path;
         $headers = ['Content-Type: application/json'];
-        $apiKey = (string)env('EDIFICE_SYNC_API_KEY', env('OA_SYNC_API_KEY', ''));
+        $apiKey = (string)env('EDIFICE_SYNC_API_KEY', env('EDIFICE_SYNC_KEY', env('OA_SYNC_API_KEY', '')));
         if ($apiKey !== '') {
             $headers[] = 'X-OA-SYNC-KEY: ' . $apiKey;
         }

@@ -23,6 +23,8 @@ import {
   Target,
   LogOut,
   ClipboardList,
+  History,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -33,6 +35,7 @@ import { navigationConfig } from "@/data/mock-data";
 import { useAuth } from "@/store/auth-context";
 import { post } from "@/lib/request";
 import { getMyPendingCounts } from "@/services/approval-flow";
+import { getUnreadMessageCount } from "@/services/message-center";
 import { ResponseCode } from "@/types/api";
 import { hasPermission } from "@/lib/permissions";
 
@@ -68,6 +71,8 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   BadgeCheck,
   Target,
   ClipboardList,
+  History,
+  Bell,
 };
 
 interface SidebarProps {
@@ -83,13 +88,16 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
   const { user, roles, permissions, isAuthenticated, isHydrated, logout } = useAuth();
 
   const [pendingCounts, setPendingCounts] = useState<Record<string, number>>({});
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
 
   const fetchPendingCounts = useCallback(async (signal?: AbortSignal) => {
     try {
-      const res = await getMyPendingCounts(signal);
-      if (res.code === ResponseCode.SUCCESS && res.data) {
-        setPendingCounts(res.data);
-      }
+      const [pendingRes, messageRes] = await Promise.all([
+        getMyPendingCounts(signal),
+        getUnreadMessageCount(signal),
+      ]);
+      if (pendingRes.code === ResponseCode.SUCCESS && pendingRes.data) setPendingCounts(pendingRes.data);
+      if (messageRes.code === ResponseCode.SUCCESS) setUnreadMessageCount(messageRes.data ?? 0);
     } catch {
       // 静默
     }
@@ -100,7 +108,12 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
     if (!isHydrated || !isAuthenticated) return;
     const controller = new AbortController();
     fetchPendingCounts(controller.signal);
-    return () => controller.abort();
+    const refresh = () => fetchPendingCounts();
+    window.addEventListener("message-center:updated", refresh);
+    return () => {
+      controller.abort();
+      window.removeEventListener("message-center:updated", refresh);
+    };
   }, [fetchPendingCounts, isAuthenticated, isHydrated, pathname]);
 
   // 路由切换时自动关闭移动抽屉
@@ -200,7 +213,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
                     {(() => {
                       const bizType = ITEM_BIZ_TYPE[item.id];
                       const dynamicBadge = bizType ? pendingCounts[bizType] ?? 0 : 0;
-                      const badgeValue = dynamicBadge > 0 ? dynamicBadge : item.badge;
+                      const badgeValue = item.id === "message-center"
+                        ? unreadMessageCount
+                        : dynamicBadge > 0 ? dynamicBadge : item.badge;
                       if (!badgeValue) return null;
                       return (
                         <Badge

@@ -37,6 +37,7 @@ import {
 import { BidFormDialog } from "@/components/bid/bid-form-dialog";
 import { BidApprovalDialog } from "@/components/bid/bid-approval-dialog";
 import { AttachmentFileActions } from "@/components/file/attachment-file-list";
+import { useDetailLink } from "@/hooks/use-detail-link";
 
 type ViewMode = "list" | "board";
 
@@ -109,7 +110,6 @@ export default function BidsPage() {
       setDetailOpen(true);
     }
   };
-
   const handleApproval = async (id: string) => {
     const res = await getBidDetail(id);
     if (res.code === ResponseCode.SUCCESS && res.data) {
@@ -117,6 +117,7 @@ export default function BidsPage() {
       setApprovalOpen(true);
     }
   };
+  useDetailLink(handleDetail, handleApproval);
 
   const handleDelete = async (b: BidVo) => {
     if (!confirm(`确认删除投标「${b.bidName}」？`)) return;
@@ -299,7 +300,7 @@ function ListView({
           <Clipboard className="w-8 h-8 text-slate-400" />
         </div>
         <h3 className="text-lg font-semibold text-slate-800 mb-1">暂无投标</h3>
-        <p className="text-sm text-slate-500">点击右上角"新建投标"开始</p>
+        <p className="text-sm text-slate-500">点击右上角“新建投标”开始</p>
       </div>
     );
   }
@@ -534,6 +535,12 @@ function BoardCard({
           onClick={() => onDetail(bid.bidId)}
         >
           详情
+        </button>
+        <button
+          className="text-xs text-slate-500 hover:text-blue-600"
+          onClick={() => onEdit(bid.bidId)}
+        >
+          编辑
         </button>
         <button
           className="text-xs text-slate-500 hover:text-blue-600"

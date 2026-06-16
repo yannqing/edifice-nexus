@@ -7,6 +7,16 @@ import { navigationConfig } from "@/data/mock-data";
 import { hasPermission } from "@/lib/permissions";
 import { useAuth } from "@/store/auth-context";
 
+const APPROVAL_DETAIL_PATHS = new Set([
+  "/inspection-approval",
+  "/project-files/approval",
+  "/bids",
+  "/acceptance",
+  "/output-value",
+  "/timesheet",
+  "/oa/applications",
+]);
+
 export function PermissionRouteGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -15,10 +25,17 @@ export function PermissionRouteGuard({ children }: { children: React.ReactNode }
   const matchedItem = useMemo(() => {
     return navigationConfig
       .flatMap((section) => section.items)
-      .find((item) => item.href === pathname);
+      .sort((a, b) => b.href.length - a.href.length)
+      .find((item) =>
+        item.href === pathname || (item.href !== "/" && pathname.startsWith(`${item.href}/`))
+      );
   }, [pathname]);
 
-  const allowed = hasPermission(permissions, matchedItem?.permissionCode, roles);
+  const messageDetailAccess = isHydrated
+    && typeof window !== "undefined"
+    && APPROVAL_DETAIL_PATHS.has(pathname)
+    && new URLSearchParams(window.location.search).has("detailId");
+  const allowed = messageDetailAccess || hasPermission(permissions, matchedItem?.permissionCode, roles);
 
   useEffect(() => {
     if (!isHydrated || !isAuthenticated || !accessToken) return;

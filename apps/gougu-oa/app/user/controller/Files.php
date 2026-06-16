@@ -16,6 +16,7 @@ declare (strict_types = 1);
 namespace app\user\controller;
 
 use app\base\BaseController;
+use app\common\service\EdificeSync;
 use app\user\model\Admin as AdminList;
 use think\facade\Db;
 use think\facade\View;
@@ -281,6 +282,10 @@ class Files extends BaseController
 				}
 				
 				add_log('edit', $id, $param);
+				$syncResult = EdificeSync::syncAdmin((int)$id);
+				if (!$syncResult['ok']) {
+					return to_assign(0, '操作成功，edifice 即时同步失败，将由定时任务补偿：' . $syncResult['message']);
+				}
 				return to_assign();
 			}
 			else{

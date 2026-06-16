@@ -16,6 +16,7 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -55,6 +56,8 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
         if (bt == null) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "未知业务类型：" + dto.getBizType());
         }
+        validateApprover(dto.getFirstApproverId(),
+                applyUserId == null ? Collections.emptySet() : Set.of(applyUserId));
         // 同一业务已有待审核节点，禁止重复提交
         ApprovalRecords current = getCurrentPending(bt, dto.getBizId());
         if (current != null) {
@@ -67,13 +70,18 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
                 .bizTypeExt(bt.getExt())
                 .inspectionFormId(dto.getBizId())
                 .approver(dto.getFirstApproverId())
+                .applyUserId(applyUserId)
                 .approvalDescription(dto.getDescription())
                 .inspectionFormStatus(STATUS_PENDING)
                 .approvalLevel(1)
                 .parentRecordId(null)
                 .nextApproverId(null)
                 .build();
-        approvalRecordsMapper.insert(record);
+        try {
+            approvalRecordsMapper.insert(record);
+        } catch (DuplicateKeyException exception) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "该业务已在审批中，请勿重复提交");
+        }
         log.info("审批提交 bizType={} bizId={} 申请人={} 首审={} recordId={}",
                 bt.getExt(), dto.getBizId(), applyUserId, dto.getFirstApproverId(),
                 record.getApprovalRecordId());
@@ -104,6 +112,14 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
         if (bt == null) bt = ApprovalBizType.fromCode(record.getApprovalRecordType());
 
         boolean rejected = !Boolean.TRUE.equals(dto.getPass());
+        if (!rejected && dto.getNextApproverId() != null) {
+            Set<Long> previousApprovers = queryChain(bt, record.getInspectionFormId()).stream()
+                    .map(ApprovalRecordVo::getApprover)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toSet());
+            if (record.getApplyUserId() != null) previousApprovers.add(record.getApplyUserId());
+            validateApprover(dto.getNextApproverId(), previousApprovers);
+        }
         // 更新当前节点
         record.setInspectionFormStatus(rejected ? STATUS_REJECTED : STATUS_APPROVED);
         if (StringUtils.hasText(dto.getComment())) {
@@ -113,7 +129,9 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
             record.setNextApproverId(dto.getNextApproverId());
         }
         record.setUpdatedTime(LocalDateTime.now());
-        approvalRecordsMapper.updateById(record);
+        if (approvalRecordsMapper.updatePendingResult(record) != 1) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "该审批已被处理，请刷新后重试");
+        }
 
         // 驳回 → 终审，链终止
         if (rejected) {
@@ -130,6 +148,7 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
                     .bizTypeExt(record.getBizTypeExt())
                     .inspectionFormId(record.getInspectionFormId())
                     .approver(dto.getNextApproverId())
+                    .applyUserId(record.getApplyUserId())
                     .approvalDescription(null)
                     .inspectionFormStatus(STATUS_PENDING)
                     .approvalLevel((record.getApprovalLevel() == null ? 1 : record.getApprovalLevel()) + 1)
@@ -209,6 +228,21 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
         return result;
     }
 
+    /**
+     * 供方法权限表达式使用：申请人或审批链中的审批人可以查看对应业务详情。
+     */
+    public boolean isParticipant(String bizType, Long bizId, Long userId) {
+        ApprovalBizType type = ApprovalBizType.fromExt(bizType);
+        if (type == null || bizId == null || userId == null) return false;
+        Long count = approvalRecordsMapper.selectCount(new LambdaQueryWrapper<ApprovalRecords>()
+                .eq(ApprovalRecords::getBizTypeExt, type.getExt())
+                .eq(ApprovalRecords::getInspectionFormId, bizId)
+                .and(w -> w.eq(ApprovalRecords::getApplyUserId, userId)
+                        .or()
+                        .eq(ApprovalRecords::getApprover, userId)));
+        return count != null && count > 0;
+    }
+
     // ==================== VO 转换 ====================
 
     private List<ApprovalRecordVo> toVos(List<ApprovalRecords> list) {
@@ -226,6 +260,7 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
             ApprovalRecordVo vo = ApprovalRecordVo.builder()
                     .approvalRecordId(r.getApprovalRecordId())
                     .approver(r.getApprover())
+                    .applyUserId(r.getApplyUserId())
                     .approvalDescription(r.getApprovalDescription())
                     .inspectionFormStatus(r.getInspectionFormStatus())
                     .createdTime(r.getCreatedTime())
@@ -243,5 +278,16 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
             if (nu != null) vo.setNextApproverName(nu.getRealName() != null ? nu.getRealName() : nu.getUsername());
             return vo;
         }).collect(Collectors.toList());
+    }
+
+    private void validateApprover(Long userId, Set<Long> previousApprovers) {
+        SysUser user = userId == null ? null : sysUserMapper.selectById(userId);
+        if (user == null || !Integer.valueOf(1).equals(user.getStatus())
+                || Integer.valueOf(0).equals(user.getEmploymentStatus())) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "所选审批人不存在、已停用或已离职");
+        }
+        if (previousApprovers.contains(userId)) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "申请人不能审批自己的流程，且审批人不能在审批链中重复出现");
+        }
     }
 }

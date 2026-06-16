@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.qsy.edifice.mapper.UserMessageReadMapper">
+
+    <insert id="insertIgnore">
+        INSERT IGNORE INTO user_message_read (id, user_id, source_type, source_id, read_time)
+        VALUES (#{id}, #{userId}, #{sourceType}, #{sourceId}, #{readTime})
+    </insert>
+
+    <insert id="insertIgnoreBatch">
+        INSERT IGNORE INTO user_message_read (id, user_id, source_type, source_id, read_time)
+        VALUES
+        <foreach collection="rows" item="row" separator=",">
+            (#{row.id}, #{row.userId}, #{row.sourceType}, #{row.sourceId}, #{row.readTime})
+        </foreach>
+    </insert>
+</mapper>

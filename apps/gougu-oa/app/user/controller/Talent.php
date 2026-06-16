@@ -16,6 +16,7 @@ declare (strict_types = 1);
 namespace app\user\controller;
 
 use app\base\BaseController;
+use app\common\service\EdificeSync;
 use app\user\model\Talent as TalentModel;
 use app\user\validate\TalentValidate;
 use think\exception\ValidateException;
@@ -227,6 +228,10 @@ class Talent extends BaseController
 			if($uid!==false){
 				Db::name('Talent')->where('id',$param ['id'])->update(['status'=>2]);
 				add_log('add', $uid, $param);
+				$syncResult = EdificeSync::syncAdmin((int)$uid);
+				if (!$syncResult['ok']) {
+					return to_assign(0, '操作成功，edifice 即时同步失败，将由定时任务补偿：' . $syncResult['message']);
+				}
 				return to_assign();
 			}
 			else {

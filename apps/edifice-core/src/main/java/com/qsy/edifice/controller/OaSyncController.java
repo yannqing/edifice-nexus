@@ -23,7 +23,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/admin/oa-sync")
-@PreAuthorize("hasAuthority('menu:user-management') or hasRole('SUPER_ADMIN')")
 public class OaSyncController {
 
     @Resource
@@ -33,11 +32,13 @@ public class OaSyncController {
     private OaUserSyncProperties properties;
 
     @GetMapping("/status")
+    @PreAuthorize("hasAuthority('menu:user-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Map<String, Object>> status() {
         return ResultUtils.success(Code.SUCCESS, oaUserSyncService.getStatus(), "success");
     }
 
     @PostMapping("/users/full")
+    @PreAuthorize("hasAuthority('menu:user-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Map<String, Object>> fullSync() {
         int synced = oaUserSyncService.syncFromOa();
         Map<String, Object> data = new LinkedHashMap<>();
@@ -46,6 +47,7 @@ public class OaSyncController {
     }
 
     @PostMapping("/retry-failed")
+    @PreAuthorize("hasAuthority('menu:user-management') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Map<String, Object>> retryFailed() {
         int pushed = oaUserSyncService.processPending();
         Map<String, Object> data = new LinkedHashMap<>();

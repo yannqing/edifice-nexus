@@ -22,6 +22,7 @@ import {
 import type { ProjectFileVo } from "@/types/project-file";
 import { PROJECT_FILE_STATUS_MAP } from "@/types/project-file";
 import { ApproveProjectFileDialog } from "@/components/project-file/approve-project-file-dialog";
+import { useDetailLink } from "@/hooks/use-detail-link";
 
 type Tab = "pending" | "all" | "mine";
 
@@ -84,6 +85,7 @@ export default function ProjectFilesApprovalPage() {
       setApproveOpen(true);
     }
   };
+  useDetailLink(handleOpenApprove);
 
   const stats = {
     total: items.length,
@@ -100,7 +102,7 @@ export default function ProjectFilesApprovalPage() {
             项目文件审批
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            三级审批：项目负责人 → 专业主管 → 总工。新增上传请到"项目详情 → 项目文件"。
+            三级审批：项目负责人 → 专业主管 → 总工。新增上传请到“项目详情 → 项目文件”。
           </p>
         </div>
       </div>

@@ -55,7 +55,7 @@ public class ProjectFilesController {
     @PostMapping("/approve")
     @Operation(summary = "审批（通过 / 驳回）",
             description = "通过 + nextApproverId 非空时流转下一级；不传 nextApproverId 视为终审")
-    @PreAuthorize("hasAuthority('menu:project-files-approval') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public BaseResponse<Boolean> approve(@RequestBody ApproveDto dto,
                                          HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
@@ -85,6 +85,7 @@ public class ProjectFilesController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "项目文件详情（含审批链）")
     public BaseResponse<ProjectFileVo> detail(@PathVariable("id") Long id) {
         return ResultUtils.success(Code.SUCCESS, projectFilesService.getDetail(id));
@@ -92,7 +93,7 @@ public class ProjectFilesController {
 
     @GetMapping("/my-pending")
     @Operation(summary = "我的待审批文件")
-    @PreAuthorize("hasAuthority('menu:project-files-approval') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("isAuthenticated()")
     public BaseResponse<List<ProjectFileVo>> myPending(HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);

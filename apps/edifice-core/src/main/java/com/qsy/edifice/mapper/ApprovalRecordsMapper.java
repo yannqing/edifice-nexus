@@ -41,4 +41,9 @@ public interface ApprovalRecordsMapper extends BaseMapper<ApprovalRecords> {
     List<ApprovalRecords> selectByBizTypeExtAndBizId(
             @Param("bizTypeExt") String bizTypeExt,
             @Param("bizId") Long bizId);
+
+    /**
+     * 原子处理待审批节点。只有状态仍为待审批时才会更新成功。
+     */
+    int updatePendingResult(ApprovalRecords record);
 }

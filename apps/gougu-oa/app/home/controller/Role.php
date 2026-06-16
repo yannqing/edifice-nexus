@@ -16,6 +16,7 @@ declare (strict_types = 1);
 namespace app\home\controller;
 
 use app\base\BaseController;
+use app\common\service\EdificeSync;
 use app\home\model\AdminGroup;
 use app\home\validate\GroupCheck;
 use think\exception\ValidateException;
@@ -96,7 +97,10 @@ class Role extends BaseController
             //清除菜单\权限缓存
             clear_cache('adminMenu');
             clear_cache('MobileRules');
-            $this->triggerEdificeFullSync();
+            $syncResult = $this->triggerEdificeFullSync();
+            if (!$syncResult['ok']) {
+                return to_assign(0, '操作成功，edifice 即时同步失败，将由定时任务补偿：' . $syncResult['message']);
+            }
             return to_assign();
         } else {
             $id = isset($param['id']) ? $param['id'] : 0;
@@ -175,7 +179,7 @@ class Role extends BaseController
 
     private function requiredEdificeRuleIds(): array
     {
-        return ['900001000', '900001001', '900001002', '900001013'];
+        return ['900001000', '900001001', '900001002', '900001013', '900001018'];
     }
 
     private function withRequiredEdificeRules(array $ruleData): array
@@ -219,58 +223,13 @@ class Role extends BaseController
         return [$value];
     }
 
-    private function triggerEdificeFullSync(): void
+    private function triggerEdificeFullSync(): array
     {
-        $url = env('EDIFICE_SYNC_URL', 'http://127.0.0.1:8081/admin/oa-sync/internal/users/full');
-        $key = env('EDIFICE_SYNC_KEY', '');
-
-        try {
-            if (function_exists('curl_init')) {
-                $ch = curl_init($url);
-                curl_setopt_array($ch, [
-                    CURLOPT_POST => true,
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_CONNECTTIMEOUT => 1,
-                    CURLOPT_TIMEOUT => 3,
-                    CURLOPT_HTTPHEADER => ['X-OA-SYNC-KEY: ' . $key],
-                ]);
-                $body = curl_exec($ch);
-                $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                $error = curl_error($ch);
-                curl_close($ch);
-
-                if (!$this->isEdificeSyncSuccessful($body, $httpCode)) {
-                    Log::warning('同步 edifice 权限失败: http=' . $httpCode . ', error=' . $error . ', body=' . (string) $body);
-                }
-                return;
-            }
-
-            $context = stream_context_create([
-                'http' => [
-                    'method' => 'POST',
-                    'timeout' => 3,
-                    'header' => "X-OA-SYNC-KEY: {$key}\r\n",
-                ],
-            ]);
-            $result = @file_get_contents($url, false, $context);
-            if (!$this->isEdificeSyncSuccessful($result)) {
-                Log::warning('同步 edifice 权限失败: file_get_contents 返回异常, body=' . (string) $result);
-            }
-        } catch (\Throwable $e) {
-            Log::warning('同步 edifice 权限异常: ' . $e->getMessage());
+        $syncResult = EdificeSync::syncAllUsers();
+        if (!$syncResult['ok']) {
+            Log::warning('同步 edifice 权限失败: ' . $syncResult['message']);
         }
-    }
-
-    private function isEdificeSyncSuccessful($body, int $httpCode = 200): bool
-    {
-        if ($body === false || $httpCode <= 0 || $httpCode >= 400) {
-            return false;
-        }
-
-        $response = json_decode((string) $body, true);
-        return is_array($response)
-            && isset($response['code'])
-            && (int) $response['code'] === 200;
+        return $syncResult;
     }
 
     //删除
@@ -287,6 +246,10 @@ class Role extends BaseController
             }
             if (Db::name('AdminGroup')->delete($id) !== false) {
                 add_log('delete', $id, []);
+                $syncResult = $this->triggerEdificeFullSync();
+                if (!$syncResult['ok']) {
+                    return to_assign(0, "删除权限组成功，edifice 即时同步失败，将由定时任务补偿：" . $syncResult['message']);
+                }
                 return to_assign(0, "删除权限组成功");
             } else {
                 return to_assign(1, "删除失败");

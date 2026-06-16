@@ -16,6 +16,7 @@ declare (strict_types = 1);
 namespace app\user\controller;
 
 use app\base\BaseController;
+use app\common\service\EdificeSync;
 use app\user\model\Department as DepartmentModel;
 use app\user\validate\DepartmentCheck;
 use think\exception\ValidateException;
@@ -60,6 +61,10 @@ class Department extends BaseController
 					$model = new DepartmentModel();
 					$model->update_auth_dids_son_dids();
                     add_log('edit', $param['id'], $param);
+                    $syncResult = EdificeSync::syncAllUsers();
+                    if (!$syncResult['ok']) {
+                        return to_assign(0, '操作成功，edifice 即时同步失败，将由定时任务补偿：' . $syncResult['message']);
+                    }
                     return to_assign();
                 }
             } else {
@@ -73,6 +78,10 @@ class Department extends BaseController
 				$model = new DepartmentModel();
 				$model->update_auth_dids_son_dids();
                 add_log('add', $did, $param);
+                $syncResult = EdificeSync::syncAllUsers();
+                if (!$syncResult['ok']) {
+                    return to_assign(0, '操作成功，edifice 即时同步失败，将由定时任务补偿：' . $syncResult['message']);
+                }
                 return to_assign();
             }
         } else {
@@ -108,6 +117,10 @@ class Department extends BaseController
         }
         if (Db::name('Department')->delete($id) !== false) {
             add_log('delete', $id);
+            $syncResult = EdificeSync::syncAllUsers();
+            if (!$syncResult['ok']) {
+                return to_assign(0, "删除部门成功，edifice 即时同步失败，将由定时任务补偿：" . $syncResult['message']);
+            }
             return to_assign(0, "删除部门成功");
         } else {
             return to_assign(1, "删除失败");

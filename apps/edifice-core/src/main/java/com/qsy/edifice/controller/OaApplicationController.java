@@ -58,6 +58,7 @@ public class OaApplicationController {
     }
 
     @GetMapping("/pending")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "我的 OA 待审批")
     public BaseResponse<Page<OaApplicationVo>> pending(GetOaApplicationListDto dto,
                                                        HttpServletRequest request) throws JsonProcessingException {
@@ -66,6 +67,7 @@ public class OaApplicationController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "OA 申请详情")
     public BaseResponse<OaApplicationVo> detail(@PathVariable("id") Long id,
                                                 HttpServletRequest request) throws JsonProcessingException {
@@ -111,6 +113,7 @@ public class OaApplicationController {
     }
 
     @PostMapping("/approve")
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "审批 OA 申请")
     public BaseResponse<ApprovalFlowService.ApprovalResult> approve(@RequestBody ApproveDto dto,
                                                                     HttpServletRequest request) throws JsonProcessingException {

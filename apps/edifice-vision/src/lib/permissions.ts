@@ -1,6 +1,6 @@
 import type { SysRole } from "@/types/auth";
 
-const SUPER_ROLE_CODES = new Set(["SUPER_ADMIN", "ADMIN", "admin"]);
+const SUPER_ROLE_CODES = new Set(["SUPER_ADMIN"]);
 
 export function isSuperAdmin(roles: SysRole[] | undefined): boolean {
   return (roles ?? []).some((role) => SUPER_ROLE_CODES.has(role.roleCode));

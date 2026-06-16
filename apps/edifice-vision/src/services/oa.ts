@@ -59,6 +59,10 @@ export async function getPendingOaApplications(
   });
 }
 
+export async function getOaApplicationDetail(id: string): Promise<BaseResponse<OaApplication>> {
+  return get<OaApplication>(`/oa/application/${id}`);
+}
+
 export async function createOaApplication(
   params: CreateOaApplicationParams
 ): Promise<BaseResponse<string>> {

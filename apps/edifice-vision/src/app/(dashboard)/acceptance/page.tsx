@@ -25,6 +25,7 @@ import {
 } from "@/types/acceptance";
 import { CreateAcceptanceDialog } from "@/components/acceptance/create-acceptance-dialog";
 import { ApproveAcceptanceDialog } from "@/components/acceptance/approve-acceptance-dialog";
+import { useDetailLink } from "@/hooks/use-detail-link";
 
 type TypeTab = "all" | 0 | 1;
 type Panel = "list" | "my-pending";
@@ -86,6 +87,7 @@ export default function AcceptancePage() {
       setApproveOpen(true);
     }
   };
+  useDetailLink(handleOpen);
 
   const stats = {
     total: items.length,

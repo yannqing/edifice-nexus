@@ -42,6 +42,7 @@ import {
   DIST_TYPE_LABELS,
 } from "@/types/output-value";
 import { CreateOutputValueDialog } from "@/components/output-value/create-output-value-dialog";
+import { useDetailLink } from "@/hooks/use-detail-link";
 
 type TabKey = "all" | "pending" | "review" | "approved" | "paid";
 type ActionKind = "confirm" | "approve" | "pay";
@@ -91,6 +92,7 @@ export default function OutputValuePage() {
   const [actionTarget, setActionTarget] = useState<OutputValueVo | null>(null);
   const [actionKind, setActionKind] = useState<ActionKind | null>(null);
   const [nextUserId, setNextUserId] = useState("");
+  useDetailLink(setExpandedId);
 
   const fetchData = useCallback(async () => {
     setLoading(true);

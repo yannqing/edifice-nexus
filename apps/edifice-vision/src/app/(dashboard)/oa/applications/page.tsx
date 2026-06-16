@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Check,
+  Eye,
   Loader2,
   Plus,
   RotateCcw,
@@ -33,12 +34,14 @@ import {
   approveOaApplication,
   createOaApplication,
   getOaApplications,
+  getOaApplicationDetail,
   getOaApplicationTypes,
   getOaSsoToken,
   getPendingOaApplications,
   submitOaApplication,
   withdrawOaApplication,
 } from "@/services/oa";
+import { useDetailLink } from "@/hooks/use-detail-link";
 
 const PAGE_SIZE = 10;
 const PHASE2_TYPES = new Set(["general", "leave", "business_trip", "makeup_card", "outgoing", "probation", "resignation"]);
@@ -136,6 +139,7 @@ export default function OaApplicationsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [submitTarget, setSubmitTarget] = useState<OaApplication | null>(null);
   const [approveTarget, setApproveTarget] = useState<OaApplication | null>(null);
+  const [detailTarget, setDetailTarget] = useState<OaApplication | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const [applicationType, setApplicationType] = useState("general");
@@ -233,6 +237,20 @@ export default function OaApplicationsPage() {
       setActionLoading(null);
     }
   };
+
+  const handleOpenDetail = async (id: string) => {
+    const res = await getOaApplicationDetail(id);
+    if (res.code === ResponseCode.SUCCESS && res.data) {
+      setDetailTarget(res.data);
+    }
+  };
+  const handleOpenApproval = async (id: string) => {
+    const res = await getOaApplicationDetail(id);
+    if (res.code === ResponseCode.SUCCESS && res.data?.currentRecordId) {
+      setApproveTarget(res.data);
+    }
+  };
+  useDetailLink(handleOpenDetail, handleOpenApproval);
 
   const resetForm = (nextType = visibleTypes[0]?.type ?? "general") => {
     setTitle("");
@@ -455,6 +473,10 @@ export default function OaApplicationsPage() {
                     <td className="py-4 px-4 text-sm text-slate-500">{formatDate(item.submittedTime ?? item.createdTime)}</td>
                     <td className="py-4 px-6 text-right">
                       <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" disabled={isBusy} onClick={() => handleOpenDetail(item.applicationId)}>
+                          <Eye className="w-4 h-4" />
+                          详情
+                        </Button>
                         {item.status === 0 && (
                           <Button variant="ghost" size="sm" disabled={isBusy} onClick={() => setSubmitTarget(item)}>
                             <Send className="w-4 h-4" />
@@ -583,6 +605,43 @@ export default function OaApplicationsPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!detailTarget} onOpenChange={(open) => !open && setDetailTarget(null)}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader><DialogTitle>申请详情</DialogTitle></DialogHeader>
+          {detailTarget && (
+            <div className="space-y-5 pt-2">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <DetailField label="标题" value={detailTarget.title} />
+                <DetailField label="申请编号" value={detailTarget.applicationNo} />
+                <DetailField label="申请类型" value={detailTarget.applicationTypeLabel} />
+                <DetailField label="申请状态" value={OA_STATUS_MAP[detailTarget.status] ?? "未知"} />
+                <DetailField label="申请人" value={detailTarget.applicantName ?? "-"} />
+                <DetailField label="当前审批人" value={detailTarget.currentApproverName ?? "-"} />
+                <DetailField label="优先级" value={OA_PRIORITY_MAP[detailTarget.priority] ?? "普通"} />
+                <DetailField label="提交时间" value={formatDate(detailTarget.submittedTime ?? detailTarget.createdTime)} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-700 mb-2">申请内容</p>
+                <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
+                  {Object.entries(detailTarget.formData ?? {}).length > 0 ? Object.entries(detailTarget.formData).map(([key, value]) => (
+                    <DetailField key={key} label={key} value={String(value ?? "-")} />
+                  )) : <p className="text-sm text-slate-500">暂无申请内容</p>}
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function DetailField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs text-slate-400">{label}</p>
+      <p className="mt-1 break-words text-sm text-slate-700">{value}</p>
     </div>
   );
 }

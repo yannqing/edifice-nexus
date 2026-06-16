@@ -37,6 +37,10 @@ public class ApprovalRecordVo implements Serializable {
     @JsonSerialize(using = ToStringSerializer.class)
     private Long approver;
 
+    @Schema(description = "审批流程发起人id")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long applyUserId;
+
     @Schema(description = "审批人姓名")
     private String approverName;
 

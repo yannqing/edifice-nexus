@@ -1,0 +1,355 @@
+package com.qsy.edifice.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
+import com.qsy.edifice.domain.dto.GetMessageCenterListDto;
+import com.qsy.edifice.domain.entity.*;
+import com.qsy.edifice.domain.vo.MessageCenterItemVo;
+import com.qsy.edifice.enums.ApprovalBizType;
+import com.qsy.edifice.mapper.*;
+import com.qsy.edifice.service.MessageCenterService;
+import jakarta.annotation.Resource;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+@Service
+public class MessageCenterServiceImpl implements MessageCenterService {
+
+    private static final String SOURCE_ANNOUNCEMENT = "announcement";
+    private static final String SOURCE_APPROVAL = "approval";
+    private static final String SOURCE_APPROVAL_RESULT = "approval_result";
+
+    @Resource
+    private ApprovalRecordsMapper approvalRecordsMapper;
+
+    @Resource
+    private AnnouncementMapper announcementMapper;
+
+    @Resource
+    private UserMessageReadMapper userMessageReadMapper;
+
+    @Resource
+    private InspectionFormMapper inspectionFormMapper;
+
+    @Resource
+    private ProjectFilesMapper projectFilesMapper;
+
+    @Resource
+    private BidMapper bidMapper;
+
+    @Resource
+    private ProjectAcceptanceMapper projectAcceptanceMapper;
+
+    @Resource
+    private OaApplicationMapper oaApplicationMapper;
+
+    @Resource
+    private OutputValueMapper outputValueMapper;
+
+    @Resource
+    private TimesheetMapper timesheetMapper;
+
+    @Resource
+    private ProjectMapper projectMapper;
+
+    @Override
+    public Page<MessageCenterItemVo> list(Long userId, GetMessageCenterListDto dto) {
+        List<MessageCenterItemVo> all = buildMessages(userId);
+        if (StringUtils.hasText(dto.getCategory())) {
+            all = all.stream().filter(item -> dto.getCategory().equals(item.getCategory())).toList();
+        }
+        if (Boolean.TRUE.equals(dto.getUnreadOnly())) {
+            all = all.stream().filter(item -> !Boolean.TRUE.equals(item.getRead())).toList();
+        }
+
+        int current = dto.getCurrent() != null && dto.getCurrent() > 0 ? dto.getCurrent() : 1;
+        int pageSize = dto.getPageSize() != null && dto.getPageSize() > 0 ? Math.min(dto.getPageSize(), 100) : 10;
+        int from = Math.min((current - 1) * pageSize, all.size());
+        int to = Math.min(from + pageSize, all.size());
+        Page<MessageCenterItemVo> page = new Page<>(current, pageSize, all.size());
+        page.setRecords(all.subList(from, to));
+        return page;
+    }
+
+    @Override
+    public long unreadCount(Long userId) {
+        Set<String> readKeys = readKeys(userId);
+        return visibleSources(userId).stream().filter(source -> !readKeys.contains(source.key())).count();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void markRead(Long userId, String sourceType, Long sourceId) {
+        if (userId == null || !StringUtils.hasText(sourceType) || sourceId == null) return;
+        boolean visible = visibleSources(userId).stream()
+                .anyMatch(source -> sourceType.equals(source.sourceType()) && sourceId.equals(source.sourceId()));
+        if (!visible) return;
+        insertRead(userId, sourceType, sourceId);
+    }
+
+    private void insertRead(Long userId, String sourceType, Long sourceId) {
+        userMessageReadMapper.insertIgnore(UserMessageRead.builder()
+                .id(IdWorker.getId())
+                .userId(userId)
+                .sourceType(sourceType)
+                .sourceId(sourceId)
+                .readTime(LocalDateTime.now())
+                .build());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void markAllRead(Long userId) {
+        Set<String> readKeys = readKeys(userId);
+        List<UserMessageRead> rows = visibleSources(userId).stream()
+                .filter(source -> !readKeys.contains(source.key()))
+                .map(source -> UserMessageRead.builder()
+                        .id(IdWorker.getId())
+                        .userId(userId)
+                        .sourceType(source.sourceType())
+                        .sourceId(source.sourceId())
+                        .readTime(LocalDateTime.now())
+                        .build())
+                .toList();
+        for (int from = 0; from < rows.size(); from += 500) {
+            userMessageReadMapper.insertIgnoreBatch(rows.subList(from, Math.min(from + 500, rows.size())));
+        }
+    }
+
+    private List<MessageCenterItemVo> buildMessages(Long userId) {
+        if (userId == null) return List.of();
+        Set<String> readKeys = readKeys(userId);
+        List<MessageCenterItemVo> messages = new ArrayList<>();
+
+        List<ApprovalRecords> approvals = approvalRecordsMapper.selectList(new LambdaQueryWrapper<ApprovalRecords>()
+                .eq(ApprovalRecords::getApprover, userId)
+                .eq(ApprovalRecords::getInspectionFormStatus, 0)
+                .orderByDesc(ApprovalRecords::getCreatedTime));
+        List<ApprovalRecords> approvalResults = approvalRecordsMapper.selectList(new LambdaQueryWrapper<ApprovalRecords>()
+                .eq(ApprovalRecords::getApplyUserId, userId)
+                .in(ApprovalRecords::getInspectionFormStatus, 1, 2)
+                .and(w -> w.isNull(ApprovalRecords::getApprovalDescription)
+                        .or()
+                        .notIn(ApprovalRecords::getApprovalDescription, "申请人撤回", "上传人撤销"))
+                .orderByDesc(ApprovalRecords::getUpdatedTime));
+        List<ApprovalRecords> allApprovalRecords = new ArrayList<>(approvals);
+        allApprovalRecords.addAll(approvalResults);
+        Map<String, String> businessNames = resolveBusinessNames(allApprovalRecords);
+
+        for (ApprovalRecords record : approvals) {
+            String businessName = businessName(record, businessNames);
+            String sourceKey = key(SOURCE_APPROVAL, record.getApprovalRecordId());
+            messages.add(MessageCenterItemVo.builder()
+                    .messageKey(sourceKey)
+                    .category("approval")
+                    .categoryLabel("待我审批")
+                    .title(businessName + "待您审批")
+                    .content("第 " + (record.getApprovalLevel() == null ? 1 : record.getApprovalLevel()) + " 级审批等待处理")
+                    .link(linkFor(record, true))
+                    .priority(1)
+                    .read(readKeys.contains(sourceKey))
+                    .sourceType(SOURCE_APPROVAL)
+                    .sourceId(record.getApprovalRecordId())
+                    .createdTime(record.getCreatedTime())
+                    .build());
+        }
+
+        for (ApprovalRecords record : approvalResults) {
+            boolean approved = Integer.valueOf(1).equals(record.getInspectionFormStatus());
+            boolean finalApproved = approved && record.getNextApproverId() == null;
+            String businessName = businessName(record, businessNames);
+            String sourceKey = key(SOURCE_APPROVAL_RESULT, record.getApprovalRecordId());
+            messages.add(MessageCenterItemVo.builder()
+                    .messageKey(sourceKey)
+                    .category("result")
+                    .categoryLabel("审批结果")
+                    .title(resultTitle(businessName, approved, finalApproved))
+                    .content(resultContent(record, approved, finalApproved))
+                    .link(linkFor(record, false))
+                    .priority(approved ? 0 : 2)
+                    .read(readKeys.contains(sourceKey))
+                    .sourceType(SOURCE_APPROVAL_RESULT)
+                    .sourceId(record.getApprovalRecordId())
+                    .createdTime(record.getUpdatedTime() != null ? record.getUpdatedTime() : record.getCreatedTime())
+                    .build());
+        }
+
+        List<Announcement> announcements = announcementMapper.selectList(new LambdaQueryWrapper<Announcement>()
+                .eq(Announcement::getStatus, 1)
+                .and(w -> w.isNull(Announcement::getExpireTime).or().ge(Announcement::getExpireTime, LocalDateTime.now()))
+                .orderByDesc(Announcement::getPublishTime));
+        for (Announcement announcement : announcements) {
+            String sourceKey = key(SOURCE_ANNOUNCEMENT, announcement.getAnnouncementId());
+            messages.add(MessageCenterItemVo.builder()
+                    .messageKey(sourceKey)
+                    .category("announcement")
+                    .categoryLabel("系统公告")
+                    .title(announcement.getTitle())
+                    .content(announcement.getContent())
+                    .link("/")
+                    .priority(announcement.getPriority() == null ? 0 : announcement.getPriority())
+                    .read(readKeys.contains(sourceKey))
+                    .sourceType(SOURCE_ANNOUNCEMENT)
+                    .sourceId(announcement.getAnnouncementId())
+                    .createdTime(announcement.getPublishTime() != null ? announcement.getPublishTime() : announcement.getCreatedTime())
+                    .build());
+        }
+
+        messages.sort(Comparator.comparing(MessageCenterItemVo::getCreatedTime,
+                Comparator.nullsLast(Comparator.reverseOrder())));
+        return messages;
+    }
+
+    private Set<String> readKeys(Long userId) {
+        if (userId == null) return Set.of();
+        List<UserMessageRead> rows = userMessageReadMapper.selectList(new LambdaQueryWrapper<UserMessageRead>()
+                .eq(UserMessageRead::getUserId, userId));
+        Set<String> result = new HashSet<>();
+        for (UserMessageRead row : rows) {
+            result.add(key(row.getSourceType(), row.getSourceId()));
+        }
+        return result;
+    }
+
+    private List<MessageSource> visibleSources(Long userId) {
+        if (userId == null) return List.of();
+        List<MessageSource> sources = new ArrayList<>();
+        approvalRecordsMapper.selectList(new LambdaQueryWrapper<ApprovalRecords>()
+                        .select(ApprovalRecords::getApprovalRecordId)
+                        .eq(ApprovalRecords::getApprover, userId)
+                        .eq(ApprovalRecords::getInspectionFormStatus, 0))
+                .forEach(record -> sources.add(new MessageSource(SOURCE_APPROVAL, record.getApprovalRecordId())));
+        approvalRecordsMapper.selectList(new LambdaQueryWrapper<ApprovalRecords>()
+                        .select(ApprovalRecords::getApprovalRecordId)
+                        .eq(ApprovalRecords::getApplyUserId, userId)
+                        .in(ApprovalRecords::getInspectionFormStatus, 1, 2)
+                        .and(w -> w.isNull(ApprovalRecords::getApprovalDescription)
+                                .or()
+                                .notIn(ApprovalRecords::getApprovalDescription, "申请人撤回", "上传人撤销")))
+                .forEach(record -> sources.add(new MessageSource(SOURCE_APPROVAL_RESULT, record.getApprovalRecordId())));
+        announcementMapper.selectList(new LambdaQueryWrapper<Announcement>()
+                        .select(Announcement::getAnnouncementId)
+                        .eq(Announcement::getStatus, 1)
+                        .and(w -> w.isNull(Announcement::getExpireTime)
+                                .or()
+                                .ge(Announcement::getExpireTime, LocalDateTime.now())))
+                .forEach(announcement -> sources.add(new MessageSource(
+                        SOURCE_ANNOUNCEMENT, announcement.getAnnouncementId())));
+        return sources;
+    }
+
+    private String key(String sourceType, Long sourceId) {
+        return sourceType + ":" + sourceId;
+    }
+
+    private ApprovalBizType resolveBizType(ApprovalRecords record) {
+        ApprovalBizType bizType = ApprovalBizType.fromExt(record.getBizTypeExt());
+        return bizType != null ? bizType : ApprovalBizType.fromCode(record.getApprovalRecordType());
+    }
+
+    private String resultTitle(String businessName, boolean approved, boolean finalApproved) {
+        if (!approved) return businessName + "审批已驳回";
+        return businessName + (finalApproved ? "最终审批已通过" : "审批节点已通过");
+    }
+
+    private String resultContent(ApprovalRecords record, boolean approved, boolean finalApproved) {
+        int level = record.getApprovalLevel() == null ? 1 : record.getApprovalLevel();
+        if (!approved) return "第 " + level + " 级审批已驳回，流程已结束";
+        if (finalApproved) return "第 " + level + " 级审批已通过，流程审批完成";
+        return "第 " + level + " 级审批已通过，流程已转交下一审批人";
+    }
+
+    private String linkFor(ApprovalRecords record, boolean pendingAction) {
+        ApprovalBizType bizType = resolveBizType(record);
+        if (bizType == null || record.getInspectionFormId() == null) return "/";
+        String base = switch (bizType.getExt()) {
+            case "file" -> "/project-files/approval";
+            case "inspection" -> "/inspection-approval";
+            case "bid" -> "/bids";
+            case "acceptance" -> "/acceptance";
+            case "output" -> "/output-value";
+            case "timesheet" -> "/timesheet";
+            case "oa_application" -> "/oa/applications";
+            default -> "/";
+        };
+        if ("/".equals(base)) return base;
+        return base + "?detailId=" + record.getInspectionFormId() + (pendingAction ? "&action=approve" : "");
+    }
+
+    private String businessName(ApprovalRecords record, Map<String, String> businessNames) {
+        ApprovalBizType bizType = resolveBizType(record);
+        String label = bizType == null ? "业务" : bizType.getLabel();
+        if (bizType == null || record.getInspectionFormId() == null) return label;
+        return businessNames.getOrDefault(businessKey(bizType, record.getInspectionFormId()), label);
+    }
+
+    private Map<String, String> resolveBusinessNames(List<ApprovalRecords> records) {
+        Map<ApprovalBizType, Set<Long>> idsByType = new EnumMap<>(ApprovalBizType.class);
+        for (ApprovalRecords record : records) {
+            ApprovalBizType type = resolveBizType(record);
+            if (type != null && record.getInspectionFormId() != null) {
+                idsByType.computeIfAbsent(type, ignored -> new HashSet<>()).add(record.getInspectionFormId());
+            }
+        }
+
+        Map<String, String> names = new HashMap<>();
+        putNames(names, ApprovalBizType.INSPECTION, selectBatch(inspectionFormMapper, idsByType.get(ApprovalBizType.INSPECTION)),
+                InspectionForm::getInspectionFormId, form -> displayName("验工单", form.getInspectionFormCode()));
+        putNames(names, ApprovalBizType.FILE, selectBatch(projectFilesMapper, idsByType.get(ApprovalBizType.FILE)),
+                ProjectFiles::getProjectFileId, file -> displayName("项目文件", file.getFileName()));
+        putNames(names, ApprovalBizType.BID, selectBatch(bidMapper, idsByType.get(ApprovalBizType.BID)),
+                Bid::getBidId, bid -> displayName("投标", bid.getBidName()));
+        putNames(names, ApprovalBizType.ACCEPTANCE, selectBatch(projectAcceptanceMapper, idsByType.get(ApprovalBizType.ACCEPTANCE)),
+                ProjectAcceptance::getAcceptanceId, acceptance -> displayName("验收", acceptance.getTitle()));
+        putNames(names, ApprovalBizType.OA_APPLICATION, selectBatch(oaApplicationMapper, idsByType.get(ApprovalBizType.OA_APPLICATION)),
+                OaApplication::getApplicationId, application -> displayName("OA申请", application.getTitle()));
+
+        List<OutputValue> outputValues = selectBatch(outputValueMapper, idsByType.get(ApprovalBizType.OUTPUT));
+        List<Timesheet> timesheets = selectBatch(timesheetMapper, idsByType.get(ApprovalBizType.TIMESHEET));
+        Set<Long> projectIds = new HashSet<>();
+        outputValues.stream().map(OutputValue::getProjectId).filter(Objects::nonNull).forEach(projectIds::add);
+        timesheets.stream().map(Timesheet::getProjectId).filter(Objects::nonNull).forEach(projectIds::add);
+        Map<Long, String> projectNames = selectBatch(projectMapper, projectIds).stream()
+                .filter(project -> project.getProjectId() != null && StringUtils.hasText(project.getProjectName()))
+                .collect(Collectors.toMap(Project::getProjectId, Project::getProjectName, (left, right) -> left));
+        putNames(names, ApprovalBizType.OUTPUT, outputValues, OutputValue::getOutputValueId,
+                item -> displayName("产值分配", projectNames.get(item.getProjectId())));
+        putNames(names, ApprovalBizType.TIMESHEET, timesheets, Timesheet::getTimesheetId,
+                item -> displayName("工时", projectNames.get(item.getProjectId())));
+        return names;
+    }
+
+    private <T> List<T> selectBatch(com.baomidou.mybatisplus.core.mapper.BaseMapper<T> mapper, Set<Long> ids) {
+        if (ids == null || ids.isEmpty()) return List.of();
+        return mapper.selectBatchIds(ids);
+    }
+
+    private <T> void putNames(Map<String, String> target, ApprovalBizType type, List<T> rows,
+                              Function<T, Long> idGetter, Function<T, String> nameGetter) {
+        for (T row : rows) {
+            Long id = idGetter.apply(row);
+            if (id != null) target.put(businessKey(type, id), nameGetter.apply(row));
+        }
+    }
+
+    private String businessKey(ApprovalBizType type, Long id) {
+        return type.getExt() + ":" + id;
+    }
+
+    private String displayName(String label, String name) {
+        return StringUtils.hasText(name) ? label + "「" + name + "」" : label;
+    }
+
+    private record MessageSource(String sourceType, Long sourceId) {
+        private String key() {
+            return sourceType + ":" + sourceId;
+        }
+    }
+}

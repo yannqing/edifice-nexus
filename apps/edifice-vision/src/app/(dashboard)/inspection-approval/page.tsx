@@ -47,6 +47,7 @@ import type {
 import type { UserListItem } from "@/types/project";
 import { INSPECTION_STATUS_MAP } from "@/types/inspection";
 import { AttachmentFileList, parseFileIdList } from "@/components/file/attachment-file-list";
+import { useDetailLink } from "@/hooks/use-detail-link";
 
 type TabKey = "pending" | "passed" | "rejected" | "all";
 
@@ -211,6 +212,7 @@ export default function InspectionApprovalPage() {
       setDetailLoading(false);
     }
   };
+  useDetailLink(openDetail);
 
   // 审批操作
   const handleApproval = async (result: number) => {

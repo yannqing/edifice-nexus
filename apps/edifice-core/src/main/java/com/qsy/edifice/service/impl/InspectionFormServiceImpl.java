@@ -530,7 +530,7 @@ public class InspectionFormServiceImpl implements InspectionFormService {
                     userId,
                     form.getInspectionFormDescription()
             );
-            current = approvalFlowService.submit(submit, userId);
+            current = approvalFlowService.submit(submit, form.getApplyUserId());
         }
 
         // 2. 执行审批

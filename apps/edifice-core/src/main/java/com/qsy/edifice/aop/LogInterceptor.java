@@ -2,7 +2,6 @@ package com.qsy.edifice.aop;
 
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -13,7 +12,6 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.UUID;
-import java.util.Set;
 
 /**
  * 请求响应日志 AOP
@@ -23,10 +21,6 @@ import java.util.Set;
 @Component
 @Slf4j
 public class LogInterceptor {
-
-    private static final Set<String> SENSITIVE_PATHS = Set.of(
-            "/auth/oa-sso-login"
-    );
 
     /**
      * 执行拦截
@@ -42,14 +36,9 @@ public class LogInterceptor {
         // 生成请求唯一 id
         String requestId = UUID.randomUUID().toString();
         String url = httpServletRequest.getRequestURI();
-        // 获取请求参数
-        Object[] args = point.getArgs();
-        String reqParam = SENSITIVE_PATHS.contains(url)
-                ? "[REDACTED]"
-                : "[" + StringUtils.join(args, ", ") + "]";
-        // 输出请求日志
-        log.info("request start，id: {}, path: {}, ip: {}, params: {}", requestId, url,
-                httpServletRequest.getRemoteHost(), reqParam);
+        // 业务请求参数统一由操作审计按脱敏规则记录，应用日志只保留请求元信息。
+        log.info("request start, id: {}, method: {}, path: {}, ip: {}", requestId,
+                httpServletRequest.getMethod(), url, httpServletRequest.getRemoteHost());
         // 执行原方法
         Object result = point.proceed();
         // 输出响应日志

@@ -29,6 +29,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -165,7 +167,7 @@ public class OaApplicationServiceImpl implements OaApplicationService {
 
     @Override
     public OaApplicationVo getById(Long applicationId, Long currentUserId) {
-        OaApplication application = findOwned(applicationId, currentUserId);
+        OaApplication application = findVisible(applicationId, currentUserId);
         return toVos(List.of(application)).get(0);
     }
 
@@ -257,8 +259,11 @@ public class OaApplicationServiceImpl implements OaApplicationService {
             record.setApprovalRecordId(existing.getCurrentRecordId());
             record.setInspectionFormStatus(APPROVAL_STATUS_REJECTED);
             record.setApprovalDescription("申请人撤回");
+            record.setNextApproverId(null);
             record.setUpdatedTime(LocalDateTime.now());
-            approvalRecordsMapper.updateById(record);
+            if (approvalRecordsMapper.updatePendingResult(record) != 1) {
+                throw new BusinessException(ErrorType.OPERATION_FAILED, "该申请已被审批，无法撤回");
+            }
         }
         existing.setStatus(STATUS_WITHDRAWN);
         existing.setCurrentRecordId(null);
@@ -318,6 +323,35 @@ public class OaApplicationServiceImpl implements OaApplicationService {
             throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只能操作自己的申请");
         }
         return application;
+    }
+
+    private OaApplication findVisible(Long applicationId, Long currentUserId) {
+        if (applicationId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "申请ID不能为空");
+        }
+        OaApplication application = oaApplicationMapper.selectById(applicationId);
+        if (application == null) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "申请不存在");
+        }
+        if (currentUserId != null && (currentUserId.equals(application.getApplicantId())
+                || isApplicationApprover(applicationId, currentUserId) || isSuperAdmin())) {
+            return application;
+        }
+        throw new BusinessException(ErrorType.NO_AUTH_ERROR, "您无权查看该申请");
+    }
+
+    private boolean isApplicationApprover(Long applicationId, Long currentUserId) {
+        Long count = approvalRecordsMapper.selectCount(new LambdaQueryWrapper<ApprovalRecords>()
+                .eq(ApprovalRecords::getBizTypeExt, ApprovalBizType.OA_APPLICATION.getExt())
+                .eq(ApprovalRecords::getInspectionFormId, applicationId)
+                .eq(ApprovalRecords::getApprover, currentUserId));
+        return count != null && count > 0;
+    }
+
+    private boolean isSuperAdmin() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(authority -> "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
     }
 
     private void ensureType(String type) {

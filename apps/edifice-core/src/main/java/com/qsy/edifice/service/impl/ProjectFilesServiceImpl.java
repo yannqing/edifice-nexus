@@ -204,8 +204,11 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
         if (pending != null) {
             pending.setInspectionFormStatus(RECORD_REJECTED);
             pending.setApprovalDescription("上传人撤销");
+            pending.setNextApproverId(null);
             pending.setUpdatedTime(LocalDateTime.now());
-            approvalRecordsMapper.updateById(pending);
+            if (approvalRecordsMapper.updatePendingResult(pending) != 1) {
+                throw new BusinessException(ErrorType.OPERATION_FAILED, "该文件审批已被处理，无法撤销");
+            }
         }
 
         entity.setApprovalStatus(APPROVAL_REJECTED);
