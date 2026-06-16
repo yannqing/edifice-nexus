@@ -28,6 +28,7 @@ import {
   GitBranch,
   ListTodo,
   SlidersHorizontal,
+  Archive,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -79,6 +80,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   GitBranch,
   ListTodo,
   SlidersHorizontal,
+  Archive,
 };
 
 interface SidebarProps {

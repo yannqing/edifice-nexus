@@ -268,6 +268,20 @@ export const navigationConfig: NavSection[] = [
         permissionCode: "menu:inspection-management",
       },
       {
+        id: "contract-management",
+        label: "合同管理",
+        icon: "FileText",
+        href: "/contract-management",
+        permissionCode: "menu:contract-management",
+      },
+      {
+        id: "project-archive",
+        label: "项目归档",
+        icon: "Archive",
+        href: "/project-archive",
+        permissionCode: "menu:project-archive",
+      },
+      {
         id: "project-files-approval",
         label: "项目文件审批",
         icon: "FolderCheck",

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.CreateProjectDto;
 import com.qsy.edifice.domain.dto.GetAllProjectListDto;
 import com.qsy.edifice.domain.dto.GetMyProjectListDto;
+import com.qsy.edifice.domain.dto.GetProjectArchiveListDto;
 import com.qsy.edifice.domain.dto.UpdateProjectDto;
 import com.qsy.edifice.domain.entity.*;
 import com.qsy.edifice.domain.vo.*;
@@ -24,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -224,6 +226,8 @@ public class ProjectServiceImpl implements ProjectService {
 
     private static final Long ROLE_MANAGER_ID = 101L;
     private static final Long ROLE_MEMBER_ID = 102L;
+    private static final Integer PROJECT_STATUS_ARCHIVED = 4;
+    private static final Set<Integer> ARCHIVABLE_STAGE_STATUSES = Set.of(3, 6);
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -640,12 +644,138 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public Page<ProjectArchiveVo> getArchivableProjectPage(GetProjectArchiveListDto dto) {
+        return getProjectArchivePage(dto, false);
+    }
+
+    @Override
+    public Page<ProjectArchiveVo> getArchivedProjectPage(GetProjectArchiveListDto dto) {
+        return getProjectArchivePage(dto, true);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void archiveProject(Long projectId) {
+        if (projectId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目ID不能为空");
+        }
+        Project project = projectMapper.selectById(projectId);
+        if (project == null) {
+            throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
+        }
+        ProjectArchiveVo archiveVo = convertToArchiveVo(project);
+        if (!Boolean.TRUE.equals(archiveVo.getArchiveReady())) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, archiveVo.getArchiveWarning());
+        }
+        if (Objects.equals(project.getProjectStatus(), PROJECT_STATUS_ARCHIVED)) {
+            return;
+        }
+        project.setProjectStatus(PROJECT_STATUS_ARCHIVED);
+        projectMapper.updateById(project);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unarchiveProject(Long projectId) {
+        if (projectId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目ID不能为空");
+        }
+        Project project = projectMapper.selectById(projectId);
+        if (project == null) {
+            throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
+        }
+        if (!Objects.equals(project.getProjectStatus(), PROJECT_STATUS_ARCHIVED)) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "只有已归档项目可以取消归档");
+        }
+        project.setProjectStatus(1);
+        projectMapper.updateById(project);
+    }
+
+    @Override
     public boolean checkProjectExists(Long projectId) {
         if (projectId == null || projectId <= 0) {
             return false;
         }
         Project project = projectMapper.selectById(projectId);
         return project != null;
+    }
+
+    private Page<ProjectArchiveVo> getProjectArchivePage(GetProjectArchiveListDto dto, boolean archived) {
+        if (dto == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL);
+        }
+        Integer current = dto.getCurrent() == null || dto.getCurrent() < 1 ? 1 : dto.getCurrent();
+        Integer pageSize = dto.getPageSize() == null || dto.getPageSize() < 1 ? 10 : dto.getPageSize();
+
+        LambdaQueryWrapper<Project> wrapper = new LambdaQueryWrapper<>();
+        if (archived) {
+            wrapper.eq(Project::getProjectStatus, PROJECT_STATUS_ARCHIVED);
+        } else {
+            wrapper.ne(Project::getProjectStatus, PROJECT_STATUS_ARCHIVED);
+        }
+        if (StringUtils.hasText(dto.getKeywords())) {
+            String keyword = dto.getKeywords().trim();
+            wrapper.and(w -> w.like(Project::getProjectName, keyword)
+                    .or()
+                    .like(Project::getProjectCode, keyword));
+        }
+        wrapper.eq(dto.getProjectType() != null, Project::getProjectType, dto.getProjectType());
+        wrapper.orderByDesc(Project::getUpdatedTime).orderByDesc(Project::getCreatedTime);
+
+        Page<Project> page = projectMapper.selectPage(new Page<>(current, pageSize), wrapper);
+        Page<ProjectArchiveVo> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
+        voPage.setRecords(page.getRecords().stream().map(this::convertToArchiveVo).collect(Collectors.toList()));
+        return voPage;
+    }
+
+    private ProjectArchiveVo convertToArchiveVo(Project project) {
+        ProjectArchiveVo vo = new ProjectArchiveVo();
+        vo.setProjectId(project.getProjectId());
+        vo.setProjectName(project.getProjectName());
+        vo.setProjectCode(project.getProjectCode());
+        vo.setProjectStatus(project.getProjectStatus());
+        vo.setProjectStartTime(project.getProjectStartTime());
+        vo.setProjectEndTime(project.getProjectEndTime());
+        vo.setUpdatedTime(project.getUpdatedTime());
+
+        if (project.getProjectType() != null) {
+            ProjectType projectType = projectTypeService.getProjectTypeById(project.getProjectType());
+            if (projectType != null) {
+                vo.setProjectType(convertToProjectTypeVo(projectType));
+            }
+        }
+
+        Contract contract = contractService.getContractByProjectId(project.getProjectId());
+        if (contract != null) {
+            ContractVo contractVo = convertToContractVo(contract);
+            vo.setContract(contractVo);
+            vo.setContractAmount(contract.getContractAmount() == null ? BigDecimal.ZERO : contract.getContractAmount());
+        } else {
+            vo.setContractAmount(BigDecimal.ZERO);
+        }
+
+        List<ProjectStage> stages = projectStageService.getProjectStagesByProjectId(project.getProjectId());
+        int totalStageCount = stages == null ? 0 : stages.size();
+        int completedStageCount = stages == null ? 0 : (int) stages.stream()
+                .filter(stage -> ARCHIVABLE_STAGE_STATUSES.contains(stage.getStageStatus()))
+                .count();
+        vo.setTotalStageCount(totalStageCount);
+        vo.setCompletedStageCount(completedStageCount);
+        if (totalStageCount == 0) {
+            vo.setArchiveReady(false);
+            vo.setArchiveWarning("项目未配置阶段，无法归档");
+        } else if (completedStageCount < totalStageCount) {
+            vo.setArchiveReady(false);
+            vo.setArchiveWarning("仍有未完成阶段，无法归档");
+        } else {
+            vo.setArchiveReady(true);
+            vo.setArchiveWarning(null);
+        }
+
+        Long fileCount = projectFilesMapper.selectCount(new LambdaQueryWrapper<ProjectFiles>()
+                .eq(ProjectFiles::getProjectId, String.valueOf(project.getProjectId())));
+        vo.setFileCount(fileCount == null ? 0 : fileCount.intValue());
+        return vo;
     }
 
     /**

@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.CreateProjectDto;
 import com.qsy.edifice.domain.dto.GetAllProjectListDto;
 import com.qsy.edifice.domain.dto.GetMyProjectListDto;
+import com.qsy.edifice.domain.dto.GetProjectArchiveListDto;
 import com.qsy.edifice.domain.dto.UpdateProjectDto;
 import com.qsy.edifice.domain.entity.Project;
 import com.qsy.edifice.domain.vo.ProjectDetailVo;
+import com.qsy.edifice.domain.vo.ProjectArchiveVo;
 import com.qsy.edifice.domain.vo.ProjectListVo;
 import com.qsy.edifice.domain.vo.ProjectStatisticsVo;
 
@@ -129,4 +131,30 @@ public interface ProjectService {
      * @return 统计信息
      */
     ProjectStatisticsVo getMyProjectStatistics(Long userId);
+
+    /**
+     * 查询可归档项目
+     * @param dto 查询条件
+     * @return 分页结果
+     */
+    Page<ProjectArchiveVo> getArchivableProjectPage(GetProjectArchiveListDto dto);
+
+    /**
+     * 查询已归档项目
+     * @param dto 查询条件
+     * @return 分页结果
+     */
+    Page<ProjectArchiveVo> getArchivedProjectPage(GetProjectArchiveListDto dto);
+
+    /**
+     * 归档项目
+     * @param projectId 项目id
+     */
+    void archiveProject(Long projectId);
+
+    /**
+     * 取消归档
+     * @param projectId 项目id
+     */
+    void unarchiveProject(Long projectId);
 }

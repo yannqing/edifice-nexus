@@ -1,7 +1,10 @@
 package com.qsy.edifice.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.qsy.edifice.domain.dto.GetContractListDto;
+import com.qsy.edifice.domain.dto.UpdateContractDto;
 import com.qsy.edifice.domain.entity.Contract;
+import com.qsy.edifice.domain.vo.ContractListVo;
 
 /**
  * 合同服务接口
@@ -36,6 +39,26 @@ public interface ContractService {
      * @return 分页结果
      */
     Page<Contract> getContractPage(Integer current, Integer pageSize);
+
+    /**
+     * 合同管理分页列表
+     * @param dto 查询条件
+     * @return 分页结果
+     */
+    Page<ContractListVo> getContractList(GetContractListDto dto);
+
+    /**
+     * 合同管理详情
+     * @param contractId 合同id
+     * @return 合同详情
+     */
+    ContractListVo getContractDetail(Long contractId);
+
+    /**
+     * 合同管理更新
+     * @param dto 更新参数
+     */
+    void updateContractInfo(UpdateContractDto dto);
 
     /**
      * 保存合同
