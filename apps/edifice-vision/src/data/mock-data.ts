@@ -356,6 +356,20 @@ export const navigationConfig: NavSection[] = [
         href: "/audit-logs",
         permissionCode: "menu:audit-logs",
       },
+      {
+        id: "flow-config",
+        label: "流程配置中心",
+        icon: "GitBranch",
+        href: "/flow-config",
+        permissionCode: "menu:flow-config",
+      },
+      {
+        id: "business-rule-config",
+        label: "业务规则配置",
+        icon: "SlidersHorizontal",
+        href: "/business-rule-config",
+        permissionCode: "menu:business-rule-config",
+      },
     ],
   },
 ];
