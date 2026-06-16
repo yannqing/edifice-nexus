@@ -179,7 +179,7 @@ class Role extends BaseController
 
     private function requiredEdificeRuleIds(): array
     {
-        return ['900001000', '900001001', '900001002', '900001013', '900001018'];
+        return ['900001000', '900001001', '900001002', '900001013', '900001018', '900001019'];
     }
 
     private function withRequiredEdificeRules(array $ruleData): array

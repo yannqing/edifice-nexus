@@ -50,7 +50,8 @@ public class OaUserSyncServiceImpl implements OaUserSyncService {
             "menu:workbench",
             "menu:my-projects",
             "menu:performance",
-            "menu:message-center"
+            "menu:message-center",
+            "menu:todo-center"
     );
 
     @Resource

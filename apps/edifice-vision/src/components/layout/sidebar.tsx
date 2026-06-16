@@ -25,6 +25,7 @@ import {
   ClipboardList,
   History,
   Bell,
+  ListTodo,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -73,6 +74,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   ClipboardList,
   History,
   Bell,
+  ListTodo,
 };
 
 interface SidebarProps {

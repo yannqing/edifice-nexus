@@ -206,6 +206,13 @@ export const navigationConfig: NavSection[] = [
         href: "/message-center",
         permissionCode: "menu:message-center",
       },
+      {
+        id: "todo-center",
+        label: "统一待办",
+        icon: "ListTodo",
+        href: "/todo-center",
+        permissionCode: "menu:todo-center",
+      },
     ],
   },
   {
