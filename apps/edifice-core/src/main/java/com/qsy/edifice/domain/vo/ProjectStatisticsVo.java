@@ -44,6 +44,11 @@ public class ProjectStatisticsVo implements Serializable {
     private Long completedCount;
 
     /**
+     * 已归档的数量（archive_status=1）
+     */
+    private Long archivedCount;
+
+    /**
      * 合同总额
      */
     private Double totalContractAmount;

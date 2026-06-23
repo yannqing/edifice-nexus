@@ -70,6 +70,8 @@ export interface ProjectListVo {
   preEndTime: string | null;
   /** 项目文件数量（project_files） */
   fileCount: number;
+  /** 归档状态：0-未归档/1-已归档 */
+  archiveStatus?: number;
 }
 
 // ==================== 项目详情 VO ====================
@@ -97,6 +99,7 @@ export interface ProjectStatisticsVo {
   processingCount: number;
   pendingAcceptanceCount: number;
   completedCount: number;
+  archivedCount?: number;
   totalContractAmount: number;
 }
 

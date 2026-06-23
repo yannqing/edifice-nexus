@@ -89,6 +89,11 @@ public class ProjectListVo implements Serializable {
      */
     private Integer fileCount;
 
+    /**
+     * 归档状态：0-未归档/1-已归档
+     */
+    private Integer archiveStatus;
+
     public static ProjectListVo objToVo(Project project) {
         if(project == null){
             throw new BusinessException(ErrorType.ARGS_NOT_NULL);

@@ -61,7 +61,7 @@ function formatMoney(value?: number | null) {
 }
 
 function formatDate(value?: string | null) {
-  return value?.replace("T", " ").slice(0, 16) || "-";
+  return value?.slice(0, 10) || "-";
 }
 
 function toDateTimeInput(value?: string | null) {
@@ -373,9 +373,6 @@ export default function ContractManagementPage() {
                   <input type="datetime-local" value={form.preEndDate ?? ""} onChange={(event) => setForm({ ...form, preEndDate: event.target.value })} className="form-input" />
                 </Field>
               </div>
-              <Field label="效益规则">
-                <textarea value={form.benefitRules ?? ""} onChange={(event) => setForm({ ...form, benefitRules: event.target.value })} rows={3} className="form-input resize-none" />
-              </Field>
               {editing && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-4">

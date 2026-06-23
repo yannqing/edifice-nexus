@@ -40,7 +40,7 @@ import type { ProjectStatus, ProjectCategory } from "@/types";
 /** 项目经理角色ID（对应 sys_role.role_id = 101） */
 const ROLE_PROJECT_MANAGER = 101;
 
-type FilterKey = "all" | "inProgress" | "pending" | "completed" | "notStarted";
+type FilterKey = "all" | "inProgress" | "pending" | "completed" | "notStarted" | "archived";
 
 const statusFilterMap: Record<FilterKey, number | null> = {
   all: null,
@@ -48,6 +48,7 @@ const statusFilterMap: Record<FilterKey, number | null> = {
   pending: 2,
   completed: 4,
   notStarted: 0,
+  archived: null,
 };
 
 const statusStyles: Record<ProjectStatus, string> = {
@@ -141,6 +142,7 @@ export default function MyProjectsPage() {
     pending: 0,
     completed: 0,
     notStarted: 0,
+    archived: 0,
   });
 
   // 支持从 OA 合同详情或消息中心跳转直接打开项目详情。
@@ -179,8 +181,17 @@ export default function MyProjectsPage() {
       }, signal);
 
       if (response.code === ResponseCode.SUCCESS && response.data) {
-        setProjects(response.data.records ?? []);
-        setTotal(response.data.total ?? 0);
+        let records = response.data.records ?? [];
+        // 已归档项目隔离：除「已归档」和「全部」tab 外，其他 tab 不显示已归档项目
+        if (activeFilter === "archived") {
+          records = records.filter((p) => p.archiveStatus === 1);
+        } else if (activeFilter === "all") {
+          // 全部 tab 包含已归档
+        } else {
+          records = records.filter((p) => p.archiveStatus !== 1);
+        }
+        setProjects(records);
+        setTotal(records.length);
       }
       setLoading(false);
     } catch (err) {
@@ -202,6 +213,7 @@ export default function MyProjectsPage() {
           pending: res.data.pendingAcceptanceCount ?? 0,
           completed: res.data.completedCount ?? 0,
           notStarted: res.data.notStartedCount ?? 0,
+          archived: res.data.archivedCount ?? 0,
         });
       }
     } catch {
@@ -227,6 +239,7 @@ export default function MyProjectsPage() {
     { key: "pending", label: "待验收" },
     { key: "completed", label: "已完成" },
     { key: "notStarted", label: "未开始" },
+    { key: "archived", label: "已归档" },
   ];
 
   return (

@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Upload,
   Download,
-  Plus,
   Search,
   Eye,
   Pencil,
@@ -155,8 +154,10 @@ export default function AllProjectsPage() {
       }, signal);
 
       if (response.code === ResponseCode.SUCCESS && response.data) {
-        setProjects(response.data.records ?? []);
-        setTotal(response.data.total ?? 0);
+        // 已归档项目不在全部项目中展示
+        const records = (response.data.records ?? []).filter((p) => p.archiveStatus !== 1);
+        setProjects(records);
+        setTotal(records.length);
       }
       setLoading(false);
     } catch (err) {
@@ -282,9 +283,6 @@ export default function AllProjectsPage() {
             }}
           >
             <Download className="w-4 h-4" /> 导出
-          </Button>
-          <Button className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2">
-            <Plus className="w-4 h-4" /> 新建项目
           </Button>
         </div>
       </div>

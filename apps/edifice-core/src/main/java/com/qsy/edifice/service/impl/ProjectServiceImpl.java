@@ -735,6 +735,7 @@ public class ProjectServiceImpl implements ProjectService {
             vo.setProcessingCount(0L);
             vo.setPendingAcceptanceCount(0L);
             vo.setCompletedCount(0L);
+            vo.setArchivedCount(0L);
             vo.setTotalContractAmount(0.0);
             return vo;
         }
@@ -752,6 +753,8 @@ public class ProjectServiceImpl implements ProjectService {
                 new LambdaQueryWrapper<Project>().in(Project::getProjectId, projectIds).eq(Project::getProjectStatus, 2)));
         vo.setCompletedCount(projectMapper.selectCount(
                 new LambdaQueryWrapper<Project>().in(Project::getProjectId, projectIds).eq(Project::getProjectStatus, 4)));
+        vo.setArchivedCount(projectMapper.selectCount(
+                new LambdaQueryWrapper<Project>().in(Project::getProjectId, projectIds).eq(Project::getArchiveStatus, 1)));
         vo.setTotalContractAmount(0.0);
 
         return vo;
