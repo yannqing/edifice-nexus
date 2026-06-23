@@ -100,10 +100,11 @@ export default function ProjectFilesApprovalPage() {
           setTotal(res.data?.length ?? 0);
         }
       } else {
-        // all / mine tab 走分页接口（mine 当前复用 all，权限下推后已经只可见自己有权看的）
+        // all / mine tab 走分页接口；mine 仅查当前用户上传的文件
         const res = await getProjectFileList({
           keyword: debouncedKeyword || undefined,
           fileCategory: fileCategory || undefined,
+          mineOnly: tab === "mine",
           current: currentPage,
           pageSize: PAGE_SIZE,
         }, signal);

@@ -281,6 +281,11 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
                             uid));
         }
 
+        // 「我上传的」tab：只看 upload_user_id = 当前用户，覆盖权限过滤
+        if (Boolean.TRUE.equals(dto.getMineOnly()) && userId != null) {
+            w.eq(ProjectFiles::getUploadUserId, userId);
+        }
+
         w.orderByDesc(ProjectFiles::getCreatedTime);
 
         Page<ProjectFiles> entityPage = projectFilesMapper.selectPage(new Page<>(current, pageSize), w);

@@ -32,6 +32,9 @@ public class GetProjectFileListDto {
     @Schema(description = "搜索关键字：模糊匹配 description / fileCategory（OR）")
     private String keyword;
 
+    @Schema(description = "仅查我上传的（true 时按 upload_user_id = 当前用户过滤）")
+    private Boolean mineOnly;
+
     @Schema(description = "当前页")
     private Integer current = 1;
 

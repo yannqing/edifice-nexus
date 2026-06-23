@@ -33,6 +33,7 @@ export async function getProjectFileList(params?: {
   approvalStatus?: number;
   fileCategory?: string;
   keyword?: string;
+  mineOnly?: boolean;
   current?: number;
   pageSize?: number;
 }, signal?: AbortSignal): Promise<BaseResponse<PageResult<ProjectFileVo>>> {
@@ -41,6 +42,7 @@ export async function getProjectFileList(params?: {
   if (params?.approvalStatus !== undefined) q.approvalStatus = String(params.approvalStatus);
   if (params?.fileCategory) q.fileCategory = params.fileCategory;
   if (params?.keyword) q.keyword = params.keyword;
+  if (params?.mineOnly) q.mineOnly = "true";
   if (params?.current !== undefined) q.current = String(params.current);
   if (params?.pageSize !== undefined) q.pageSize = String(params.pageSize);
   return get<PageResult<ProjectFileVo>>("/project-files/list", { params: q, signal });
