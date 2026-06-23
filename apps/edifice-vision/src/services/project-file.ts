@@ -56,6 +56,12 @@ export async function getMyPendingProjectFiles(): Promise<BaseResponse<ProjectFi
   return get<ProjectFileVo[]>("/project-files/my-pending");
 }
 
+export async function getProjectFileStatistics(): Promise<
+  BaseResponse<{ total: number; pending: number; approved: number; rejected: number }>
+> {
+  return get("/project-files/statistics");
+}
+
 export function getProjectFileDownloadUrl(fileId: string, token?: string | null): string {
   const query = token ? `?token=${encodeURIComponent(token)}` : "";
   return `${BASE_URL}/file/download/${fileId}${query}`;

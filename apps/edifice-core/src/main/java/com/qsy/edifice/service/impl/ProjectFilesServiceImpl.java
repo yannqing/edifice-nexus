@@ -289,6 +289,27 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
     }
 
     @Override
+    public Map<String, Long> getStatistics(Long userId, boolean canViewAll) {
+        // 与 listProjectFilesPage 相同的权限过滤，但不分页、不按状态过滤
+        LambdaQueryWrapper<ProjectFiles> w = new LambdaQueryWrapper<>();
+        if (!canViewAll && userId != null) {
+            String uid = String.valueOf(userId);
+            w.and(ww -> ww.eq(ProjectFiles::getUploadUserId, userId)
+                    .or().apply(
+                            "project_id IN (SELECT CAST(project_id AS CHAR) FROM project_member "
+                                    + "WHERE user_id = {0} AND is_delete = 0)",
+                            uid));
+        }
+        List<ProjectFiles> all = projectFilesMapper.selectList(w);
+        Map<String, Long> stats = new HashMap<>();
+        stats.put("total", (long) all.size());
+        stats.put("pending", all.stream().filter(f -> Integer.valueOf(1).equals(f.getApprovalStatus())).count());
+        stats.put("approved", all.stream().filter(f -> Integer.valueOf(2).equals(f.getApprovalStatus())).count());
+        stats.put("rejected", all.stream().filter(f -> Integer.valueOf(3).equals(f.getApprovalStatus())).count());
+        return stats;
+    }
+
+    @Override
     public List<ProjectFileVo> listProjectFiles(Long projectId, Integer approvalStatus, String keyword, Long userId, boolean canViewAll) {
         List<ProjectFileVo> list = listProjectFiles(projectId, approvalStatus, keyword);
         if (canViewAll) {

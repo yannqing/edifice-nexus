@@ -110,6 +110,15 @@ public class ProjectFilesController {
                 projectFilesService.listMyPending(loginUser.getUserId()));
     }
 
+    @GetMapping("/statistics")
+    @Operation(summary = "项目文件统计", description = "按审批状态分组计数，供卡片统计使用")
+    @PreAuthorize("isAuthenticated()")
+    public BaseResponse<java.util.Map<String, Long>> statistics(HttpServletRequest request) throws JsonProcessingException {
+        SysUser loginUser = jwtUtils.getUserFromToken(request.getHeader("token"));
+        return ResultUtils.success(Code.SUCCESS,
+                projectFilesService.getStatistics(loginUser.getUserId(), canViewAllProjectFiles()));
+    }
+
     private boolean canViewAllProjectFiles() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null) {

@@ -8,6 +8,7 @@ import com.qsy.edifice.domain.entity.ProjectFiles;
 import com.qsy.edifice.domain.vo.ProjectFileVo;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 项目文件服务接口（Phase 3 扩展三级审批）
@@ -89,4 +90,15 @@ public interface ProjectFilesService {
      * 我的待审：当前登录用户的所有"审批中且当前节点 approver = 我"的项目文件
      */
     List<ProjectFileVo> listMyPending(Long userId);
+
+    /**
+     * 项目文件统计（按审批状态分组计数）。
+     *
+     * <p>卡片统计不依赖当前 tab 的列表过滤，需独立统计全量。
+     *
+     * @param userId     当前登录用户
+     * @param canViewAll 是否有查看全部的权限
+     * @return key = 状态码(0/1/2/3)，value = 数量；key "total" = 总数
+     */
+    Map<String, Long> getStatistics(Long userId, boolean canViewAll);
 }

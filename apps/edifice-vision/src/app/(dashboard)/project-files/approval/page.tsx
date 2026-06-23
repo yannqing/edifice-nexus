@@ -22,6 +22,7 @@ import {
   getMyPendingProjectFiles,
   getProjectFileDetail,
   getProjectFileList,
+  getProjectFileStatistics,
 } from "@/services/project-file";
 import type { ProjectFileVo } from "@/types/project-file";
 import {
@@ -64,6 +65,7 @@ export default function ProjectFilesApprovalPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [current, setCurrent] = useState<ProjectFileVo | null>(null);
   const [currentDetail, setCurrentDetail] = useState<ProjectFileVo | null>(null);
+  const [statsData, setStatsData] = useState<{ total: number; pending: number; approved: number; rejected: number } | null>(null);
 
   // 搜索 + 分类筛选 + 分页 state（仅 all/mine tab 用）
   const [keyword, setKeyword] = useState("");
@@ -130,6 +132,18 @@ export default function ProjectFilesApprovalPage() {
     setCurrentPage(1);
   }, [tab]);
 
+  // 卡片统计独立拉取，不依赖当前 tab 的列表数据
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await getProjectFileStatistics();
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setStatsData(res.data);
+      }
+    } catch { /* 静默 */ }
+  }, []);
+
+  useEffect(() => { fetchStats(); }, [fetchStats]);
+
   const handleOpenApprove = async (id: string) => {
     const res = await getProjectFileDetail(id);
     if (res.code === ResponseCode.SUCCESS && res.data) {
@@ -148,10 +162,10 @@ export default function ProjectFilesApprovalPage() {
   useDetailLink(handleOpenDetail);
 
   const stats = {
-    total: items.length,
-    pending: items.filter((f) => f.approvalStatus === 1).length,
-    approved: items.filter((f) => f.approvalStatus === 2).length,
-    rejected: items.filter((f) => f.approvalStatus === 3).length,
+    total: statsData?.total ?? items.length,
+    pending: statsData?.pending ?? items.filter((f) => f.approvalStatus === 1).length,
+    approved: statsData?.approved ?? items.filter((f) => f.approvalStatus === 2).length,
+    rejected: statsData?.rejected ?? items.filter((f) => f.approvalStatus === 3).length,
   };
 
   return (
@@ -369,7 +383,7 @@ export default function ProjectFilesApprovalPage() {
         open={approveOpen}
         onOpenChange={setApproveOpen}
         file={current}
-        onSuccess={() => fetchData()}
+        onSuccess={() => { fetchData(); fetchStats(); }}
       />
 
       <ProjectFileDetailDialog
