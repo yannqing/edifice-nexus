@@ -394,19 +394,68 @@ export default function OutputValuePage() {
                       <div className="px-5 pb-5 border-t border-slate-100">
                         {/* 派生金额卡片（v0.4） */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-xs">
+                          <BreakdownBox label="当前阶段产值" value={item.currentStageAmount ?? item.stageCumulativeAmount ?? 0} tone="blue" />
+                          <BreakdownBox label="历史补差合计" value={item.adjustmentAmount ?? item.previousCumulativeAmount ?? 0} tone="amber" />
                           <BreakdownBox label="公司账 (60% + 转入)" value={item.companyReserve ?? 0} tone="slate" />
                           <BreakdownBox label="离职兜底（独立记账）" value={item.otherAmount ?? 0} tone="rose" />
-                          <BreakdownBox label="公司补贴" value={item.subsidyAmount ?? 0} tone="blue" />
-                          <BreakdownBox label="本期效益部分" value={item.benefitAmountPart ?? 0} tone="amber" />
                         </div>
                         {item.stageCumulativeAmount != null && (
                           <p className="text-xs text-slate-400 mt-2">
-                            阶段应得 ¥{(item.stageCumulativeAmount ?? 0).toLocaleString()}
+                            当前阶段 ¥{(item.currentStageAmount ?? item.stageCumulativeAmount ?? 0).toLocaleString()}
                             · 基本部分 ¥{(item.baseAmountPart ?? 0).toLocaleString()}
+                            · 效益部分 ¥{(item.benefitAmountPart ?? 0).toLocaleString()}
                             {item.benefitSnapshot != null && (
                               <> · 创建时效益值 ¥{(item.benefitSnapshot ?? 0).toLocaleString()}</>
                             )}
                           </p>
+                        )}
+
+                        {(item.adjustmentDetails ?? []).length > 0 && (
+                          <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50/40 overflow-x-auto">
+                            <div className="px-3 py-2 text-sm font-semibold text-slate-700">
+                              历史补差明细
+                            </div>
+                            <table className="w-full text-xs bg-white">
+                              <thead className="bg-amber-50 text-slate-500">
+                                <tr>
+                                  <th className="text-left py-2 px-3 font-medium">历史阶段</th>
+                                  <th className="text-right py-2 px-3 font-medium">原阶段金额</th>
+                                  <th className="text-right py-2 px-3 font-medium">重算金额</th>
+                                  <th className="text-right py-2 px-3 font-medium">已补/扣</th>
+                                  <th className="text-right py-2 px-3 font-medium">本次补/扣</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {item.adjustmentDetails.map((detail) => (
+                                  <tr key={detail.adjustmentDetailId ?? detail.sourceOutputValueId} className="border-t border-amber-50">
+                                    <td className="py-2 px-3 text-slate-700">
+                                      {detail.sourceStageName || "-"}
+                                      <span className="ml-1 text-slate-400">
+                                        {detail.sourceBaseRatio}%
+                                      </span>
+                                    </td>
+                                    <td className="py-2 px-3 text-right text-slate-600">
+                                      {formatAmount(detail.oldStageAmount)}
+                                    </td>
+                                    <td className="py-2 px-3 text-right text-slate-600">
+                                      {formatAmount(detail.newStageAmount)}
+                                    </td>
+                                    <td className="py-2 px-3 text-right text-slate-600">
+                                      {formatAmount(detail.alreadyAdjustedAmount)}
+                                    </td>
+                                    <td
+                                      className={cn(
+                                        "py-2 px-3 text-right font-semibold",
+                                        detail.adjustmentAmount < 0 ? "text-rose-600" : "text-emerald-700",
+                                      )}
+                                    >
+                                      {formatAmount(detail.adjustmentAmount)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         )}
 
                         <table className="w-full mt-4">

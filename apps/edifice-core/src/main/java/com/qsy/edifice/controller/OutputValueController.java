@@ -6,6 +6,7 @@ import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.dto.CreateOutputValueDto;
 import com.qsy.edifice.domain.dto.OutputValueActionDto;
 import com.qsy.edifice.domain.entity.SysUser;
+import com.qsy.edifice.domain.vo.OutputValuePreviewVo;
 import com.qsy.edifice.domain.vo.OutputValueVo;
 import com.qsy.edifice.service.OutputValueService;
 import com.qsy.edifice.utils.JwtUtils;
@@ -46,6 +47,14 @@ public class OutputValueController {
     @Operation(summary = "产值分配统计")
     public BaseResponse<Map<String, Object>> getStatistics() {
         Map<String, Object> result = outputValueService.getStatistics();
+        return ResultUtils.success(Code.SUCCESS, result);
+    }
+
+    @GetMapping("/preview")
+    @Operation(summary = "预览产值分配金额", description = "创建前预览当前阶段产值、历史补差与本次总额")
+    public BaseResponse<OutputValuePreviewVo> preview(@RequestParam Long projectId,
+                                                       @RequestParam Long projectStageId) {
+        OutputValuePreviewVo result = outputValueService.previewOutputValue(projectId, projectStageId);
         return ResultUtils.success(Code.SUCCESS, result);
     }
 

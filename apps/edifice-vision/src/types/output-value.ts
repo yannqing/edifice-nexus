@@ -19,6 +19,23 @@ export interface DistributionItemVo {
   amount: number;
 }
 
+export interface OutputValueAdjustmentDetailVo {
+  adjustmentDetailId?: string | null;
+  sourceOutputValueId: string;
+  sourceProjectStageId: string;
+  sourceStageName: string;
+  sourceBaseRatio: number;
+  sourceBenefitRatio: number;
+  oldBaseAmountSnapshot: number | null;
+  oldBenefitAmountSnapshot: number | null;
+  oldStageAmount: number;
+  newBaseAmountSnapshot: number;
+  newBenefitAmountSnapshot: number;
+  newStageAmount: number;
+  alreadyAdjustedAmount: number;
+  adjustmentAmount: number;
+}
+
 export interface OutputValueVo {
   outputValueId: string;
   projectId: string;
@@ -51,6 +68,16 @@ export interface OutputValueVo {
   benefitAmountPart: number | null;
   /** 快照：本单创建时合同的预计效益值 */
   benefitSnapshot: number | null;
+  /** 当前阶段纯产值，不含历史补差 */
+  currentStageAmount: number | null;
+  /** 历史阶段补差合计，可正可负 */
+  adjustmentAmount: number | null;
+  /** 快照：本单创建时合同的基本金额 */
+  baseAmountSnapshot: number | null;
+  /** 快照：本单创建时合同的效益金额 */
+  benefitAmountSnapshot: number | null;
+  /** 计算版本 */
+  calculationVersion: string | null;
 
   /** 0-待确认/1-待审核/2-已审批/3-已发放 */
   status: number;
@@ -68,6 +95,7 @@ export interface OutputValueVo {
   paidTime: string | null;
   createdTime: string;
   distributions: DistributionItemVo[];
+  adjustmentDetails: OutputValueAdjustmentDetailVo[];
 }
 
 export interface CreateDistributionItem {
@@ -97,7 +125,7 @@ export interface CreateOutputValueParams {
   distributions: CreateDistributionItem[];
 }
 
-/** 创建产值分配单前预览：当前阶段独立产值 */
+/** 创建产值分配单前预览：当前阶段产值 + 历史补差 */
 export interface OutputValuePreview {
   baseAmount: number;
   benefitAmount: number;
@@ -105,9 +133,10 @@ export interface OutputValuePreview {
   benefitRatio: number;
   basePart: number;
   benefitPart: number;
-  currentCumulative: number;
-  previousCumulative: number;
+  currentStageAmount: number;
+  adjustmentAmount: number;
   thisPeriodTotal: number;
+  adjustmentDetails: OutputValueAdjustmentDetailVo[];
 }
 
 export interface OutputValueStats {

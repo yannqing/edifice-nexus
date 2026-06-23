@@ -101,6 +101,26 @@ public class OutputValue implements Serializable {
     @TableField("benefit_snapshot")
     private BigDecimal benefitSnapshot;
 
+    /** 当前阶段纯产值，不含历史补差 */
+    @TableField("current_stage_amount")
+    private BigDecimal currentStageAmount;
+
+    /** 历史阶段补差合计，可正可负 */
+    @TableField("adjustment_amount")
+    private BigDecimal adjustmentAmount;
+
+    /** 快照：本单创建时合同的基本金额 */
+    @TableField("base_amount_snapshot")
+    private BigDecimal baseAmountSnapshot;
+
+    /** 快照：本单创建时合同的效益金额 */
+    @TableField("benefit_amount_snapshot")
+    private BigDecimal benefitAmountSnapshot;
+
+    /** 计算版本 */
+    @TableField("calculation_version")
+    private String calculationVersion;
+
     @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
 

@@ -73,6 +73,21 @@ public class OutputValueVo implements Serializable {
     /** 快照：本单创建时合同的预计效益值 */
     private BigDecimal benefitSnapshot;
 
+    /** 当前阶段纯产值，不含历史补差 */
+    private BigDecimal currentStageAmount;
+
+    /** 历史阶段补差合计，可正可负 */
+    private BigDecimal adjustmentAmount;
+
+    /** 快照：本单创建时合同的基本金额 */
+    private BigDecimal baseAmountSnapshot;
+
+    /** 快照：本单创建时合同的效益金额 */
+    private BigDecimal benefitAmountSnapshot;
+
+    /** 计算版本 */
+    private String calculationVersion;
+
     /** 0-待确认/1-待审核/2-已审批/3-已发放 */
     private Integer status;
 
@@ -101,6 +116,8 @@ public class OutputValueVo implements Serializable {
     private LocalDateTime createdTime;
 
     private List<DistributionItemVo> distributions;
+
+    private List<OutputValuePreviewVo.AdjustmentDetailVo> adjustmentDetails;
 
     @Data
     @AllArgsConstructor

@@ -14,7 +14,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ResponseCode } from "@/types/api";
 import { getAllProjects, getProjectDetail, getUserList } from "@/services/project";
-import { createOutputValue, getOutputValueList } from "@/services/output-value";
+import {
+  createOutputValue,
+  getOutputValueList,
+  getOutputValuePreview,
+} from "@/services/output-value";
 import type {
   ProjectListVo,
   ProjectDetailVo,
@@ -27,6 +31,7 @@ import {
   generateQuarterOptions,
   WORK_TYPE_LABELS,
   type CreateDistributionItem,
+  type OutputValuePreview,
   type OutputValueVo,
 } from "@/types/output-value";
 
@@ -65,16 +70,18 @@ function getStageStatusLabel(status: number): string {
   return labels[status] ?? "未知";
 }
 
-function resolveBaseAmount(contract: ProjectDetailVo["contract"] | undefined): number {
-  const contractAmount = contract?.contractAmount ?? 0;
-  const baseAmount = contract?.baseAmount ?? 0;
-
-  if ((contract?.contractType ?? 0) === 0) {
-    return contractAmount || baseAmount;
-  }
-
-  return baseAmount > 0 ? baseAmount : contractAmount;
-}
+const EMPTY_PREVIEW: OutputValuePreview = {
+  baseAmount: 0,
+  benefitAmount: 0,
+  baseRatio: 0,
+  benefitRatio: 0,
+  basePart: 0,
+  benefitPart: 0,
+  currentStageAmount: 0,
+  adjustmentAmount: 0,
+  thisPeriodTotal: 0,
+  adjustmentDetails: [],
+};
 
 export function CreateOutputValueDialog({
   open,
@@ -87,6 +94,8 @@ export function CreateOutputValueDialog({
   const [projectId, setProjectId] = useState<string>("");
   const [projectDetail, setProjectDetail] = useState<ProjectDetailVo | null>(null);
   const [stages, setStages] = useState<ProjectStageVo[]>([]);
+  const [preview, setPreview] = useState<OutputValuePreview>(EMPTY_PREVIEW);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [stageId, setStageId] = useState<string>("");
   const [quarter, setQuarter] = useState<string>(currentQuarter());
   const [confirmUserId, setConfirmUserId] = useState<string>("");
@@ -99,6 +108,8 @@ export function CreateOutputValueDialog({
     setProjectId("");
     setProjectDetail(null);
     setStages([]);
+    setPreview(EMPTY_PREVIEW);
+    setPreviewLoading(false);
     setStageId("");
     setQuarter(currentQuarter());
     setConfirmUserId("");
@@ -155,6 +166,7 @@ export function CreateOutputValueDialog({
       setProjectDetail(null);
       setStages([]);
       setStageId("");
+      setPreview(EMPTY_PREVIEW);
       return;
     }
     let cancelled = false;
@@ -175,6 +187,39 @@ export function CreateOutputValueDialog({
       cancelled = true;
     };
   }, [projectId, isStageAvailable]);
+
+  useEffect(() => {
+    if (!projectId || !stageId) {
+      setPreview(EMPTY_PREVIEW);
+      setPreviewLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setPreviewLoading(true);
+    setError("");
+    (async () => {
+      try {
+        const res = await getOutputValuePreview(projectId, stageId);
+        if (cancelled) return;
+        if (res.code === ResponseCode.SUCCESS && res.data) {
+          setPreview(res.data);
+        } else {
+          setPreview(EMPTY_PREVIEW);
+          setError(res.msg || "产值预览计算失败");
+        }
+      } catch {
+        if (!cancelled) {
+          setPreview(EMPTY_PREVIEW);
+          setError("产值预览计算失败，请稍后重试");
+        }
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, stageId]);
 
   // 候选分配人员：优先项目成员，否则全量
   const memberOptions = useMemo(() => {
@@ -197,35 +242,11 @@ export function CreateOutputValueDialog({
     [stages, stageId],
   );
 
-  // v0.4 预览：阶段比例是单阶段比例，不是项目累计比例。
-  const preview = useMemo(() => {
-    const contract = projectDetail?.contract;
-    const contractType = contract?.contractType ?? 0;
-    const hasBenefit = contractType === 1;
-    const baseAmt = resolveBaseAmount(contract);
-    const benefitAmt = hasBenefit ? contract?.benefitAmount ?? 0 : 0;
-    const baseRatio = selectedStage?.stageOutput ?? 0;
-    const rawBenefitRatio = selectedStage?.benefitInclusionRatio ?? 0;
-    const benefitRatio = !hasBenefit ? 0 : rawBenefitRatio > 0 ? rawBenefitRatio : baseRatio;
-    const basePart = Math.round(baseAmt * (baseRatio / 100) * 100) / 100;
-    const benefitPart = Math.round(benefitAmt * (benefitRatio / 100) * 100) / 100;
-    const currentCumulative = basePart + benefitPart;
-    return {
-      contractType,
-      hasBenefit,
-      baseAmount: baseAmt,
-      benefitAmount: benefitAmt,
-      baseRatio,
-      benefitRatio,
-      basePart,
-      benefitPart,
-      currentCumulative,
-    };
-  }, [projectDetail, selectedStage]);
+  const hasBenefit = preview.benefitAmount !== 0 || preview.benefitRatio !== 0;
 
   // 派生数据（员工池 / 公司账 / 实得汇总等）
   const { totalNum, subsidyNum, companyMain, employeePool, sumAlloc, sumActual, downgradeDelta, otherAmount } = useMemo(() => {
-    const t = preview.currentCumulative;
+    const t = preview.thisPeriodTotal;
     const s = Number(subsidyAmount) || 0;
     const cmpMain = Math.round(t * 0.6 * 100) / 100;
     const empPool = Math.round(t * 0.4 * 100) / 100;
@@ -283,9 +304,10 @@ export function CreateOutputValueDialog({
     }
     if (!quarter) return setError("请选择季度");
     if (!confirmUserId) return setError("请选择确认人");
-    if (preview.currentCumulative <= 0) {
+    if (previewLoading) return setError("产值预览正在计算，请稍后再提交");
+    if (preview.thisPeriodTotal === 0) {
       return setError(
-        "本阶段产值为 0：请先检查合同金额、预计效益金额或阶段产值比例",
+        "本次产值为 0：请先检查合同金额、预计效益金额、阶段产值比例或历史补差",
       );
     }
     if (Math.abs(sumAlloc - 100) > 0.01)
@@ -340,9 +362,9 @@ export function CreateOutputValueDialog({
     >
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>新建产值分配单（v0.4）</DialogTitle>
+          <DialogTitle>新建产值分配单</DialogTitle>
           <DialogDescription>
-            阶段产值由系统按合同类型和阶段累计比例自动计算；员工池 40%、公司账 60%（含降档差额、离职兜底）。
+            阶段产值由系统按合同、阶段比例和历史补差自动计算；员工池 40%、公司账 60%（含降档差额、离职兜底）。
           </DialogDescription>
         </DialogHeader>
 
@@ -437,21 +459,24 @@ export function CreateOutputValueDialog({
           {/* v0.4 阶段产值预览：系统按合同 + 阶段比例自动算 */}
           <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 space-y-2 text-xs">
             <p className="text-sm font-semibold text-slate-700">
-              本阶段产值（系统计算）
+              产值预览（系统计算）
               <span className="ml-2 text-xs text-slate-400 font-normal">
-                {preview.hasBenefit
+                {hasBenefit
                   ? "基本+效益 · 本阶段产值 = 基本部分 + 效益部分"
                   : "基本收费 · 本阶段产值 = 合同金额 × 阶段比例"}
               </span>
+              {previewLoading && (
+                <Loader2 className="inline-block w-3.5 h-3.5 animate-spin ml-2 text-blue-500" />
+              )}
             </p>
-            <div className={cn("grid grid-cols-1 gap-2 text-slate-600", preview.hasBenefit && "sm:grid-cols-2")}>
+            <div className={cn("grid grid-cols-1 gap-2 text-slate-600", hasBenefit && "sm:grid-cols-2")}>
               <div>
                 基本部分：¥{preview.baseAmount.toLocaleString()} × {preview.baseRatio}%
                 <span className="font-semibold text-slate-800 ml-1">
                   = ¥{preview.basePart.toLocaleString()}
                 </span>
               </div>
-              {preview.hasBenefit && (
+              {hasBenefit && (
                 <div>
                   效益部分：¥{preview.benefitAmount.toLocaleString()} × {preview.benefitRatio}%
                   <span className="font-semibold text-slate-800 ml-1">
@@ -461,9 +486,73 @@ export function CreateOutputValueDialog({
               )}
             </div>
             <div className="pt-2 border-t border-blue-100 text-slate-700">
-              当前阶段应得：
+              当前阶段产值：
               <span className="text-base font-bold text-blue-700 ml-2">
-                ¥{preview.currentCumulative.toLocaleString()}
+                ¥{preview.currentStageAmount.toLocaleString()}
+              </span>
+            </div>
+            <div className="pt-2 border-t border-blue-100 text-slate-700">
+              历史补差合计：
+              <span
+                className={cn(
+                  "text-base font-bold ml-2",
+                  preview.adjustmentAmount < 0 ? "text-rose-600" : "text-emerald-700",
+                )}
+              >
+                ¥{preview.adjustmentAmount.toLocaleString()}
+              </span>
+              <span className="text-slate-400 ml-2">
+                （补差为正，扣回为负）
+              </span>
+            </div>
+            {preview.adjustmentDetails.length > 0 && (
+              <div className="overflow-x-auto border border-blue-100 rounded-lg bg-white">
+                <table className="w-full text-xs">
+                  <thead className="bg-blue-50 text-slate-500">
+                    <tr>
+                      <th className="text-left py-2 px-3 font-medium">历史阶段</th>
+                      <th className="text-right py-2 px-3 font-medium">原阶段金额</th>
+                      <th className="text-right py-2 px-3 font-medium">重算金额</th>
+                      <th className="text-right py-2 px-3 font-medium">已补/扣</th>
+                      <th className="text-right py-2 px-3 font-medium">本次补/扣</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.adjustmentDetails.map((detail) => (
+                      <tr key={detail.sourceOutputValueId} className="border-t border-blue-50">
+                        <td className="py-2 px-3 text-slate-700">
+                          {detail.sourceStageName || "-"}
+                          <span className="ml-1 text-slate-400">
+                            {detail.sourceBaseRatio}%
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-right text-slate-600">
+                          ¥{detail.oldStageAmount.toLocaleString()}
+                        </td>
+                        <td className="py-2 px-3 text-right text-slate-600">
+                          ¥{detail.newStageAmount.toLocaleString()}
+                        </td>
+                        <td className="py-2 px-3 text-right text-slate-600">
+                          ¥{detail.alreadyAdjustedAmount.toLocaleString()}
+                        </td>
+                        <td
+                          className={cn(
+                            "py-2 px-3 text-right font-semibold",
+                            detail.adjustmentAmount < 0 ? "text-rose-600" : "text-emerald-700",
+                          )}
+                        >
+                          ¥{detail.adjustmentAmount.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="pt-2 border-t border-blue-100 text-slate-700">
+              本次计入分配总额：
+              <span className="text-lg font-bold text-blue-700 ml-2">
+                ¥{preview.thisPeriodTotal.toLocaleString()}
               </span>
             </div>
           </div>
@@ -642,7 +731,7 @@ export function CreateOutputValueDialog({
           <Button
             className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || previewLoading}
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin mr-1" />} 创建
           </Button>

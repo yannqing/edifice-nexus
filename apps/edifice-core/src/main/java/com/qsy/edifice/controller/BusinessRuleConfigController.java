@@ -10,6 +10,8 @@ import com.qsy.edifice.domain.dto.ToggleConfigStatusDto;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.domain.vo.BusinessRuleConfigVo;
 import com.qsy.edifice.domain.vo.BusinessRuleTemplateVo;
+import com.qsy.edifice.enums.ErrorType;
+import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.service.BusinessRuleConfigService;
 import com.qsy.edifice.utils.JwtUtils;
 import com.qsy.edifice.utils.ResultUtils;
@@ -62,7 +64,7 @@ public class BusinessRuleConfigController {
     @Operation(summary = "保存业务规则配置")
     public BaseResponse<Long> save(@RequestBody SaveBusinessRuleConfigDto dto, HttpServletRequest request)
             throws JsonProcessingException {
-        return ResultUtils.success(Code.SUCCESS, businessRuleConfigService.save(dto, userId(request)), "保存成功");
+        throw new BusinessException(ErrorType.OPERATION_FAILED, "业务规则禁止新增和编辑，只允许启用或停用");
     }
 
     @PutMapping("/toggle/{id}")
@@ -77,8 +79,7 @@ public class BusinessRuleConfigController {
     @DeleteMapping("/{id}")
     @Operation(summary = "删除业务规则配置")
     public BaseResponse<Boolean> delete(@PathVariable Long id) {
-        businessRuleConfigService.delete(id);
-        return ResultUtils.success(Code.SUCCESS, true, "删除成功");
+        throw new BusinessException(ErrorType.OPERATION_FAILED, "业务规则禁止删除，只允许启用或停用");
     }
 
     private Long userId(HttpServletRequest request) throws JsonProcessingException {

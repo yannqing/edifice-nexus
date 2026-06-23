@@ -349,6 +349,11 @@ create table output_value
     base_amount_part           decimal(20, 2) null comment '本期基本部分',
     benefit_amount_part        decimal(20, 2) null comment '本期效益部分',
     benefit_snapshot           decimal(20, 2) null comment '快照：本单创建时合同的预计效益值',
+    current_stage_amount       decimal(20, 2) null comment '当前阶段纯产值，不含历史补差',
+    adjustment_amount          decimal(20, 2) null comment '历史阶段补差合计，可正可负',
+    base_amount_snapshot       decimal(20, 2) null comment '创建时合同基本金额快照',
+    benefit_amount_snapshot    decimal(20, 2) null comment '创建时合同效益金额快照',
+    calculation_version        varchar(64) null comment '产值计算版本',
     created_time       datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updated_time       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
     is_delete          tinyint  default 0                 not null comment '逻辑删除',
@@ -359,6 +364,35 @@ create table output_value
     key idx_output_value_current_handler (current_handler_id)
 )
     comment '产值分配单表';
+
+
+-- auto-generated definition
+create table output_value_adjustment_detail
+(
+    adjustment_detail_id        bigint                             not null comment '补差明细id'
+        primary key,
+    output_value_id             bigint                             not null comment '本次产值分配单id',
+    source_output_value_id      bigint                             not null comment '补差来源历史产值分配单id',
+    source_project_stage_id     bigint                             not null comment '补差来源历史阶段id',
+    source_stage_name           varchar(128)                       null     comment '补差来源历史阶段名称快照',
+    source_base_ratio           decimal(10, 4) default 0.0000      not null comment '来源阶段基本比例快照',
+    source_benefit_ratio        decimal(10, 4) default 0.0000      not null comment '来源阶段效益比例快照',
+    old_base_amount_snapshot    decimal(20, 2)                     null     comment '历史单创建时基本金额快照',
+    old_benefit_amount_snapshot decimal(20, 2)                     null     comment '历史单创建时效益金额快照',
+    old_stage_amount            decimal(20, 2) default 0.00        not null comment '历史阶段原计算纯阶段金额',
+    new_base_amount_snapshot    decimal(20, 2) default 0.00        not null comment '本单创建时基本金额快照',
+    new_benefit_amount_snapshot decimal(20, 2) default 0.00        not null comment '本单创建时效益金额快照',
+    new_stage_amount            decimal(20, 2) default 0.00        not null comment '按本单金额重算后的历史阶段金额',
+    already_adjusted_amount     decimal(20, 2) default 0.00        not null comment '之前已对该历史阶段补差/扣回金额',
+    adjustment_amount           decimal(20, 2) default 0.00        not null comment '本次补差/扣回金额',
+    created_time                datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    updated_time                datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_delete                   tinyint  default 0                 not null comment '逻辑删除',
+    key idx_ov_adjust_output (output_value_id),
+    key idx_ov_adjust_source_output (source_output_value_id),
+    key idx_ov_adjust_source_stage (source_project_stage_id)
+)
+    comment '产值分配历史阶段补差明细表';
 
 
 -- auto-generated definition

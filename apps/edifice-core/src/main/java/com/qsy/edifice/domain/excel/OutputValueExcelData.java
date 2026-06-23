@@ -46,11 +46,11 @@ public class OutputValueExcelData {
     @ColumnWidth(16)
     private BigDecimal totalAmount;
 
-    @ExcelProperty("阶段应得(元)")
+    @ExcelProperty("当前阶段产值(元)")
     @ColumnWidth(18)
     private BigDecimal stageCumulativeAmount;
 
-    @ExcelProperty("历史累计(旧口径)")
+    @ExcelProperty("历史补差合计(元)")
     @ColumnWidth(16)
     private BigDecimal previousCumulativeAmount;
 

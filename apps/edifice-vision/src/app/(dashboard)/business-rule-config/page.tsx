@@ -1,43 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { ReactNode } from "react";
 import {
   ChevronLeft,
   ChevronRight,
-  Loader2,
-  Pencil,
-  Plus,
   Search,
   SlidersHorizontal,
-  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { TablePageSkeleton } from "@/components/ui/skeleton";
 import { isAbortError } from "@/lib/request";
 import { cn } from "@/lib/utils";
 import {
-  deleteBusinessRuleConfig,
   getBusinessRuleConfigList,
-  getBusinessRuleTemplates,
-  saveBusinessRuleConfig,
   toggleBusinessRuleConfig,
 } from "@/services/config-center";
 import { ResponseCode } from "@/types/api";
 import type {
   BusinessRuleConfigVo,
-  BusinessRuleTemplateVo,
   ConfigBizType,
-  SaveBusinessRuleConfigParams,
 } from "@/types/config-center";
 
 const PAGE_SIZE = 10;
@@ -53,13 +36,6 @@ const bizTypeOptions: Array<{ value: ConfigBizType | "all"; label: string }> = [
   { value: "oa_application", label: "OA申请" },
 ];
 
-const valueTypeOptions = [
-  { value: "boolean", label: "布尔" },
-  { value: "number", label: "数字" },
-  { value: "string", label: "文本" },
-  { value: "json", label: "JSON" },
-];
-
 const valueTypeLabel: Record<string, string> = {
   boolean: "布尔",
   number: "数字",
@@ -67,52 +43,20 @@ const valueTypeLabel: Record<string, string> = {
   json: "JSON",
 };
 
-function emptyForm(): SaveBusinessRuleConfigParams {
-  return {
-    bizType: "output",
-    ruleKey: "allow_negative_output",
-    ruleName: "允许负产值",
-    ruleValue: "false",
-    valueType: "boolean",
-    enabled: 1,
-    description: "控制产值分配单计算结果为负数时是否允许创建。",
-  };
-}
-
 function formatTime(value?: string | null) {
   return value?.replace("T", " ").slice(0, 16) || "-";
 }
 
-function applyTemplate(
-  template: BusinessRuleTemplateVo,
-  enabled = 1
-): SaveBusinessRuleConfigParams {
-  return {
-    bizType: template.bizType,
-    ruleKey: template.ruleKey,
-    ruleName: template.ruleName,
-    ruleValue: template.defaultValue,
-    valueType: template.valueType,
-    enabled,
-    description: template.description ?? "",
-  };
-}
-
 export default function BusinessRuleConfigPage() {
   const [items, setItems] = useState<BusinessRuleConfigVo[]>([]);
-  const [templates, setTemplates] = useState<BusinessRuleTemplateVo[]>([]);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [toggleLoadingId, setToggleLoadingId] = useState<string | null>(null);
   const [keyword, setKeyword] = useState("");
   const [debouncedKeyword, setDebouncedKeyword] = useState("");
   const [bizType, setBizType] = useState("all");
   const [enabled, setEnabled] = useState("all");
-  const [formOpen, setFormOpen] = useState(false);
-  const [form, setForm] = useState<SaveBusinessRuleConfigParams>(emptyForm());
-  const [deleteTarget, setDeleteTarget] = useState<BusinessRuleConfigVo | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -154,103 +98,18 @@ export default function BusinessRuleConfigPage() {
     return () => controller.abort();
   }, [fetchList]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    getBusinessRuleTemplates(controller.signal)
-      .then((res) => {
-        if (res.code === ResponseCode.SUCCESS && res.data) {
-          setTemplates(res.data);
-        }
-      })
-      .catch((err) => {
-        if (!isAbortError(err)) setTemplates([]);
-      });
-    return () => controller.abort();
-  }, []);
-
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  const openCreate = () => {
-    const defaultTemplate = templates.find((template) => template.bizType === "output")
-      ?? templates[0];
-    setForm(defaultTemplate ? applyTemplate(defaultTemplate) : emptyForm());
-    setFormOpen(true);
-  };
-
-  const openEdit = (item: BusinessRuleConfigVo) => {
-    setForm({
-      ruleConfigId: item.ruleConfigId,
-      bizType: item.bizType,
-      ruleKey: item.ruleKey,
-      ruleName: item.ruleName,
-      ruleValue: item.ruleValue,
-      valueType: item.valueType,
-      enabled: item.enabled,
-      description: item.description ?? "",
-    });
-    setFormOpen(true);
-  };
-
-  const templatesForBiz = templates.filter((template) => template.bizType === form.bizType);
-  const selectedTemplate = templates.find(
-    (template) => template.bizType === form.bizType && template.ruleKey === form.ruleKey
-  );
-
-  const handleSave = async () => {
-    if (!form.ruleKey.trim() || !form.ruleName.trim()) {
-      toast.error("请填写规则编码和规则名称");
-      return;
-    }
-    if (form.valueType === "json") {
-      try {
-        JSON.parse(form.ruleValue || "{}");
-      } catch {
-        toast.error("规则值不是合法 JSON");
-        return;
-      }
-    }
-    if (form.valueType === "number" && Number.isNaN(Number(form.ruleValue))) {
-      toast.error("规则值必须是数字");
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await saveBusinessRuleConfig({
-        ...form,
-        ruleKey: form.ruleKey.trim(),
-        ruleName: form.ruleName.trim(),
-        ruleValue: form.ruleValue.trim(),
-      });
-      if (res.code === ResponseCode.SUCCESS) {
-        toast.success("保存成功");
-        setFormOpen(false);
-        fetchList();
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleToggle = async (item: BusinessRuleConfigVo) => {
-    const res = await toggleBusinessRuleConfig(item.ruleConfigId, item.enabled === 1 ? 0 : 1);
-    if (res.code === ResponseCode.SUCCESS) {
-      toast.success(item.enabled === 1 ? "已停用" : "已启用");
-      fetchList();
-    }
-  };
-
-  const confirmDelete = async () => {
-    if (!deleteTarget) return;
-    setDeleteLoading(true);
+    setToggleLoadingId(item.ruleConfigId);
     try {
-      const res = await deleteBusinessRuleConfig(deleteTarget.ruleConfigId);
+      const res = await toggleBusinessRuleConfig(item.ruleConfigId, item.enabled === 1 ? 0 : 1);
       if (res.code === ResponseCode.SUCCESS) {
-        toast.success("已删除");
-        setDeleteTarget(null);
+        toast.success(item.enabled === 1 ? "已停用" : "已启用");
         fetchList();
       }
     } finally {
-      setDeleteLoading(false);
+      setToggleLoadingId(null);
     }
   };
 
@@ -259,11 +118,8 @@ export default function BusinessRuleConfigPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">业务规则配置</h1>
-          <p className="text-sm text-slate-500 mt-1">集中管理业务开关、校验条件和计算规则参数</p>
+          <p className="text-sm text-slate-500 mt-1">业务规则只允许启用或停用，规则内容由系统维护</p>
         </div>
-        <Button onClick={openCreate} className="bg-blue-600 hover:bg-blue-700">
-          <Plus className="w-4 h-4 mr-2" /> 新建规则
-        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-[1fr_180px_160px] gap-3">
@@ -339,14 +195,13 @@ export default function BusinessRuleConfigPage() {
                   <td className="px-5 py-4 text-slate-500 whitespace-nowrap">{formatTime(item.updatedTime)}</td>
                   <td className="px-5 py-4">
                     <div className="flex items-center justify-end gap-2">
-                      <Button size="sm" variant="outline" onClick={() => openEdit(item)}>
-                        <Pencil className="w-4 h-4 mr-1" /> 编辑
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleToggle(item)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={toggleLoadingId === item.ruleConfigId}
+                        onClick={() => handleToggle(item)}
+                      >
                         {item.enabled === 1 ? "停用" : "启用"}
-                      </Button>
-                      <Button size="sm" variant="outline" className="text-rose-600" onClick={() => setDeleteTarget(item)}>
-                        <Trash2 className="w-4 h-4 mr-1" /> 删除
                       </Button>
                     </div>
                   </td>
@@ -369,185 +224,6 @@ export default function BusinessRuleConfigPage() {
           </Button>
         </div>
       </div>
-
-      <Dialog open={formOpen} onOpenChange={(open) => !saving && setFormOpen(open)}>
-        <DialogContent className="max-w-2xl max-h-[86vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{form.ruleConfigId ? "编辑业务规则" : "新建业务规则"}</DialogTitle>
-            <DialogDescription>规则来自业务模板，保存后业务服务会按模板编码读取。</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="业务类型" required>
-                <select
-                  value={form.bizType}
-                  disabled={Boolean(form.ruleConfigId)}
-                  onChange={(event) => {
-                    const nextBizType = event.target.value as ConfigBizType;
-                    const nextTemplate = templates.find((template) => template.bizType === nextBizType);
-                    setForm(nextTemplate ? applyTemplate(nextTemplate, form.enabled) : {
-                      ...emptyForm(),
-                      bizType: nextBizType,
-                      enabled: form.enabled,
-                    });
-                  }}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
-                >
-                  {bizTypeOptions.filter((option) => option.value !== "all").map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="规则模板" required>
-                <select
-                  value={form.ruleKey}
-                  disabled={Boolean(form.ruleConfigId)}
-                  onChange={(event) => setForm((prev) => ({
-                    ...applyTemplate(templates.find((template) =>
-                      template.bizType === prev.bizType && template.ruleKey === event.target.value
-                    ) ?? {
-                      bizType: prev.bizType,
-                      bizTypeLabel: prev.bizType,
-                      ruleKey: event.target.value,
-                      ruleName: "",
-                      valueType: "boolean",
-                      defaultValue: "true",
-                      description: "",
-                    }, prev.enabled),
-                  }))}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
-                >
-                  {templatesForBiz.length === 0 && <option value="">暂无可用规则模板</option>}
-                  {templatesForBiz.map((template) => (
-                    <option key={template.ruleKey} value={template.ruleKey}>
-                      {template.ruleName}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label="规则编码" required>
-                <input
-                  value={form.ruleKey}
-                  disabled
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
-                />
-              </Field>
-              <Field label="值类型" required>
-                <input
-                  value={valueTypeLabel[form.valueType] ?? form.valueType}
-                  disabled
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-slate-50"
-                />
-              </Field>
-            </div>
-            {selectedTemplate?.description && (
-              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
-                {selectedTemplate.description}
-              </div>
-            )}
-
-            <Field label="规则值" required>
-              {form.valueType === "boolean" ? (
-                <select
-                  value={form.ruleValue}
-                  onChange={(event) => setForm((prev) => ({ ...prev, ruleValue: event.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
-                >
-                  <option value="true">true</option>
-                  <option value="false">false</option>
-                </select>
-              ) : form.valueType === "json" ? (
-                <textarea
-                  rows={5}
-                  value={form.ruleValue}
-                  onChange={(event) => setForm((prev) => ({ ...prev, ruleValue: event.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white font-mono"
-                  placeholder='{"enabled": true}'
-                />
-              ) : (
-                <input
-                  value={form.ruleValue}
-                  onChange={(event) => setForm((prev) => ({ ...prev, ruleValue: event.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
-                  placeholder={form.valueType === "number" ? "请输入数字" : "请输入文本"}
-                />
-              )}
-            </Field>
-
-            <SwitchField label="启用规则" value={form.enabled} onChange={(value) => setForm((prev) => ({ ...prev, enabled: value }))} />
-
-            <Field label="规则说明">
-              <textarea
-                rows={3}
-                value={form.description ?? ""}
-                onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
-                placeholder="说明规则影响范围、业务含义和注意事项"
-              />
-            </Field>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-slate-100">
-            <Button variant="outline" disabled={saving} onClick={() => setFormOpen(false)}>取消</Button>
-            <Button disabled={saving} onClick={handleSave}>
-              {saving && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-              保存
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && !deleteLoading && setDeleteTarget(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>删除业务规则</DialogTitle>
-            <DialogDescription>
-              删除后该规则不再参与业务校验，相关业务会使用代码默认值。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="p-3 bg-rose-50 border border-rose-100 rounded-lg text-sm text-rose-700">
-            确定删除「{deleteTarget?.ruleName}」吗？
-          </div>
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">
-            <Button variant="outline" disabled={deleteLoading} onClick={() => setDeleteTarget(null)}>取消</Button>
-            <Button className="bg-rose-600 hover:bg-rose-700" disabled={deleteLoading} onClick={confirmDelete}>
-              {deleteLoading && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-              确认删除
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
-  );
-}
-
-function Field({ label, required, children }: { label: string; required?: boolean; children: ReactNode }) {
-  return (
-    <label className="block">
-      <span className="text-xs font-medium text-slate-600 mb-1 block">
-        {label} {required && <span className="text-rose-500">*</span>}
-      </span>
-      {children}
-    </label>
-  );
-}
-
-function SwitchField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(value === 1 ? 0 : 1)}
-      className={cn(
-        "w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg border text-sm transition-colors",
-        value === 1 ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-500"
-      )}
-    >
-      <span>{label}</span>
-      <span className={cn("w-9 h-5 rounded-full p-0.5 transition-colors", value === 1 ? "bg-blue-600" : "bg-slate-300")}>
-        <span className={cn("block w-4 h-4 rounded-full bg-white transition-transform", value === 1 ? "translate-x-4" : "translate-x-0")} />
-      </span>
-    </button>
   );
 }

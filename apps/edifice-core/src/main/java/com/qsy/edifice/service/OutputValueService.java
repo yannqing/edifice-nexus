@@ -1,6 +1,7 @@
 package com.qsy.edifice.service;
 
 import com.qsy.edifice.domain.dto.CreateOutputValueDto;
+import com.qsy.edifice.domain.vo.OutputValuePreviewVo;
 import com.qsy.edifice.domain.vo.OutputValueVo;
 import jakarta.servlet.http.HttpServletResponse;
 
@@ -16,6 +17,11 @@ public interface OutputValueService {
      * @return 列表
      */
     List<OutputValueVo> getOutputValueList(Integer status);
+
+    /**
+     * 创建产值分配单前预览，包含当前阶段产值与历史补差明细。
+     */
+    OutputValuePreviewVo previewOutputValue(Long projectId, Long projectStageId);
 
     /**
      * 创建产值分配单

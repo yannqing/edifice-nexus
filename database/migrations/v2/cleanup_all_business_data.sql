@@ -47,6 +47,7 @@ TRUNCATE TABLE edifice_db.user_message_read;
 
 -- 2. 产值分配相关
 TRUNCATE TABLE edifice_db.output_value_distribution;
+TRUNCATE TABLE edifice_db.output_value_adjustment_detail;
 TRUNCATE TABLE edifice_db.output_value;
 TRUNCATE TABLE edifice_db.performance_restore;
 

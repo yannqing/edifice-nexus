@@ -4,6 +4,7 @@ import type { BaseResponse } from "@/types/api";
 import type {
   OutputValueVo,
   CreateOutputValueParams,
+  OutputValuePreview,
   OutputValueStats,
 } from "@/types/output-value";
 
@@ -19,6 +20,15 @@ export async function getOutputValueList(
 
 export async function getOutputValueStats(): Promise<BaseResponse<OutputValueStats>> {
   return get<OutputValueStats>("/output-value/statistics");
+}
+
+export async function getOutputValuePreview(
+  projectId: string,
+  projectStageId: string,
+): Promise<BaseResponse<OutputValuePreview>> {
+  return get<OutputValuePreview>("/output-value/preview", {
+    params: { projectId, projectStageId },
+  });
 }
 
 export async function createOutputValue(
