@@ -713,8 +713,11 @@ public class ReportController {
 
                 List<ProjectStage> stages = stagesGrouped.getOrDefault(pid, Collections.emptyList());
                 item.put("phases", stages.size());
-                int completed = (int) stages.stream().filter(s -> s.getStageStatus() == 3 || s.getStageStatus() == 6).count();
-                item.put("currentPhase", completed);
+                // 进度统计：已开始的阶段（排除 status=0 未开始），含进行中/待验收/已验收/已驳回/已完成
+                int currentPhase = (int) stages.stream()
+                        .filter(s -> s.getStageStatus() != null && s.getStageStatus() != 0)
+                        .count();
+                item.put("currentPhase", currentPhase);
 
                 myProjects.add(item);
             }
