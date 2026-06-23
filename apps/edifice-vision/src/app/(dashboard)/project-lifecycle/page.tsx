@@ -16,7 +16,6 @@ import {
   GitBranch,
   Loader2,
   Search,
-  Wallet,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,7 +53,6 @@ const eventIconMap: Record<string, ComponentType<{ className?: string }>> = {
   stage: GitBranch,
   inspection: CheckCircle2,
   output: Coins,
-  collection: Wallet,
   file: FileText,
   archive: Archive,
 };
@@ -86,7 +84,7 @@ function stageStatusClass(status?: number | null) {
 
 function eventAccentClass(type: string) {
   if (type === "archive") return "bg-emerald-100 text-emerald-700";
-  if (type === "output" || type === "collection") return "bg-amber-100 text-amber-700";
+  if (type === "output") return "bg-amber-100 text-amber-700";
   if (type === "inspection") return "bg-blue-100 text-blue-700";
   if (type === "file") return "bg-violet-100 text-violet-700";
   return "bg-slate-100 text-slate-600";
@@ -193,7 +191,7 @@ export default function ProjectLifecyclePage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">项目生命周期</h1>
-          <p className="text-sm text-slate-500 mt-1">按项目串联立项、合同、阶段、验工、产值、回款、文件和归档动态</p>
+          <p className="text-sm text-slate-500 mt-1">按项目串联立项、合同、阶段、验工、产值、文件和归档动态</p>
         </div>
       </div>
 
@@ -302,10 +300,9 @@ export default function ProjectLifecyclePage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                   <SummaryItem label="合同金额" value={formatMoney(detail.summary.contractAmount)} />
                   <SummaryItem label="已发放产值" value={formatMoney(detail.summary.paidOutputAmount)} />
-                  <SummaryItem label="累计回款" value={formatMoney(detail.summary.totalCollectionAmount)} />
                   <SummaryItem label="阶段完成" value={`${detail.summary.completedStageCount}/${detail.summary.stageCount}`} />
                 </div>
 
@@ -426,7 +423,6 @@ function StageNode({ stage }: { stage: LifecycleStageVo }) {
         <MiniMetric label="验工单" value={`${stage.inspectionCount} 个`} />
         <MiniMetric label="产值单" value={`${stage.outputValueCount} 个`} />
         <MiniMetric label="已发放" value={formatMoney(stage.paidOutputAmount)} />
-        <MiniMetric label="回款" value={formatMoney(stage.collectionAmount)} />
       </div>
       <div className="flex flex-wrap gap-2 mt-4">
         {stage.latestInspectionStatus !== null && stage.latestInspectionStatus !== undefined && (
