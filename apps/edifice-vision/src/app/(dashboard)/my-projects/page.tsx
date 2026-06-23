@@ -143,9 +143,10 @@ export default function MyProjectsPage() {
     notStarted: 0,
   });
 
-  // 支持从 OA 合同详情直接打开已关联工程项目。
+  // 支持从 OA 合同详情或消息中心跳转直接打开项目详情。
   useEffect(() => {
-    const projectId = new URLSearchParams(window.location.search).get("projectId");
+    const params = new URLSearchParams(window.location.search);
+    const projectId = params.get("projectId") || params.get("detailId");
     if (projectId && /^\d+$/.test(projectId)) {
       setSelectedProjectId(projectId);
       setDetailOpen(true);
