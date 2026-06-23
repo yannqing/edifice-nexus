@@ -400,8 +400,10 @@ public class OaUserSyncServiceImpl implements OaUserSyncService {
                 .in(SysPermission::getPermissionCode, permissionCodes)
                 .eq(SysPermission::getIsDelete, 0));
 
-        sysRolePermissionMapper.delete(new LambdaQueryWrapper<SysRolePermission>()
-                .eq(SysRolePermission::getRoleId, roleId));
+        // 物理删除重建镜像关系。sys_role_permission 是 OA 镜像关联表，
+        // mapper.delete() 会被 @TableLogic 拦截成 UPDATE is_delete=1，
+        // 重复同步会导致数据膨胀（实测一个 role+permission 关联累计 19602 行）。
+        jdbcTemplate.update("DELETE FROM sys_role_permission WHERE role_id = ?", roleId);
         for (SysPermission permission : permissions) {
             sysRolePermissionMapper.insert(SysRolePermission.builder()
                     .roleId(roleId)
@@ -458,9 +460,11 @@ public class OaUserSyncServiceImpl implements OaUserSyncService {
             }
         }
 
-        sysUserRoleMapper.delete(new LambdaQueryWrapper<SysUserRole>()
-                .eq(SysUserRole::getUserId, user.getUserId())
-                .eq(SysUserRole::getSource, "OA_SYNC"));
+        // 物理删除 OA_SYNC 来源的镜像关系。同上，避免 @TableLogic 累积垃圾行。
+        // 只删 source='OA_SYNC' 的，手工分配的角色（source != OA_SYNC）保留。
+        jdbcTemplate.update(
+                "DELETE FROM sys_user_role WHERE user_id = ? AND source = 'OA_SYNC'",
+                user.getUserId());
 
         if (oaGroupIds.isEmpty()) {
             ensureDefaultRole(user);
