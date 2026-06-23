@@ -11,6 +11,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import org.springframework.dao.DataAccessException;
 
@@ -45,6 +46,17 @@ public class GlobalExceptionHandler {
         String requestURI = request.getRequestURI();
         log.error("请求地址 {},不支持 {} 请求", requestURI, e.getMethod());
         return ResultUtils.failure(e.getMessage());
+    }
+
+    /**
+     * 上传文件超过大小限制（multipart 解析阶段抛出，请求到不了 Controller）
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public BaseResponse<Object> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException e,
+                                                                     HttpServletRequest request) {
+        String requestURI = request.getRequestURI();
+        log.warn("请求地址 {},上传文件超过大小限制 {}", requestURI, e.getMessage());
+        return ResultUtils.failure("文件大小超过限制，请压缩或拆分后再上传（单文件最大 20MB）");
     }
 
     /**
