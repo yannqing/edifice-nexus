@@ -15,6 +15,7 @@ import { getMyPerformance, getMyProjectDetails, getMyPayments } from "@/services
 import { ResponseCode } from "@/types/api";
 import { PROJECT_STATUS_MAP } from "@/types/project";
 import { OUTPUT_VALUE_STATUS_MAP } from "@/types/output-value";
+import type { PerformanceData, ProjectDetail, PaymentRecord } from "@/types/performance";
 
 type TabKey = "overview" | "projects" | "payments";
 
@@ -39,36 +40,6 @@ function formatAmount(v: number) {
 function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "-";
   return dateStr.replace("T", " ").slice(0, 10);
-}
-
-interface PerformanceData {
-  projectCount: number;
-  totalHours: number;
-  managementHours: number;
-  basicHours: number;
-  intellectualHours: number;
-  paidOutputValue: number;
-  totalOutputValue: number;
-}
-
-interface ProjectDetail {
-  projectId: string;
-  projectName: string;
-  projectCode: string;
-  projectStatus: number;
-  category: string;
-  role: string;
-  totalHours: number;
-  outputValue: number;
-}
-
-interface PaymentRecord {
-  distributionId: string;
-  projectName: string;
-  stageName: string;
-  amount: number;
-  status: number;
-  paidTime: string | null;
 }
 
 export default function PerformancePage() {

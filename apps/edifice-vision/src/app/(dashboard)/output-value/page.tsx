@@ -200,12 +200,13 @@ export default function OutputValuePage() {
     }
   };
 
+  // tab 角标来自统计接口，不受当前 tab 列表过滤影响
   const tabs: { key: TabKey; label: string; count: number }[] = [
-    { key: "all", label: "全部", count: items.length },
-    { key: "pending", label: "待确认", count: items.filter((i) => i.status === 0).length },
-    { key: "review", label: "待审核", count: items.filter((i) => i.status === 1).length },
-    { key: "approved", label: "已审批", count: items.filter((i) => i.status === 2).length },
-    { key: "paid", label: "已发放", count: items.filter((i) => i.status === 3).length },
+    { key: "all", label: "全部", count: stats?.totalCount ?? items.length },
+    { key: "pending", label: "待确认", count: stats?.confirmCount ?? items.filter((i) => i.status === 0).length },
+    { key: "review", label: "待审核", count: stats?.reviewCount ?? items.filter((i) => i.status === 1).length },
+    { key: "approved", label: "已审批", count: stats?.approvedCount ?? items.filter((i) => i.status === 2).length },
+    { key: "paid", label: "已发放", count: stats?.paidCount ?? items.filter((i) => i.status === 3).length },
   ];
   const actionTitle =
     actionKind === "confirm"

@@ -25,7 +25,7 @@ import java.util.Map;
 @Tag(name = "绩效还原")
 @RestController
 @RequestMapping("/performance/restore")
-@PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
+@PreAuthorize("hasAuthority('menu:performance-restore') or hasRole('SUPER_ADMIN')")
 public class PerformanceRestoreController {
 
     @Resource

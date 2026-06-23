@@ -509,9 +509,6 @@ public class ReportController {
                             .projectCount(userProjects.getOrDefault(uid, Collections.emptySet()).size())
                             .allocAmount(userAlloc.getOrDefault(uid, BigDecimal.ZERO))
                             .completionAmount(userCompletion.getOrDefault(uid, BigDecimal.ZERO))
-                            // TODO: 等 LEADER 角色上线后按角色归集
-                            .leaderShare(BigDecimal.ZERO)
-                            .companyShare(BigDecimal.ZERO)
                             .build();
                 })
                 .sorted((a, b) -> b.getAllocAmount().compareTo(a.getAllocAmount()))

@@ -140,8 +140,12 @@ export interface OutputValuePreview {
 }
 
 export interface OutputValueStats {
+  totalCount?: number;
   pendingCount: number;
+  confirmCount?: number;
+  reviewCount?: number;
   approvedCount: number;
+  paidCount?: number;
   paidAmount: number;
   totalAmount: number;
 }

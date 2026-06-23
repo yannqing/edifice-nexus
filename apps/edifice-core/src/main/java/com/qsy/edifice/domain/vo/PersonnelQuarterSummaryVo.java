@@ -40,10 +40,4 @@ public class PersonnelQuarterSummaryVo implements Serializable {
 
     /** 实得金额（应得 × 完成比例 或 离职归零之和） */
     private BigDecimal completionAmount;
-
-    /** 领导兜底：目前暂以 0 占位，等角色体系（LEADER）上线后按角色归集 */
-    private BigDecimal leaderShare;
-
-    /** 公司分成：目前暂以 0 占位 */
-    private BigDecimal companyShare;
 }

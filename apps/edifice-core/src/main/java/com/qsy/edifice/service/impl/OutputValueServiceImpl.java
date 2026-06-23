@@ -687,8 +687,13 @@ public class OutputValueServiceImpl implements OutputValueService {
     public Map<String, Object> getStatistics() {
         List<OutputValue> all = outputValueMapper.selectList(null);
         Map<String, Object> stats = new HashMap<>();
+        // 各状态独立计数（供前端 tab 角标使用）
+        stats.put("totalCount", all.size());
         stats.put("pendingCount", all.stream().filter(o -> o.getStatus() == 0 || o.getStatus() == 1).count());
+        stats.put("confirmCount", all.stream().filter(o -> o.getStatus() == 0).count());
+        stats.put("reviewCount", all.stream().filter(o -> o.getStatus() == 1).count());
         stats.put("approvedCount", all.stream().filter(o -> o.getStatus() == 2).count());
+        stats.put("paidCount", all.stream().filter(o -> o.getStatus() == 3).count());
         // "已发放"仅统计 status=3 的记录，作为现金动作统计
         stats.put("paidAmount", all.stream()
                 .filter(o -> o.getStatus() == 3)

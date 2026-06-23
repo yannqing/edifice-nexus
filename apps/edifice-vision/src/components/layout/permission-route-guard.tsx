@@ -23,7 +23,7 @@ const PROJECT_DETAIL_PATHS = new Set([
 
 const HIDDEN_ROUTE_PERMISSIONS: Record<string, string> = {
   "/acceptance": "menu:oa-applications",
-  "/performance-restore": "menu:all-projects",
+  "/performance-restore": "menu:performance-restore",
 };
 
 const PUBLIC_DASHBOARD_PATHS = new Set([

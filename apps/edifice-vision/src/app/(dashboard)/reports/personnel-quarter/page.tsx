@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Users, TrendingUp, Wallet, Loader2 } from "lucide-react";
+import { Users, TrendingUp, Wallet, TrendingDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TablePageSkeleton } from "@/components/ui/skeleton";
 import { ResponseCode } from "@/types/api";
@@ -87,7 +87,7 @@ export default function PersonnelQuarterSummaryPage() {
         <TablePageSkeleton columns={6} rows={6} />
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Summary
               icon={<Users className="w-5 h-5" />}
               label="参与人数"
@@ -102,9 +102,15 @@ export default function PersonnelQuarterSummaryPage() {
             />
             <Summary
               icon={<Wallet className="w-5 h-5" />}
-              label="实得合计 / 降档差额"
-              value={`${formatAmount(totalActual)} / ${formatAmount(totalDownGrade)}`}
+              label="实得合计"
+              value={formatAmount(totalActual)}
               tone="amber"
+            />
+            <Summary
+              icon={<TrendingDown className="w-5 h-5" />}
+              label="降档差额"
+              value={formatAmount(totalDownGrade)}
+              tone="rose"
             />
           </div>
 
@@ -118,14 +124,12 @@ export default function PersonnelQuarterSummaryPage() {
                   <th className="text-right py-3 px-4 font-semibold">应得金额</th>
                   <th className="text-right py-3 px-4 font-semibold">实得金额</th>
                   <th className="text-right py-3 px-4 font-semibold">降档差额</th>
-                  <th className="text-right py-3 px-4 font-semibold">领导兜底</th>
-                  <th className="text-right py-3 px-4 font-semibold">公司分成</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-16 text-center text-slate-400">
+                    <td colSpan={6} className="py-16 text-center text-slate-400">
                       {loading ? (
                         <Loader2 className="w-4 h-4 animate-spin inline" />
                       ) : (
@@ -169,12 +173,6 @@ export default function PersonnelQuarterSummaryPage() {
                         >
                           {formatAmount(diff)}
                         </td>
-                        <td className="py-3 px-4 text-right text-slate-400">
-                          {formatAmount(r.leaderShare)}
-                        </td>
-                        <td className="py-3 px-4 text-right text-slate-400">
-                          {formatAmount(r.companyShare)}
-                        </td>
                       </tr>
                     );
                   })
@@ -183,8 +181,7 @@ export default function PersonnelQuarterSummaryPage() {
             </table>
           </div>
           <p className="text-xs text-slate-400">
-            说明：v0.4 起领导分成不再单独区分，所有非员工实得（降档差额 / 离职兜底 / 公司主体 60%）统一归公司账；
-            "领导兜底" / "公司分成" 列保留 0 仅作历史兼容。
+            说明：v0.4 起所有非员工实得（降档差额 / 离职兜底 / 公司主体 60%）统一归公司账，不再单独区分。
           </p>
         </>
       )}
@@ -201,12 +198,13 @@ function Summary({
   icon: React.ReactNode;
   label: string;
   value: string | number;
-  tone: "blue" | "emerald" | "amber";
+  tone: "blue" | "emerald" | "amber" | "rose";
 }) {
   const toneMap: Record<string, string> = {
     blue: "bg-blue-100 text-blue-600",
     emerald: "bg-emerald-100 text-emerald-600",
     amber: "bg-amber-100 text-amber-600",
+    rose: "bg-rose-100 text-rose-600",
   };
   return (
     <div className="glass-card p-4 rounded-xl">

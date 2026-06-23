@@ -132,14 +132,10 @@ export interface PersonnelQuarterSummaryVo {
   userId: string;
   realName: string;
   projectCount: number;
-  /** 应得（planned）= total × 60% × alloc% */
+  /** 应得（planned）= total × 40% × alloc%（v0.4 员工池比例为 40%） */
   allocAmount: number;
   /** 实得（actual）= planned × completion% */
   completionAmount: number;
-  /** 领导兜底：暂为 0 占位 */
-  leaderShare: number;
-  /** 公司分成：暂为 0 占位 */
-  companyShare: number;
 }
 
 export async function getPersonnelQuarterSummary(
