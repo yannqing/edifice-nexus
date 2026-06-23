@@ -25,6 +25,7 @@ public class MessageCenterServiceImpl implements MessageCenterService {
     private static final String SOURCE_ANNOUNCEMENT = "announcement";
     private static final String SOURCE_APPROVAL = "approval";
     private static final String SOURCE_APPROVAL_RESULT = "approval_result";
+    private static final String SOURCE_APPROVAL_DONE = "approval_done";
     private static final String SOURCE_APPROVAL_URGE = "approval_urge";
     private static final String SOURCE_PROJECT_MEMBER = "project_member";
     private static final String SOURCE_PROJECT_ARCHIVE = "project_archive";
@@ -151,6 +152,14 @@ public class MessageCenterServiceImpl implements MessageCenterService {
                         .or()
                         .notIn(ApprovalRecords::getApprovalDescription, "申请人撤回", "上传人撤销"))
                 .orderByDesc(ApprovalRecords::getUpdatedTime));
+        // 我已审批：我是审批人且已处理的记录
+        List<ApprovalRecords> approvalDone = approvalRecordsMapper.selectList(new LambdaQueryWrapper<ApprovalRecords>()
+                .eq(ApprovalRecords::getApprover, userId)
+                .in(ApprovalRecords::getInspectionFormStatus, 1, 2)
+                .and(w -> w.isNull(ApprovalRecords::getApprovalDescription)
+                        .or()
+                        .notIn(ApprovalRecords::getApprovalDescription, "申请人撤回", "上传人撤销"))
+                .orderByDesc(ApprovalRecords::getUpdatedTime));
         List<ApprovalUrge> urges = approvalUrgeMapper.selectList(new LambdaQueryWrapper<ApprovalUrge>()
                 .eq(ApprovalUrge::getToUserId, userId)
                 .orderByDesc(ApprovalUrge::getCreatedTime));
@@ -164,6 +173,7 @@ public class MessageCenterServiceImpl implements MessageCenterService {
                 .collect(Collectors.toMap(ApprovalRecords::getApprovalRecordId, Function.identity(), (left, right) -> left));
         List<ApprovalRecords> allApprovalRecords = new ArrayList<>(approvals);
         allApprovalRecords.addAll(approvalResults);
+        allApprovalRecords.addAll(approvalDone);
         allApprovalRecords.addAll(urgedRecords.values());
         Map<String, String> businessNames = resolveBusinessNames(allApprovalRecords);
         Map<Long, String> urgeFromUserNames = resolveUserNames(urges.stream()
@@ -204,6 +214,26 @@ public class MessageCenterServiceImpl implements MessageCenterService {
                     .priority(approved ? 0 : 2)
                     .read(readKeys.contains(sourceKey))
                     .sourceType(SOURCE_APPROVAL_RESULT)
+                    .sourceId(record.getApprovalRecordId())
+                    .createdTime(record.getUpdatedTime() != null ? record.getUpdatedTime() : record.getCreatedTime())
+                    .build());
+        }
+
+        for (ApprovalRecords record : approvalDone) {
+            boolean approved = Integer.valueOf(1).equals(record.getInspectionFormStatus());
+            boolean finalApproved = approved && record.getNextApproverId() == null;
+            String businessName = businessName(record, businessNames);
+            String sourceKey = key(SOURCE_APPROVAL_DONE, record.getApprovalRecordId());
+            messages.add(MessageCenterItemVo.builder()
+                    .messageKey(sourceKey)
+                    .category("processed")
+                    .categoryLabel("我已审批")
+                    .title(doneTitle(businessName, approved, finalApproved))
+                    .content(doneContent(record, approved, finalApproved))
+                    .link(linkFor(record, false))
+                    .priority(approved ? 0 : 2)
+                    .read(readKeys.contains(sourceKey))
+                    .sourceType(SOURCE_APPROVAL_DONE)
                     .sourceId(record.getApprovalRecordId())
                     .createdTime(record.getUpdatedTime() != null ? record.getUpdatedTime() : record.getCreatedTime())
                     .build());
@@ -329,6 +359,15 @@ public class MessageCenterServiceImpl implements MessageCenterService {
                                 .or()
                                 .notIn(ApprovalRecords::getApprovalDescription, "申请人撤回", "上传人撤销")))
                 .forEach(record -> sources.add(new MessageSource(SOURCE_APPROVAL_RESULT, record.getApprovalRecordId())));
+        // 我已审批
+        approvalRecordsMapper.selectList(new LambdaQueryWrapper<ApprovalRecords>()
+                        .select(ApprovalRecords::getApprovalRecordId)
+                        .eq(ApprovalRecords::getApprover, userId)
+                        .in(ApprovalRecords::getInspectionFormStatus, 1, 2)
+                        .and(w -> w.isNull(ApprovalRecords::getApprovalDescription)
+                                .or()
+                                .notIn(ApprovalRecords::getApprovalDescription, "申请人撤回", "上传人撤销")))
+                .forEach(record -> sources.add(new MessageSource(SOURCE_APPROVAL_DONE, record.getApprovalRecordId())));
         approvalUrgeMapper.selectList(new LambdaQueryWrapper<ApprovalUrge>()
                         .select(ApprovalUrge::getUrgeId)
                         .eq(ApprovalUrge::getToUserId, userId))
@@ -372,6 +411,18 @@ public class MessageCenterServiceImpl implements MessageCenterService {
     private String resultContent(ApprovalRecords record, boolean approved, boolean finalApproved) {
         int level = record.getApprovalLevel() == null ? 1 : record.getApprovalLevel();
         if (!approved) return "第 " + level + " 级审批已驳回，流程已结束";
+        if (finalApproved) return "第 " + level + " 级审批已通过，流程审批完成";
+        return "第 " + level + " 级审批已通过，流程已转交下一审批人";
+    }
+
+    private String doneTitle(String businessName, boolean approved, boolean finalApproved) {
+        if (!approved) return "您已驳回" + businessName;
+        return "您已通过" + businessName + (finalApproved ? "（最终审批）" : "");
+    }
+
+    private String doneContent(ApprovalRecords record, boolean approved, boolean finalApproved) {
+        int level = record.getApprovalLevel() == null ? 1 : record.getApprovalLevel();
+        if (!approved) return "第 " + level + " 级审批已驳回";
         if (finalApproved) return "第 " + level + " 级审批已通过，流程审批完成";
         return "第 " + level + " 级审批已通过，流程已转交下一审批人";
     }

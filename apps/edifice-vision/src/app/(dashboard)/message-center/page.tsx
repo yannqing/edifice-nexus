@@ -33,6 +33,7 @@ const tabs = [
   { key: "all", label: "全部消息" },
   { key: "approval", label: "待我审批" },
   { key: "result", label: "审批结果" },
+  { key: "processed", label: "我已审批" },
   { key: "project", label: "项目动态" },
   { key: "announcement", label: "系统公告" },
 ];
@@ -165,10 +166,10 @@ export default function MessageCenterPage() {
       {!loading && items.length > 0 && (
         <div className="border border-slate-200 bg-white rounded-lg divide-y divide-slate-100">
           {items.map((item) => {
-            const rejected = item.category === "result" && item.priority >= 2;
+            const rejected = (item.category === "result" || item.category === "processed") && item.priority >= 2;
             const Icon = item.category === "approval"
               ? ClipboardCheck
-              : rejected ? XCircle : item.category === "result" ? CircleCheckBig : item.category === "project" ? FolderGit2 : Megaphone;
+              : rejected ? XCircle : item.category === "result" || item.category === "processed" ? CircleCheckBig : item.category === "project" ? FolderGit2 : Megaphone;
             return (
               <button
                 key={item.messageKey}
@@ -184,7 +185,8 @@ export default function MessageCenterPage() {
                     ? "bg-amber-100 text-amber-700"
                     : rejected ? "bg-rose-100 text-rose-700"
                       : item.category === "result" ? "bg-emerald-100 text-emerald-700"
-                        : item.category === "project" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700"
+                        : item.category === "processed" ? "bg-teal-100 text-teal-700"
+                          : item.category === "project" ? "bg-violet-100 text-violet-700" : "bg-blue-100 text-blue-700"
                 )}>
                   <Icon className="w-5 h-5" />
                 </div>
