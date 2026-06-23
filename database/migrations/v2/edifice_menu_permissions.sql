@@ -69,7 +69,7 @@ VALUES
     (900000000000001014, '人员分配汇总', 'menu:personnel-quarter', 1, 0, '/reports/personnel-quarter', 0),
     (900000000000001015, '用户管理', 'menu:user-management', 1, 0, '/user-management', 0),
     (900000000000001016, '公告管理', 'menu:announcement-management', 1, 0, '/announcement-management', 0),
-    (900000000000001017, '绩效还原', 'menu:performance-restore', 1, 0, '/performance-restore', 0)
+    (900000000000001025, '绩效还原', 'menu:performance-restore', 1, 0, '/performance-restore', 0)
 ON DUPLICATE KEY UPDATE
     permission_name = VALUES(permission_name),
     permission_type = VALUES(permission_type),
@@ -102,7 +102,7 @@ VALUES
     (900001014, 900001000, '/reports/personnel-quarter', '人员分配汇总', 'edifice:menu:personnel-quarter', 'edifice', '', 0, 14, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
     (900001015, 900001000, '/user-management', '用户管理', 'edifice:menu:user-management', 'edifice', '', 0, 15, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
     (900001016, 900001000, '/announcement-management', '公告管理', 'edifice:menu:announcement-management', 'edifice', '', 0, 16, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-    (900001017, 900001000, '/performance-restore', '绩效还原', 'edifice:menu:performance-restore', 'edifice', '', 0, 17, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP())
+    (900001025, 900001000, '/performance-restore', '绩效还原', 'edifice:menu:performance-restore', 'edifice', '', 0, 25, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP())
 ON DUPLICATE KEY UPDATE
     pid = VALUES(pid),
     src = VALUES(src),
@@ -136,7 +136,7 @@ UPDATE office_db.oa_admin_group
 SET rules = TRIM(BOTH ',' FROM CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM rules), ''), '900001013'))
 WHERE FIND_IN_SET('900001013', rules) = 0;
 
-SET @edifice_rule_ids := '900001000,900001001,900001002,900001003,900001004,900001005,900001006,900001007,900001008,900001009,900001010,900001012,900001013,900001014,900001015,900001016,900001017';
+SET @edifice_rule_ids := '900001000,900001001,900001002,900001003,900001004,900001005,900001006,900001007,900001008,900001009,900001010,900001012,900001013,900001014,900001015,900001016,900001025';
 UPDATE office_db.oa_admin_group
 SET rules = CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM rules), ''), @edifice_rule_ids)
 WHERE id = 1
