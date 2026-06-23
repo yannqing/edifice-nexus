@@ -27,6 +27,7 @@ import type {
   FilesVo,
 } from "@/types/project";
 import { EditableAttachmentFileList } from "@/components/file/attachment-file-list";
+import { AmountInput } from "@/components/ui/amount-input";
 
 interface CreateProjectDialogProps {
   open: boolean;
@@ -363,42 +364,28 @@ export function CreateProjectDialog({
               </select>
             </FormField>
 
-            <FormField label="合同金额（元）" required>
-              <input
-                type="number"
-                value={form.contractAmount || ""}
-                onChange={(e) => updateField("contractAmount", Number(e.target.value))}
+            <FormField label="合同金额" required>
+              <AmountInput
+                value={form.contractAmount || undefined}
+                onChange={(v) => updateField("contractAmount", v ?? 0)}
                 placeholder="请输入合同金额"
-                className="form-input"
-                min={0}
               />
             </FormField>
 
             {form.contractType === 1 && (
               <>
-                <FormField label="基础金额（元）">
-                  <input
-                    type="number"
-                    value={form.baseAmount || ""}
-                    onChange={(e) => updateField("baseAmount", Number(e.target.value))}
+                <FormField label="基础金额">
+                  <AmountInput
+                    value={form.baseAmount || undefined}
+                    onChange={(v) => updateField("baseAmount", v ?? 0)}
                     placeholder="请输入基础金额"
-                    className="form-input"
-                    min={0}
                   />
                 </FormField>
-                <FormField label="预计效益金额（元）">
-                  <input
-                    type="number"
-                    value={form.benefitAmount ?? ""}
-                    onChange={(e) =>
-                      updateField(
-                        "benefitAmount",
-                        e.target.value === "" ? undefined : Number(e.target.value),
-                      )
-                    }
-                    placeholder="如审减额 5%，预估 20 万则填 200000"
-                    className="form-input"
-                    min={0}
+                <FormField label="预计效益金额">
+                  <AmountInput
+                    value={form.benefitAmount}
+                    onChange={(v) => updateField("benefitAmount", v)}
+                    placeholder="如审减额 5%，预估 20 万则填 20"
                   />
                 </FormField>
               </>

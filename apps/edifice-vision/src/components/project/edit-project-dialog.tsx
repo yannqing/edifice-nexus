@@ -21,6 +21,7 @@ import {
 import { ResponseCode } from "@/types/api";
 import type { UpdateProjectParams, UserListItem } from "@/types/project";
 import { PROJECT_STATUS_MAP } from "@/types/project";
+import { AmountInput } from "@/components/ui/amount-input";
 
 interface EditProjectDialogProps {
   projectId: string | null;
@@ -317,25 +318,21 @@ export function EditProjectDialog({
                   </select>
                 </FormField>
 
-                <FormField label="合同金额（元）">
-                  <input
-                    type="number"
-                    value={form.contractAmount ?? ""}
-                    onChange={(e) => updateField("contractAmount", Number(e.target.value))}
-                    className="form-input"
-                    min={0}
+                <FormField label="合同金额">
+                  <AmountInput
+                    value={form.contractAmount ?? undefined}
+                    onChange={(v) => updateField("contractAmount", v)}
+                    placeholder="请输入合同金额"
                   />
                 </FormField>
 
                 {form.contractType === 1 && (
                   <>
-                    <FormField label="基础金额（元）">
-                      <input
-                        type="number"
-                        value={form.baseAmount ?? ""}
-                        onChange={(e) => updateField("baseAmount", Number(e.target.value))}
-                        className="form-input"
-                        min={0}
+                    <FormField label="基础金额">
+                      <AmountInput
+                        value={form.baseAmount ?? undefined}
+                        onChange={(v) => updateField("baseAmount", v)}
+                        placeholder="请输入基础金额"
                       />
                     </FormField>
                     {/* 预计效益金额必须走"效益修正"流程，保证审计留痕 */}
