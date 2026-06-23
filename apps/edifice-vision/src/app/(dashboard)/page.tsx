@@ -37,6 +37,8 @@ import { ResponseCode } from "@/types/api";
 import { PROJECT_STATUS_MAP } from "@/types/project";
 import { useAuth } from "@/store/auth-context";
 import { hasPermission } from "@/lib/permissions";
+import { getTodoCenterList } from "@/services/todo-center";
+import type { TodoCenterItem } from "@/types/todo-center";
 
 const statusStyles: Record<string, string> = {
   未开始: "bg-slate-100 text-slate-500",
@@ -75,6 +77,7 @@ export default function DashboardPage() {
   const [announcements, setAnnouncements] = useState<AnnouncementVo[]>([]);
   const [announcementLoading, setAnnouncementLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
+  const [todoItems, setTodoItems] = useState<TodoCenterItem[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -102,6 +105,17 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { fetchAnnouncements(); }, [fetchAnnouncements]);
+
+  // 待办事项从统一待办中心拉取（pending tab 前 5 条）
+  useEffect(() => {
+    getTodoCenterList("pending", { current: 1, pageSize: 5 })
+      .then((res) => {
+        if (res.code === ResponseCode.SUCCESS && res.data) {
+          setTodoItems(res.data.records ?? []);
+        }
+      })
+      .catch(() => { /* 静默 */ });
+  }, []);
 
   const handleDeleteAnnouncement = async (id: string) => {
     try {
@@ -237,29 +251,33 @@ export default function DashboardPage() {
               <div className="flex justify-between items-center mb-5">
                 <h3 className="text-lg font-bold text-slate-800">待办事项</h3>
                 <span className="text-xs px-2 py-0.5 bg-rose-100 text-rose-600 rounded-full font-medium">
-                  {data.todos.length}
+                  {todoItems.length}
                 </span>
               </div>
               <div className="space-y-3">
-                {data.todos.map((todo) => (
-                  <div key={todo.id} className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer">
+                {todoItems.map((todo) => (
+                  <div
+                    key={todo.todoId}
+                    onClick={() => todo.link && router.push(todo.link)}
+                    className="flex items-start gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
                     <div className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0",
-                      todo.type === "验工审批" ? "bg-amber-500" : "bg-blue-500")} />
+                      todo.bizTypeLabel === "验工单" ? "bg-amber-500" : "bg-blue-500")} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-800 truncate">{todo.title}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs text-slate-400">{todo.from}</span>
+                        <span className="text-xs text-slate-400">{todo.applyUserName ?? "-"}</span>
                         <span className="text-xs text-slate-300">·</span>
-                        <span className="text-xs text-slate-400">{formatTime(todo.time)}</span>
+                        <span className="text-xs text-slate-400">{formatTime(todo.createdTime ?? null)}</span>
                       </div>
                     </div>
                     <Badge variant="secondary" className={cn("text-xs shrink-0",
-                      todo.type === "验工审批" ? "bg-amber-100 text-amber-600" : "bg-blue-100 text-blue-600")}>
-                      {todo.type}
+                      todo.bizTypeLabel === "验工单" ? "bg-amber-100 text-amber-600" : "bg-blue-100 text-blue-600")}>
+                      {todo.bizTypeLabel}
                     </Badge>
                   </div>
                 ))}
-                {data.todos.length === 0 && (
+                {todoItems.length === 0 && (
                   <p className="text-sm text-slate-400 text-center py-4">暂无待办</p>
                 )}
               </div>
@@ -287,10 +305,15 @@ export default function DashboardPage() {
                           {p.category && <span className="text-xs text-slate-400">{p.category}</span>}
                         </div>
                         <div className="flex gap-1">
-                          {Array.from({ length: p.phases }).map((_, i) => (
-                            <div key={i} className={cn("h-1.5 flex-1 rounded-full",
-                              i < p.currentPhase ? "bg-blue-500" : "bg-slate-200")} />
-                          ))}
+                          {Array.from({ length: p.phases }).map((_, i) => {
+                            const completed = p.completedPhase ?? 0;
+                            return (
+                              <div key={i} className={cn("h-1.5 flex-1 rounded-full",
+                                i < completed ? "bg-emerald-500"
+                                : i < p.currentPhase ? "bg-blue-500"
+                                : "bg-slate-200")} />
+                            );
+                          })}
                         </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">

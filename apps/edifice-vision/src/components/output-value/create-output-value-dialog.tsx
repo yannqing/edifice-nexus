@@ -126,7 +126,8 @@ export function CreateOutputValueDialog({
         getOutputValueList(),
       ]);
       if (projectsRes.code === ResponseCode.SUCCESS && projectsRes.data) {
-        setProjects(projectsRes.data.records ?? []);
+        // 已归档项目不能创建产值分配
+        setProjects((projectsRes.data.records ?? []).filter((p) => p.archiveStatus !== 1));
       }
       if (usersRes.code === ResponseCode.SUCCESS && usersRes.data) {
         setUsers(usersRes.data.records ?? []);

@@ -33,6 +33,7 @@ export interface DashboardData {
     category: string;
     phases: number;
     currentPhase: number;
+    completedPhase?: number;
   }[];
   categoryDistribution: {
     category: string;

@@ -52,6 +52,8 @@ public class ReportController {
     private SysUserMapper sysUserMapper;
     @Resource
     private InspectionFormMapper inspectionFormMapper;
+    @Resource
+    private ApprovalRecordsMapper approvalRecordsMapper;
     @Autowired
     private JwtUtils jwtUtils;
 
@@ -563,14 +565,12 @@ public class ReportController {
                 .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        // 待审批验工单数
-        long pendingInspections = 0L;
-        if (!myProjectIdStringSet.isEmpty()) {
-            pendingInspections = inspectionFormMapper.selectCount(
-                    new LambdaQueryWrapper<InspectionForm>()
-                            .in(InspectionForm::getProjectId, myProjectIdStringSet)
-                            .eq(InspectionForm::getInspectionFormStatus, 0));
-        }
+        // 待审批验工单数（当前用户作为审批人待处理的验工单）
+        long pendingInspections = approvalRecordsMapper.selectCount(
+                new LambdaQueryWrapper<ApprovalRecords>()
+                        .eq(ApprovalRecords::getApprover, userId)
+                        .eq(ApprovalRecords::getInspectionFormStatus, 0)
+                        .eq(ApprovalRecords::getBizTypeExt, "inspection"));
 
         Map<String, Object> stats = new LinkedHashMap<>();
         stats.put("projectCount", projectCount);
@@ -718,6 +718,11 @@ public class ReportController {
                         .filter(s -> s.getStageStatus() != null && s.getStageStatus() != 0)
                         .count();
                 item.put("currentPhase", currentPhase);
+                // 已完成阶段数（status=3 已验收 / status=6 已完成）
+                int completedPhase = (int) stages.stream()
+                        .filter(s -> s.getStageStatus() != null && (s.getStageStatus() == 3 || s.getStageStatus() == 6))
+                        .count();
+                item.put("completedPhase", completedPhase);
 
                 myProjects.add(item);
             }

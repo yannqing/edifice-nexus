@@ -240,13 +240,6 @@ export const navigationConfig: NavSection[] = [
         href: "/timesheet",
         permissionCode: "menu:timesheet",
       },
-      {
-        id: "oa-applications",
-        label: "OA 申请",
-        icon: "ClipboardList",
-        href: "/oa/applications",
-        permissionCode: "menu:oa-applications",
-      },
     ],
   },
   {

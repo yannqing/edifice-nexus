@@ -17,35 +17,46 @@ import {
   getProjectStats,
   getCategoryStats,
   getPersonnelRanking,
+  getPersonnelQuarterSummary,
 } from "@/services/report";
 import { ResponseCode } from "@/types/api";
+import { currentQuarter, generateQuarterOptions } from "@/types/output-value";
+import type { PersonnelQuarterSummaryVo } from "@/services/report";
 
 type ReportKey = "project" | "category" | "personnel";
 
 export default function StatisticsPage() {
   const [activeReport, setActiveReport] = useState<ReportKey>("project");
   const [loading, setLoading] = useState(true);
+  const [quarter, setQuarter] = useState(currentQuarter());
+  const quarterOptions = generateQuarterOptions(8);
   const [overview, setOverview] = useState<{ totalProjects: number; totalContractAmount: number; completedOutputValue: number; totalOutputValue: number } | null>(null);
   const [projectData, setProjectData] = useState<{ projectName: string; category: string; contractAmount: number; completedAmount: number; pendingValue: number }[]>([]);
   const [categoryData, setCategoryData] = useState<{ category: string; name: string; count: number; contractTotal: number; completedTotal: number; percentage: number }[]>([]);
-  const [personnelData, setPersonnelData] = useState<{ rank: number; name: string; outputValue: number }[]>([]);
+  const [personnelData, setPersonnelData] = useState<PersonnelQuarterSummaryVo[]>([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [ovRes, projRes, catRes, persRes] = await Promise.all([
+      // 概览和项目/分类统计不受季度影响
+      const [ovRes, projRes, catRes] = await Promise.all([
         getReportOverview(),
         getProjectStats(),
         getCategoryStats(),
-        getPersonnelRanking(),
       ]);
       if (ovRes.code === ResponseCode.SUCCESS) setOverview(ovRes.data);
       if (projRes.code === ResponseCode.SUCCESS) setProjectData(projRes.data ?? []);
       if (catRes.code === ResponseCode.SUCCESS) setCategoryData(catRes.data ?? []);
-      if (persRes.code === ResponseCode.SUCCESS) setPersonnelData(persRes.data ?? []);
+
+      // 人员排名按季度查询
+      const persRes = await getPersonnelQuarterSummary(quarter);
+      if (persRes.code === ResponseCode.SUCCESS) {
+        const sorted = (persRes.data ?? []).sort((a, b) => (b.completionAmount ?? 0) - (a.completionAmount ?? 0));
+        setPersonnelData(sorted);
+      }
     } catch { /* 静默 */ }
     finally { setLoading(false); }
-  }, []);
+  }, [quarter]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -63,9 +74,20 @@ export default function StatisticsPage() {
 
   return (
     <div className="p-4 md:p-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">统计报表</h1>
-        <p className="text-slate-500 text-sm mt-1">全面分析项目产值、回款、人员绩效等核心数据。</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">统计报表</h1>
+          <p className="text-slate-500 text-sm mt-1">全面分析项目产值、人员绩效等核心数据。</p>
+        </div>
+        <select
+          value={quarter}
+          onChange={(e) => setQuarter(e.target.value)}
+          className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {quarterOptions.map((q) => (
+            <option key={q} value={q}>{q}</option>
+          ))}
+        </select>
       </div>
 
       {loading && <TablePageSkeleton columns={4} rows={5} />}
@@ -182,28 +204,32 @@ export default function StatisticsPage() {
                   <tr className="text-slate-500 text-xs uppercase tracking-wider">
                     <th className="text-center py-4 px-4 font-semibold w-16">排名</th>
                     <th className="text-left py-4 px-4 font-semibold">姓名</th>
-                    <th className="text-right py-4 px-6 font-semibold">已发放产值</th>
+                    <th className="text-center py-4 px-4 font-semibold">参与项目</th>
+                    <th className="text-right py-4 px-4 font-semibold">应得金额</th>
+                    <th className="text-right py-4 px-6 font-semibold">实得金额</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
-                  {personnelData.map((p) => (
-                    <tr key={p.rank} className="hover:bg-slate-50/50">
+                  {personnelData.map((p, idx) => (
+                    <tr key={p.userId} className="hover:bg-slate-50/50">
                       <td className="py-3 px-4 text-center">
                         <span className={cn("w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold",
-                          p.rank === 1 ? "bg-amber-100 text-amber-700" : p.rank === 2 ? "bg-slate-200 text-slate-600"
-                          : p.rank === 3 ? "bg-orange-100 text-orange-700" : "bg-slate-50 text-slate-500")}>
-                          {p.rank}
+                          idx === 0 ? "bg-amber-100 text-amber-700" : idx === 1 ? "bg-slate-200 text-slate-600"
+                          : idx === 2 ? "bg-orange-100 text-orange-700" : "bg-slate-50 text-slate-500")}>
+                          {idx + 1}
                         </span>
                       </td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-xs font-medium text-blue-600">
-                            {p.name?.[0] ?? "?"}
+                            {p.realName?.[0] ?? "?"}
                           </div>
-                          <span className="font-medium text-slate-800">{p.name}</span>
+                          <span className="font-medium text-slate-800">{p.realName}</span>
                         </div>
                       </td>
-                      <td className="py-3 px-6 text-right font-semibold text-slate-800">{formatAmount(p.outputValue)}</td>
+                      <td className="py-3 px-4 text-center text-slate-600">{p.projectCount}</td>
+                      <td className="py-3 px-4 text-right text-slate-600">{formatAmount(p.allocAmount ?? 0)}</td>
+                      <td className="py-3 px-6 text-right font-semibold text-slate-800">{formatAmount(p.completionAmount ?? 0)}</td>
                     </tr>
                   ))}
                 </tbody>
