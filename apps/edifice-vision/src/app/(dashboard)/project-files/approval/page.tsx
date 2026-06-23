@@ -22,6 +22,7 @@ import {
 import type { ProjectFileVo } from "@/types/project-file";
 import { PROJECT_FILE_STATUS_MAP } from "@/types/project-file";
 import { ApproveProjectFileDialog } from "@/components/project-file/approve-project-file-dialog";
+import { ProjectFileDetailDialog } from "@/components/project-file/project-file-detail-dialog";
 import { useDetailLink } from "@/hooks/use-detail-link";
 
 type Tab = "pending" | "all" | "mine";
@@ -52,7 +53,9 @@ export default function ProjectFilesApprovalPage() {
   const [items, setItems] = useState<ProjectFileVo[]>([]);
   const [loading, setLoading] = useState(true);
   const [approveOpen, setApproveOpen] = useState(false);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [current, setCurrent] = useState<ProjectFileVo | null>(null);
+  const [currentDetail, setCurrentDetail] = useState<ProjectFileVo | null>(null);
   const [keyword, setKeyword] = useState("");
 
   const fetchData = useCallback(async () => {
@@ -85,7 +88,15 @@ export default function ProjectFilesApprovalPage() {
       setApproveOpen(true);
     }
   };
-  useDetailLink(handleOpenApprove);
+  const handleOpenDetail = async (id: string) => {
+    const res = await getProjectFileDetail(id);
+    if (res.code === ResponseCode.SUCCESS && res.data) {
+      setCurrentDetail(res.data);
+      setDetailOpen(true);
+    }
+  };
+  // 详情链接（外部 URL ?id=xxx）走只读详情弹窗
+  useDetailLink(handleOpenDetail);
 
   const stats = {
     total: items.length,
@@ -251,7 +262,7 @@ export default function ProjectFilesApprovalPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleOpenApprove(f.projectFileId)}
+                        onClick={() => handleOpenDetail(f.projectFileId)}
                       >
                         详情
                       </Button>
@@ -269,6 +280,12 @@ export default function ProjectFilesApprovalPage() {
         onOpenChange={setApproveOpen}
         file={current}
         onSuccess={fetchData}
+      />
+
+      <ProjectFileDetailDialog
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        file={currentDetail}
       />
     </div>
   );
