@@ -13,10 +13,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ResponseCode } from "@/types/api";
-import { getUserList } from "@/services/project";
+import { getUserCandidates } from "@/services/user";
+import { getEnabledFlowConfig } from "@/services/config-center";
 import { approveProjectFile } from "@/services/project-file";
 import type { ProjectFileVo } from "@/types/project-file";
 import type { UserListItem } from "@/types/project";
+import type { ApprovalFlowConfigVo, ApprovalFlowNodeVo } from "@/types/config-center";
+
+/** 在流程配置里按 nodeOrder 找节点 */
+function nodeAt(config: ApprovalFlowConfigVo | null, order: number): ApprovalFlowNodeVo | null {
+  return config?.nodes.find((node) => node.nodeOrder === order) ?? null;
+}
 
 interface Props {
   open: boolean;
@@ -31,16 +38,25 @@ export function ApproveProjectFileDialog({ open, onOpenChange, file, onSuccess }
   const [comment, setComment] = useState<string>("");
   const [terminateHere, setTerminateHere] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
+  // 项目文件的审批流配置（bizType = file）。null 表示未配置流程，回退到旧逻辑
+  const [flowConfig, setFlowConfig] = useState<ApprovalFlowConfigVo | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setNextApproverId("");
     setComment("");
     setTerminateHere(false);
+    setFlowConfig(null);
     (async () => {
-      const res = await getUserList();
-      if (res.code === ResponseCode.SUCCESS && res.data) {
-        setUsers(res.data.records ?? []);
+      const [usersRes, flowRes] = await Promise.all([
+        getUserCandidates({ pageSize: 500 }),
+        getEnabledFlowConfig("file"),
+      ]);
+      if (usersRes.code === ResponseCode.SUCCESS && usersRes.data) {
+        setUsers((usersRes.data.records ?? []) as unknown as UserListItem[]);
+      }
+      if (flowRes.code === ResponseCode.SUCCESS && flowRes.data) {
+        setFlowConfig(flowRes.data);
       }
     })();
   }, [open]);
@@ -50,16 +66,31 @@ export function ApproveProjectFileDialog({ open, onOpenChange, file, onSuccess }
   const chain = file.approvalChain ?? [];
   const currentRecord = chain.find((r) => r.approvalRecordId === file.currentRecordId);
   const currentLevel = currentRecord?.approvalLevel ?? 1;
-  // 三级审批：第 3 级默认终审；<3 级默认流转下一级
-  const defaultTerminate = currentLevel >= 3;
+
+  // 按流程配置驱动：当前节点、下一级节点
+  const currentNode = nodeAt(flowConfig, currentLevel);
+  const nextNode = nodeAt(flowConfig, currentLevel + 1);
+  const flowHasNoNextNode = Boolean(flowConfig && !nextNode);
+  // 当前节点是否允许终审：未配置流程时按旧逻辑（>=3 终审）；配置了流程则看 allowTerminate 或没有下一级
+  const flowCanTerminateHere = !flowConfig
+    || flowHasNoNextNode
+    || currentNode?.allowTerminate === 1;
+  // 未配置流程时回退到写死的「L3 终审」逻辑，保持兼容
+  const legacyDefaultTerminate = !flowConfig && currentLevel >= 3;
+  const terminateChecked = terminateHere || legacyDefaultTerminate || flowHasNoNextNode;
+  // 关键修复：当前节点不允许终审时，复选框禁用，且强制不勾选
+  const terminateDisabled = legacyDefaultTerminate || flowHasNoNextNode || !flowCanTerminateHere;
+  // 下一级是否需要选人：未配置流程默认需要；配置了流程看下一级节点类型
+  const nextApproverRequiresSelection = !flowConfig || nextNode?.approverSourceType === "starter_select";
 
   const handleApprove = async (pass: boolean) => {
     if (!file.currentRecordId) {
       toast.error("当前没有可操作的审批节点");
       return;
     }
-    const shouldTerminate = pass ? terminateHere || defaultTerminate : true;
-    if (pass && !shouldTerminate && !nextApproverId) {
+    // 实际是否终审：通过才看勾选；驳回一律视为终审（链终止）
+    const shouldTerminate = pass ? terminateChecked : true;
+    if (pass && !shouldTerminate && nextApproverRequiresSelection && !nextApproverId) {
       toast.error("请选择下一级审批人，或勾选'终审通过'");
       return;
     }
@@ -69,7 +100,7 @@ export function ApproveProjectFileDialog({ open, onOpenChange, file, onSuccess }
       const res = await approveProjectFile({
         recordId: file.currentRecordId,
         pass,
-        nextApproverId: pass && !shouldTerminate ? nextApproverId : undefined,
+        nextApproverId: pass && !shouldTerminate && nextApproverRequiresSelection ? nextApproverId : undefined,
         comment: comment || undefined,
       });
       if (res.code === ResponseCode.SUCCESS) {
@@ -91,6 +122,9 @@ export function ApproveProjectFileDialog({ open, onOpenChange, file, onSuccess }
             项目 <span className="font-medium text-slate-700">{file.projectName}</span> ·
             阶段 <span className="font-medium text-slate-700">{file.stageName ?? "-"}</span> ·
             当前层级 <span className="font-medium text-blue-600">L{currentLevel}</span>
+            {flowConfig && currentNode && (
+              <span className="text-slate-400"> · {currentNode.nodeName}</span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -135,17 +169,21 @@ export function ApproveProjectFileDialog({ open, onOpenChange, file, onSuccess }
             <input
               id="terminate"
               type="checkbox"
-              checked={terminateHere || defaultTerminate}
-              disabled={defaultTerminate}
+              checked={terminateChecked}
+              disabled={terminateDisabled}
               onChange={(e) => setTerminateHere(e.target.checked)}
             />
             <label htmlFor="terminate" className="text-sm text-slate-600">
               终审（通过后直接归档；不再流转下一级）
-              {defaultTerminate && <span className="text-slate-400 ml-1">(L3 自动终审)</span>}
+              {flowHasNoNextNode && <span className="text-slate-400 ml-1">(已是最后一级)</span>}
+              {legacyDefaultTerminate && <span className="text-slate-400 ml-1">(L3 自动终审)</span>}
+              {!flowCanTerminateHere && !terminateDisabled && (
+                <span className="text-slate-400 ml-1">(当前节点不允许终审)</span>
+              )}
             </label>
           </div>
 
-          {!(terminateHere || defaultTerminate) && (
+          {!terminateChecked && nextApproverRequiresSelection && (
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">
                 下一级审批人
@@ -163,8 +201,16 @@ export function ApproveProjectFileDialog({ open, onOpenChange, file, onSuccess }
                 ))}
               </select>
               <p className="text-[11px] text-slate-400 mt-1">
-                L1 建议选专业主管 · L2 建议选总工；当前 L{currentLevel}
+                {nextNode
+                  ? `下一级：${nextNode.nodeName}（L${currentLevel + 1}）`
+                  : `L${currentLevel} 建议选专业主管 · L${currentLevel + 1} 建议选总工；当前 L${currentLevel}`}
               </p>
+            </div>
+          )}
+
+          {!terminateChecked && !nextApproverRequiresSelection && nextNode && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+              下一级节点「{nextNode.nodeName}」由系统按流程配置自动确定审批人，审批通过后将自动流转。
             </div>
           )}
 
