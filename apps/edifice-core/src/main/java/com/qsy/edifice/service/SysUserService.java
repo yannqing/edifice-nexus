@@ -5,6 +5,7 @@ import com.qsy.edifice.domain.dto.GetUserListDto;
 import com.qsy.edifice.domain.dto.SysUserCreateDto;
 import com.qsy.edifice.domain.dto.SysUserUpdateDto;
 import com.qsy.edifice.domain.dto.UpdateProfileDto;
+import com.qsy.edifice.domain.vo.SysUserCandidateVo;
 import com.qsy.edifice.domain.vo.SysUserDetailVo;
 import com.qsy.edifice.domain.vo.SysUserListVo;
 
@@ -13,12 +14,23 @@ import java.util.List;
 public interface SysUserService {
 
     /**
-     * 查询所有用户
+     * 查询所有用户（管理员场景，需 menu:user-management 权限）
      *
      * @param getUserListDto 查询条件
      * @return 封装 vo 返回
      */
     Page<SysUserListVo> getAllUsers(GetUserListDto getUserListDto);
+
+    /**
+     * 查询候选人列表（业务场景：审批人/项目经理/项目成员选择等）
+     *
+     * <p>只返回精简字段（不含手机号/邮箱/身份证等敏感信息），权限要求仅需登录。
+     * 默认只返回在职且启用的用户。
+     *
+     * @param getUserListDto 查询条件（关键字 / 部门 / 分页）
+     * @return 精简候选 vo 分页
+     */
+    Page<SysUserCandidateVo> getCandidates(GetUserListDto getUserListDto);
 
     /**
      * 根据用户 id 查询用户详情

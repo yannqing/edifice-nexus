@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 import { isAbortError } from "@/lib/request";
 import { ResponseCode } from "@/types/api";
 import type { SysUserListItem } from "@/services/user";
-import { getUserList } from "@/services/user";
+import { getUserCandidates } from "@/services/user";
 import {
   OA_PRIORITY_MAP,
   OA_STATUS_MAP,
@@ -165,7 +165,7 @@ export default function OaApplicationsPage() {
         setApplicationType(res.data[0].type);
       }
     });
-    getUserList({ current: 1, pageSize: 100 }).then((res) => {
+    getUserCandidates({ current: 1, pageSize: 100 }).then((res) => {
       if (res.code === ResponseCode.SUCCESS) setUsers(res.data?.records ?? []);
     });
   }, []);

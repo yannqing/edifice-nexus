@@ -10,6 +10,7 @@ import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.domain.entity.SysDepartment;
 import com.qsy.edifice.domain.entity.SysPosition;
 import com.qsy.edifice.domain.entity.SysUserDepartment;
+import com.qsy.edifice.domain.vo.SysUserCandidateVo;
 import com.qsy.edifice.domain.vo.SysUserDetailVo;
 import com.qsy.edifice.domain.vo.SysUserListVo;
 import com.qsy.edifice.enums.ErrorType;
@@ -97,6 +98,73 @@ public class SysUserServiceImpl implements SysUserService {
         fillOrgNames(sysUserListVos);
 
         return new Page<SysUserListVo>(current, pageSize, sysUserPage.getTotal()).setRecords(sysUserListVos);
+    }
+
+    @Override
+    public Page<SysUserCandidateVo> getCandidates(GetUserListDto dto) {
+        // 候选人场景强制只看在职 + 启用，避免下拉框出现离职/禁用账号
+        if (dto == null) dto = new GetUserListDto();
+        if (dto.getStatus() == null) dto.setStatus(1);
+        if (dto.getEmploymentStatus() == null) dto.setEmploymentStatus(1);
+
+        Integer current = dto.getCurrent() != null && dto.getCurrent() > 0 ? dto.getCurrent() : 1;
+        Integer pageSize = dto.getPageSize() != null && dto.getPageSize() > 0 ? dto.getPageSize() : 10;
+
+        LambdaQueryWrapper<SysUser> wrapper = buildUserQueryWrapper(dto);
+        Page<SysUser> sysUserPage = sysUserMapper.selectPage(new Page<>(current, pageSize), wrapper);
+
+        List<SysUserCandidateVo> records = sysUserPage.getRecords().stream()
+                .map(SysUserCandidateVo::objToVo)
+                .toList();
+        fillCandidateOrgNames(records);
+
+        return new Page<SysUserCandidateVo>(current, pageSize, sysUserPage.getTotal()).setRecords(records);
+    }
+
+    /**
+     * 把 {@link #getAllUsers} 里的 wrapper 构造逻辑抽出来共用。
+     */
+    private LambdaQueryWrapper<SysUser> buildUserQueryWrapper(GetUserListDto dto) {
+        LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
+
+        // 统一关键字：OR 匹配 username / realName / employeeNo / phone
+        if (StringUtils.isNotEmpty(dto.getKeywords())) {
+            String kw = dto.getKeywords().trim();
+            wrapper.and(w -> w.like(SysUser::getUsername, kw)
+                    .or().like(SysUser::getRealName, kw)
+                    .or().like(SysUser::getEmployeeNo, kw)
+                    .or().like(SysUser::getPhone, kw));
+        }
+
+        wrapper.like(StringUtils.isNotEmpty(dto.getUsername()), SysUser::getUsername, dto.getUsername());
+        wrapper.like(StringUtils.isNotEmpty(dto.getRealName()), SysUser::getRealName, dto.getRealName());
+        wrapper.like(StringUtils.isNotEmpty(dto.getEmployeeNo()), SysUser::getEmployeeNo, dto.getEmployeeNo());
+        wrapper.like(StringUtils.isNotEmpty(dto.getEmail()), SysUser::getEmail, dto.getEmail());
+        wrapper.like(StringUtils.isNotEmpty(dto.getPhone()), SysUser::getPhone, dto.getPhone());
+        wrapper.like(StringUtils.isNotEmpty(dto.getPosition()), SysUser::getPosition, dto.getPosition());
+        if (dto.getEmploymentStatus() != null) {
+            wrapper.eq(SysUser::getEmploymentStatus, dto.getEmploymentStatus());
+        }
+        if (dto.getStatus() != null) {
+            wrapper.eq(SysUser::getStatus, dto.getStatus());
+        }
+        applyDepartmentFilter(wrapper, dto);
+        wrapper.orderByDesc(SysUser::getCreatedTime);
+        return wrapper;
+    }
+
+    private void fillCandidateOrgNames(List<SysUserCandidateVo> users) {
+        if (users == null || users.isEmpty()) return;
+        Map<Long, SysDepartment> departments = sysDepartmentMapper.selectList(null).stream()
+                .collect(Collectors.toMap(SysDepartment::getDepartmentId, Function.identity(), (a, b) -> a));
+        Map<Long, SysPosition> positions = sysPositionMapper.selectList(null).stream()
+                .collect(Collectors.toMap(SysPosition::getPositionId, Function.identity(), (a, b) -> a));
+        for (SysUserCandidateVo user : users) {
+            SysDepartment department = departments.get(user.getDepartmentId());
+            if (department != null) user.setDepartmentName(department.getName());
+            SysPosition position = positions.get(user.getPositionId());
+            if (position != null) user.setPositionName(position.getName());
+        }
     }
 
     @Override

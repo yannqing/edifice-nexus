@@ -1,5 +1,6 @@
 import { get, post, put, del } from "@/lib/request";
 import type { BaseResponse } from "@/types/api";
+import { getUserCandidates } from "@/services/user";
 import type {
   ProjectListVo,
   ProjectDetailVo,
@@ -143,7 +144,11 @@ export async function getStageTemplates(
 }
 
 /**
- * 获取用户列表（用于选择项目成员）
+ * 获取用户列表（用于选择项目成员/审批人等业务场景）。
+ *
+ * <p>内部代理 {@link getUserCandidates}（GET /users/candidates），
+ * 任何登录用户均可调用，不再要求 menu:user-management 权限。
+ * 这是为了修复「ceshi 等普通员工在审批/上传文件等业务场景下选不到审批人」的问题。
  */
 export async function getUserList(params?: {
   keywords?: string;
@@ -152,19 +157,24 @@ export async function getUserList(params?: {
 }): Promise<
   BaseResponse<PageResult<UserListItem>>
 > {
-  const query: Record<string, string> = {
-    pageSize: "500",
-    status: "1",
-    employmentStatus: "1",
+  const query: {
+    keywords?: string;
+    departmentId?: string;
+    includeChildren?: boolean;
+    pageSize: number;
+    status: number;
+    employmentStatus: number;
+  } = {
+    pageSize: 500,
+    status: 1,
+    employmentStatus: 1,
   };
   if (params?.keywords) query.keywords = params.keywords;
   if (params?.departmentId) query.departmentId = params.departmentId;
   if (params?.includeChildren !== undefined) {
-    query.includeChildren = String(params.includeChildren);
+    query.includeChildren = params.includeChildren;
   }
-  return get<PageResult<UserListItem>>("/users/all", {
-    params: query,
-  });
+  return getUserCandidates(query) as unknown as Promise<BaseResponse<PageResult<UserListItem>>>;
 }
 
 /**

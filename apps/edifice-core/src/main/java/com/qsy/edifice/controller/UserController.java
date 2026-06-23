@@ -9,6 +9,7 @@ import com.qsy.edifice.domain.dto.SysUserCreateDto;
 import com.qsy.edifice.domain.dto.SysUserUpdateDto;
 import com.qsy.edifice.domain.dto.UpdateProfileDto;
 import com.qsy.edifice.domain.entity.SysUser;
+import com.qsy.edifice.domain.vo.SysUserCandidateVo;
 import com.qsy.edifice.domain.vo.SysUserDetailVo;
 import com.qsy.edifice.domain.vo.SysUserListVo;
 import com.qsy.edifice.service.SysUserService;
@@ -71,6 +72,16 @@ public class UserController {
         Page<SysUserListVo> userListVoList = sysUserService.getAllUsers(getUserListDto);
 
         return ResultUtils.success(Code.SUCCESS, userListVoList);
+    }
+
+    @GetMapping("/candidates")
+    @Operation(summary = "查询候选人列表",
+            description = "业务场景（审批人/项目经理/项目成员选择等）使用的精简用户列表。" +
+                    "默认只返回在职且启用的用户，仅暴露选人必需字段（不含手机号/邮箱/身份证等敏感信息）。")
+    @PreAuthorize("isAuthenticated()")
+    public BaseResponse<Page<SysUserCandidateVo>> getCandidates(GetUserListDto getUserListDto) {
+        Page<SysUserCandidateVo> candidates = sysUserService.getCandidates(getUserListDto);
+        return ResultUtils.success(Code.SUCCESS, candidates);
     }
 
     @GetMapping("/{id}")

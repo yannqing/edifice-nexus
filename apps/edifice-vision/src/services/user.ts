@@ -147,6 +147,38 @@ export async function getUserList(
   return get<PageResult<SysUserListItem>>("/users/all", { params: query, signal });
 }
 
+/**
+ * 查询候选人列表（业务场景通用：审批人/项目经理/项目成员选择等）。
+ *
+ * <p>对应后端 GET /users/candidates，仅需登录权限（不需要 menu:user-management）。
+ * 返回精简字段（不含身份证、入职日期、最后登录时间等敏感/冗余信息），
+ * 默认只返回在职且启用的用户。
+ *
+ * <p>与 {@link getUserList} 的区别：getUserList 走 /users/all 需要用户管理菜单权限，
+ * 本函数走 /users/candidates 任何登录用户都能调，适合所有业务页面的选人下拉框。
+ */
+export async function getUserCandidates(
+  params?: GetUserListParams,
+  signal?: AbortSignal
+): Promise<BaseResponse<PageResult<SysUserListItem>>> {
+  const query: Record<string, string> = {};
+  if (params?.keywords) query.keywords = params.keywords;
+  if (params?.username) query.username = params.username;
+  if (params?.realName) query.realName = params.realName;
+  if (params?.employeeNo) query.employeeNo = params.employeeNo;
+  if (params?.email) query.email = params.email;
+  if (params?.phone) query.phone = params.phone;
+  if (params?.position) query.position = params.position;
+  if (params?.departmentId) query.departmentId = params.departmentId;
+  if (params?.includeChildren !== undefined) query.includeChildren = String(params.includeChildren);
+  if (params?.employmentStatus !== undefined) query.employmentStatus = String(params.employmentStatus);
+  if (params?.status !== undefined) query.status = String(params.status);
+  if (params?.current !== undefined) query.current = String(params.current);
+  if (params?.pageSize !== undefined) query.pageSize = String(params.pageSize);
+
+  return get<PageResult<SysUserListItem>>("/users/candidates", { params: query, signal });
+}
+
 export async function getUserDetail(id: string): Promise<BaseResponse<SysUser>> {
   return get<SysUser>(`/users/${id}`);
 }
