@@ -27,6 +27,8 @@ use think\facade\View;
 class Role extends BaseController
 {
     private const HIDDEN_OA_MODULES = ['project'];
+    private const HIDDEN_RULE_IDS = ['900001011'];
+    private const HIDDEN_RULE_NAMES = ['edifice:menu:collection'];
     private const HIDDEN_MOBILE_URL_PREFIXES = ['/qiye/project'];
 
     public function index()
@@ -50,6 +52,7 @@ class Role extends BaseController
         $param = get_params();
         if (request()->isAjax()) {
             $ruleData = $this->normalizeMultiValue($param['rule'] ?? []);
+            $ruleData = $this->withoutHiddenRules($ruleData);
             $ruleData = $this->withRequiredEdificeRules($ruleData);
             $layoutData = $this->normalizeMultiValue($param['layout'] ?? []);
             $menuData = $this->normalizeMultiValue($param['mobile_menu'] ?? []);
@@ -188,9 +191,17 @@ class Role extends BaseController
 
     private function filterHiddenRules(array $rules): array
     {
-        return array_values(array_filter($rules, static function ($rule) {
-            return !in_array($rule['module'] ?? '', self::HIDDEN_OA_MODULES, true);
-        }));
+        $visible = [];
+        foreach ($rules as $rule) {
+            if ($this->isHiddenRule($rule)) {
+                continue;
+            }
+            if (!empty($rule['children']) && is_array($rule['children'])) {
+                $rule['children'] = $this->filterHiddenRules($rule['children']);
+            }
+            $visible[] = $rule;
+        }
+        return $visible;
     }
 
     private function filterHiddenMobileBar(array $bars): array
@@ -211,6 +222,13 @@ class Role extends BaseController
         return array_values(array_unique(array_merge($ruleData, $this->requiredEdificeRuleIds())));
     }
 
+    private function withoutHiddenRules(array $ruleData): array
+    {
+        return array_values(array_filter($ruleData, static function ($ruleId) {
+            return !in_array((string) $ruleId, self::HIDDEN_RULE_IDS, true);
+        }));
+    }
+
     private function markRequiredEdificeRules(array $rules): array
     {
         $required = $this->requiredEdificeRuleIds();
@@ -223,6 +241,17 @@ class Role extends BaseController
             }
         }
         return $rules;
+    }
+
+    private function isHiddenRule(array $rule): bool
+    {
+        if (in_array($rule['module'] ?? '', self::HIDDEN_OA_MODULES, true)) {
+            return true;
+        }
+        if (in_array((string)($rule['id'] ?? ''), self::HIDDEN_RULE_IDS, true)) {
+            return true;
+        }
+        return in_array((string)($rule['name'] ?? ''), self::HIDDEN_RULE_NAMES, true);
     }
 
     private function normalizeMultiValue($value): array

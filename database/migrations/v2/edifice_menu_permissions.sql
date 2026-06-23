@@ -43,7 +43,7 @@ VALUES
     (900000000000000001, '超级管理员', 'SUPER_ADMIN', '拥有 edifice 全部功能权限', 1, 0),
     (900000000000000002, '普通员工', 'STAFF', '默认员工权限，可访问个人工作相关功能', 1, 0),
     (900000000000000003, '项目管理员', 'PROJECT_ADMIN', '管理项目、验工、文件审批、投标等项目功能', 1, 0),
-    (900000000000000004, '财务人员', 'FINANCE', '管理产值、回款及财务相关报表', 1, 0),
+    (900000000000000004, '财务人员', 'FINANCE', '管理产值及财务相关报表', 1, 0),
     (900000000000000005, '管理层', 'MANAGER', '查看管理视图、报表和审批相关功能', 1, 0)
 ON DUPLICATE KEY UPDATE
     role_name = VALUES(role_name),
@@ -63,7 +63,7 @@ VALUES
     (900000000000001008, '项目文件审批', 'menu:project-files-approval', 1, 0, '/project-files/approval', 0),
     (900000000000001009, '投标管理', 'menu:bids', 1, 0, '/bids', 0),
     (900000000000001010, '产值分配', 'menu:output-value', 1, 0, '/output-value', 0),
-    (900000000000001011, '回款记录', 'menu:collection', 1, 0, '/collection', 0),
+    (900000000000001011, '回款记录', 'menu:collection', 1, 0, '/collection', 1),
     (900000000000001012, '统计报表', 'menu:statistics', 1, 0, '/statistics', 0),
     (900000000000001013, '个人绩效', 'menu:performance', 1, 0, '/performance', 0),
     (900000000000001014, '人员分配汇总', 'menu:personnel-quarter', 1, 0, '/reports/personnel-quarter', 0),
@@ -75,6 +75,11 @@ ON DUPLICATE KEY UPDATE
     parent_id = VALUES(parent_id),
     path = VALUES(path),
     is_delete = VALUES(is_delete);
+
+-- 回款记录功能暂不启用：保留权限定义用于历史兼容，但不再展示或授权。
+UPDATE sys_role_permission
+SET is_delete = 1
+WHERE permission_id = 900000000000001011;
 
 -- 将 edifice 权限节点写入 OA 的“系统管理 / 角色权限”树。
 -- 后续只需要在 OA 的角色权限里勾选这些节点；edifice 定时同步 OA 权限组并据此显示/拦截模块。
@@ -91,7 +96,6 @@ VALUES
     (900001008, 900001000, '/project-files/approval', '项目文件审批', 'edifice:menu:project-files-approval', 'edifice', '', 0, 8, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
     (900001009, 900001000, '/bids', '投标管理', 'edifice:menu:bids', 'edifice', '', 0, 9, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
     (900001010, 900001000, '/output-value', '产值分配', 'edifice:menu:output-value', 'edifice', '', 0, 10, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
-    (900001011, 900001000, '/collection', '回款记录', 'edifice:menu:collection', 'edifice', '', 0, 11, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
     (900001012, 900001000, '/statistics', '统计报表', 'edifice:menu:statistics', 'edifice', '', 0, 12, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
     (900001013, 900001000, '/performance', '个人绩效', 'edifice:menu:performance', 'edifice', '', 0, 13, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
     (900001014, 900001000, '/reports/personnel-quarter', '人员分配汇总', 'edifice:menu:personnel-quarter', 'edifice', '', 0, 14, 1, UNIX_TIMESTAMP(), UNIX_TIMESTAMP()),
@@ -108,6 +112,14 @@ ON DUPLICATE KEY UPDATE
     status = VALUES(status),
     update_time = UNIX_TIMESTAMP();
 
+UPDATE office_db.oa_admin_rule
+SET status = 0, update_time = UNIX_TIMESTAMP()
+WHERE id = 900001011 OR name = 'edifice:menu:collection';
+
+UPDATE office_db.oa_admin_group
+SET rules = TRIM(BOTH ',' FROM REPLACE(CONCAT(',', rules, ','), ',900001011,', ','))
+WHERE FIND_IN_SET('900001011', rules);
+
 SET @edifice_required_rule_ids := '900001000,900001001,900001002,900001013';
 UPDATE office_db.oa_admin_group
 SET rules = TRIM(BOTH ',' FROM CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM rules), ''), '900001000'))
@@ -122,7 +134,7 @@ UPDATE office_db.oa_admin_group
 SET rules = TRIM(BOTH ',' FROM CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM rules), ''), '900001013'))
 WHERE FIND_IN_SET('900001013', rules) = 0;
 
-SET @edifice_rule_ids := '900001000,900001001,900001002,900001003,900001004,900001005,900001006,900001007,900001008,900001009,900001010,900001011,900001012,900001013,900001014,900001015,900001016';
+SET @edifice_rule_ids := '900001000,900001001,900001002,900001003,900001004,900001005,900001006,900001007,900001008,900001009,900001010,900001012,900001013,900001014,900001015,900001016';
 UPDATE office_db.oa_admin_group
 SET rules = CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM rules), ''), @edifice_rule_ids)
 WHERE id = 1
@@ -147,7 +159,6 @@ JOIN sys_permission p ON p.permission_code IN (
     'menu:project-files-approval',
     'menu:bids',
     'menu:output-value',
-    'menu:collection',
     'menu:statistics',
     'menu:performance',
     'menu:personnel-quarter',
@@ -209,7 +220,6 @@ FROM sys_role r
 JOIN sys_permission p ON p.permission_code IN (
     'menu:workbench',
     'menu:output-value',
-    'menu:collection',
     'menu:statistics',
     'menu:personnel-quarter'
 )
@@ -234,7 +244,6 @@ JOIN sys_permission p ON p.permission_code IN (
     'menu:project-files-approval',
     'menu:bids',
     'menu:output-value',
-    'menu:collection',
     'menu:statistics',
     'menu:personnel-quarter',
     'menu:announcement-management'

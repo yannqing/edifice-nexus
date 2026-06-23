@@ -316,13 +316,6 @@ export const navigationConfig: NavSection[] = [
         href: "/output-value",
         permissionCode: "menu:output-value",
       },
-      {
-        id: "collection",
-        label: "回款记录",
-        icon: "Wallet",
-        href: "/collection",
-        permissionCode: "menu:collection",
-      },
     ],
   },
   {
