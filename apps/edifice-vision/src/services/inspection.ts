@@ -78,12 +78,12 @@ export async function getInspectionDetail(
 }
 
 /**
- * 验工单统计总览
+ * 验工单统计总览（全局，供验工单管理页使用）
  */
 export async function getInspectionOverview(): Promise<
   BaseResponse<InspectionOverviewVo>
 > {
-  return get<InspectionOverviewVo>("/inspections/my-list/statistic");
+  return get<InspectionOverviewVo>("/inspections/statistic");
 }
 
 /**
