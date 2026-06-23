@@ -513,7 +513,7 @@ class Contract extends BaseController
 			View::assign('auth', $auth);
 			View::assign('engineering_project', $engineeringProject);
 			View::assign('engineering_project_types', $engineeringProjectTypes);
-			View::assign('edifice_web_url', rtrim((string)env('EDIFICE_WEB_URL', 'http://127.0.0.1:3000'), '/'));
+			View::assign('edifice_web_url', $this->edificeWebUrl());
 			if(is_mobile()){
 				return view('qiye@/contract/contract_view');
 			}
@@ -578,6 +578,22 @@ class Contract extends BaseController
 		}
 		$shareIds = array_filter(array_map('intval', explode(',', (string)$contract['share_ids'])));
 		return in_array((int)$this->uid, $shareIds, true);
+	}
+
+	private function edificeWebUrl(): string
+	{
+		$configuredUrl = trim((string)env('EDIFICE_WEB_URL', ''));
+		if ($configuredUrl !== '') {
+			return rtrim($configuredUrl, '/');
+		}
+
+		$domain = request()->domain();
+		$scheme = parse_url($domain, PHP_URL_SCHEME) ?: 'http';
+		$host = parse_url($domain, PHP_URL_HOST);
+		if (!$host) {
+			$host = explode(':', (string)($_SERVER['HTTP_HOST'] ?? '127.0.0.1'))[0];
+		}
+		return $scheme . '://' . $host . ':3001';
 	}
 	
    /**

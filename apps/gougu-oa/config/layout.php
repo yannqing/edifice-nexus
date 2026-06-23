@@ -19,18 +19,6 @@ return [
 			'name'       => 'note',
 			'title'       => '企业公告',
         ],
-		[
-			'id'       => 4,
-			'row'       => 1,
-			'name'       => 'project',
-			'title'       => '项目列表',
-        ],
-        [
-			'id'       => 5,
-			'row'       => 1,
-			'name'       => 'task',
-			'title'       => '任务列表',
-        ],
         [
 			'id'       => 6,
 			'row'       => 1,

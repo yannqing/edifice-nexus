@@ -26,6 +26,9 @@ use think\facade\View;
 
 class Role extends BaseController
 {
+    private const HIDDEN_OA_MODULES = ['project'];
+    private const HIDDEN_MOBILE_URL_PREFIXES = ['/qiye/project'];
+
     public function index()
     {
         if (request()->isAjax()) {
@@ -104,9 +107,10 @@ class Role extends BaseController
             return to_assign();
         } else {
             $id = isset($param['id']) ? $param['id'] : 0;
-            $rule = admin_rule();
+            $rule = $this->filterHiddenRules(admin_rule());
 			$layouts = get_config('layout');
 			$mobile_bar = Db::name('MobileBar')->where([['status','=',1]])->field('id,url,title,icon')->select()->toArray();
+            $mobile_bar = $this->filterHiddenMobileBar($mobile_bar);
 			$mobile_menu = Db::name('MobileTypes')->where(['status'=>1])->select()->toArray();		
 
 			
@@ -180,6 +184,26 @@ class Role extends BaseController
     private function requiredEdificeRuleIds(): array
     {
         return ['900001000', '900001001', '900001002', '900001013', '900001018', '900001019'];
+    }
+
+    private function filterHiddenRules(array $rules): array
+    {
+        return array_values(array_filter($rules, static function ($rule) {
+            return !in_array($rule['module'] ?? '', self::HIDDEN_OA_MODULES, true);
+        }));
+    }
+
+    private function filterHiddenMobileBar(array $bars): array
+    {
+        return array_values(array_filter($bars, static function ($bar) {
+            $url = (string)($bar['url'] ?? '');
+            foreach (self::HIDDEN_MOBILE_URL_PREFIXES as $prefix) {
+                if (str_starts_with($url, $prefix)) {
+                    return false;
+                }
+            }
+            return true;
+        }));
     }
 
     private function withRequiredEdificeRules(array $ruleData): array

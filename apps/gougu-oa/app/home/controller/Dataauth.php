@@ -22,10 +22,12 @@ use think\facade\View;
 
 class dataauth extends BaseController
 {
+	private const HIDDEN_DATA_AUTH_NAMES = ['project_admin'];
+
     public function index()
     {
         if (request()->isAjax()) {
-			$list = Db::name('DataAuth')->select();
+			$list = Db::name('DataAuth')->whereNotIn('name', self::HIDDEN_DATA_AUTH_NAMES)->select();
             return to_assign(0, '', $list);
         } else {
             return view();
@@ -37,6 +39,10 @@ class dataauth extends BaseController
     {
         $param = get_params();
         if (request()->isAjax()) {
+			$detail = Db::name('DataAuth')->where('id', $param['id'] ?? 0)->find();
+			if (empty($detail) || in_array($detail['name'], self::HIDDEN_DATA_AUTH_NAMES, true)) {
+				return to_assign(1, '该模块配置已停用');
+			}
             $param['update_time'] = time();
             $res = Db::name('DataAuth')->strict(false)->field(true)->update($param);
             if ($res) {
@@ -46,6 +52,9 @@ class dataauth extends BaseController
         } else {
             $id = isset($param['id']) ? $param['id'] : 0;
             $detail = $this->auth_detail($id);
+			if (empty($detail)) {
+				return view('../../base/view/common/roletemplate');
+			}
             $module = strtolower(app('http')->getName());
             $class = strtolower(app('request')->controller());
             $action = strtolower(app('request')->action());
@@ -62,6 +71,9 @@ class dataauth extends BaseController
 	public function auth_detail($id)
     {
         $detail = Db::name('DataAuth')->where('id',$id)->find();
+		if (empty($detail) || in_array($detail['name'], self::HIDDEN_DATA_AUTH_NAMES, true)) {
+			return [];
+		}
 		//	日常办公
 		if($detail['name'] =='office_admin'){			
 			$conf_1_str = Db::name('Admin')->where('id', 'in', $detail['conf_1'])->column('name');
@@ -86,10 +98,6 @@ class dataauth extends BaseController
             $detail['conf_1_str'] = implode(',', $conf_1_str);
 		}
 		if($detail['name'] =='contract_admin'){
-			$conf_1_str = Db::name('Admin')->where('id', 'in', $detail['conf_1'])->column('name');
-            $detail['conf_1_str'] = implode(',', $conf_1_str);
-		}
-		if($detail['name'] =='project_admin'){
 			$conf_1_str = Db::name('Admin')->where('id', 'in', $detail['conf_1'])->column('name');
             $detail['conf_1_str'] = implode(',', $conf_1_str);
 		}

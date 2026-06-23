@@ -51,15 +51,6 @@
 				{include file="/index/layout_note" /}	
 			{/if}
 			
-			{if ( $layout.row == 1) AND ( $layout.name == 'project') }
-				{include file="/index/layout_project" /}	
-			{/if}
-			
-			{if ( $layout.row == 1) AND ( $layout.name == 'task') }
-				{include file="/index/layout_task" /}	
-			{/if}
-			
-			
 			{if ( $layout.row == 1) AND ( $layout.name == 'chartview') }
 				{include file="/index/layout_chartview" /}	
 			{/if}
@@ -169,14 +160,6 @@
 		
 		if(typeof layoutNote ==='function'){
 			layoutNote(table);
-		}
-		
-		if(typeof layoutProject ==='function'){
-			layoutProject(table);
-		}
-		
-		if(typeof layoutTask ==='function'){
-			layoutTask(table);
 		}
 		
 		if(typeof layoutChartView ==='function'){

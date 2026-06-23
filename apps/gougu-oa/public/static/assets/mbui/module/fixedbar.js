@@ -7,7 +7,6 @@ mbui.define([], function (exports) {
 				<a href="/qiye/index/index">工作台</a>\
 				<a href="/qiye/customer/index">客户<br>管理</a>\
 				<a href="/qiye/contract/index">合同<br>管理</a>\
-				<a href="/qiye/project/index">项目<br>管理</a>\
 				<a href="/qiye/msg/index">消息<br>通知</a>\
 			</div>\
 		</div>');

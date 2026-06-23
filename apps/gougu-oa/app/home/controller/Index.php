@@ -26,6 +26,9 @@ use think\facade\View;
 
 class Index extends BaseController
 {	
+	private const HIDDEN_OA_MODULES = ['project', 'edifice'];
+	private const HIDDEN_DASHBOARD_LAYOUTS = ['project', 'task'];
+
     public function index()
     {
 		$mobile = is_mobile();
@@ -43,10 +46,14 @@ class Index extends BaseController
 				$v = explode(',', $v);
 				$adminMenus = array_merge($adminMenus, $v);
 			}
-			$menu = Db::name('AdminRule')->where(['menu' => 1, 'status' => 1])->where('id', 'in', $adminMenus)->order('sort asc,id asc')->select()->toArray();
+			$menu = Db::name('AdminRule')->where(['menu' => 1, 'status' => 1])
+				->where('id', 'in', $adminMenus)
+				->whereNotIn('module', self::HIDDEN_OA_MODULES)
+				->order('sort asc,id asc')->select()->toArray();
 			$list = list_to_tree($menu);
 			\think\facade\Cache::tag('adminMenu')->set('menu' . $this->uid, $list);
 		}
+		$list = $this->filterHiddenMenu($list);
 		View::assign('menu', $list);
 		View::assign('admin',$admin);
 		View::assign('system',get_system_config('system'));
@@ -78,8 +85,24 @@ class Index extends BaseController
 			'status' => (int)$admin['status'],
 		], $secret, 'HS256');
 
-		$edificeUrl = rtrim((string)env('EDIFICE_WEB_URL', 'http://127.0.0.1:3000'), '/');
+		$edificeUrl = $this->edificeWebUrl();
 		return redirect($edificeUrl . '/sso/oa?token=' . rawurlencode($token));
+	}
+
+	private function edificeWebUrl(): string
+	{
+		$configuredUrl = trim((string)env('EDIFICE_WEB_URL', ''));
+		if ($configuredUrl !== '') {
+			return rtrim($configuredUrl, '/');
+		}
+
+		$domain = request()->domain();
+		$scheme = parse_url($domain, PHP_URL_SCHEME) ?: 'http';
+		$host = parse_url($domain, PHP_URL_HOST);
+		if (!$host) {
+			$host = explode(':', (string)($_SERVER['HTTP_HOST'] ?? '127.0.0.1'))[0];
+		}
+		return $scheme . '://' . $host . ':3001';
 	}
 
     public function main()
@@ -173,13 +196,7 @@ class Index extends BaseController
             'id' => 242,
             'url' => '/finance/ticket/datalist',
         );
-		$handle[] = array(
-            'name' => '待完成任务',
-            'num' => Db::name('ProjectTask')->where([['director_uid', '=', $uid],['status', '<', 3],['delete_time', '=', 0]])->count(),
-            'id' => 348,
-            'url' => '/project/task/datalist',
-        );
-				
+
 		$whereCustomer = array();
 		$whereCustomerOr = array();
 		$whereCustomer[] = ['delete_time', '=', 0];
@@ -230,39 +247,6 @@ class Index extends BaseController
 			'num' => $purchaseCount,
 		);
 		
-		$project_ids = Db::name('ProjectUser')->where(['uid' => $uid, 'delete_time' => 0])->column('project_id');
-		$whereProject = [];
-		$whereProject[] = ['delete_time', '=', 0];
-		$whereProject[] = ['id', 'in', $project_ids];			
-		$projectCount = Db::name('Project')->where($whereProject)->count();
-		
-		$whereOr = array();
-		$map1 = [];
-		$map2 = [];
-		$map3 = [];
-		$map4 = [];
-		$map1[] = ['admin_id', '=', $uid];
-		$map2[] = ['director_uid', '=', $uid];
-		$map3[] = ['', 'exp', Db::raw("FIND_IN_SET({$uid},assist_admin_ids)")];
-		$map4[] = ['project_id', 'in', $project_ids];
-		
-		$whereOr =[$map1,$map2,$map3];
-		$taskCount = Db::name('ProjectTask')
-			->where(function ($query) use ($whereOr) {
-				if (!empty($whereOr))
-					$query->whereOr($whereOr);
-				})
-			->where([['delete_time', '=', 0]])->count();
-		
-		$total[] = array(
-			'name' => '项目总数',
-			'num' => $projectCount,
-		);
-		$total[] = array(
-			'name' => '任务总数',
-			'num' => $taskCount,
-		);
-		
 		$todue=[];
 		$delay_day = valueAuth('contract_admin','conf_10');
 		if(empty($delay_day)){
@@ -298,29 +282,6 @@ class Index extends BaseController
             'id' => 323,
             'url' => '/contract/purchase/datalist',
         );
-		$delay_day_b = valueAuth('project_admin','conf_10');
-		if(empty($delay_day_b)){
-			$delay_day_b = 3;
-		}
-		$delay_day_b_time = time()+$delay_day_b*60*60*24;
-		$todue[] = array(
-            'name' => '快到期的项目',
-            'num' =>  Db::name('Project')->where($whereProject)->where([['status','<',3],['end_time','<',$delay_day_b_time]])->count(),
-            'id' => 343,
-            'url' => '/project/index/datalist',
-        );
-        $todue[] = array(
-            'name' => '快到期的任务',
-            'num' =>  Db::name('ProjectTask')
-			->where(function ($query) use ($whereOr) {
-				if (!empty($whereOr))
-					$query->whereOr($whereOr);
-				})
-			->where([['delete_time', '=', 0],['status','<',3],['end_time','<',$delay_day_b_time]])->count(),
-            'id' => 348,
-            'url' => '/project/task/datalist',
-        );
-		
 		$position_id = Db::name('Admin')->where('id',$uid)->value('position_id');
 		$adminGroup = Db::name('PositionGroup')->where(['pid' => $position_id])->column('group_id');
 		$adminLayout = Db::name('AdminGroup')->where('id', 'in', $adminGroup)->column('layouts');
@@ -332,6 +293,9 @@ class Index extends BaseController
 		$layouts = get_config('layout');
 		$layout_selected = [];
 		foreach ($layouts as $key =>$vo) {
+			if (in_array($vo['name'], self::HIDDEN_DASHBOARD_LAYOUTS, true)) {
+				continue;
+			}
 			if (!empty($adminLayouts) and in_array($vo['id'], $adminLayouts)) {
 				$layout_selected[] = $vo;
 			}
@@ -344,6 +308,21 @@ class Index extends BaseController
         View::assign('TP_VERSION', \think\facade\App::version());
         return View();
     }
+
+	private function filterHiddenMenu(array $menus): array
+	{
+		$visible = [];
+		foreach ($menus as $menu) {
+			if (in_array($menu['module'] ?? '', self::HIDDEN_OA_MODULES, true)) {
+				continue;
+			}
+			if (!empty($menu['children']) && is_array($menu['children'])) {
+				$menu['children'] = $this->filterHiddenMenu($menu['children']);
+			}
+			$visible[] = $menu;
+		}
+		return $visible;
+	}
 	
 	//权限不足
 	public function role()

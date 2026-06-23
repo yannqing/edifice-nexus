@@ -100,6 +100,7 @@ TRUNCATE TABLE office_db.oa_admin_profiles;
 TRUNCATE TABLE office_db.oa_admin_log;
 TRUNCATE TABLE office_db.oa_admin_log_count;
 TRUNCATE TABLE office_db.oa_admin_group;
+TRUNCATE TABLE office_db.oa_position_group;
 TRUNCATE TABLE office_db.oa_department_admin;
 TRUNCATE TABLE office_db.oa_department_change;
 
