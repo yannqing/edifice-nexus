@@ -2,7 +2,9 @@ package com.qsy.edifice.service.impl;
 
 import com.alibaba.excel.EasyExcel;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.qsy.edifice.domain.dto.ApproveDto;
 import com.qsy.edifice.domain.dto.CreateOutputValueDto;
+import com.qsy.edifice.domain.dto.SubmitApprovalDto;
 import com.qsy.edifice.domain.entity.*;
 import com.qsy.edifice.domain.excel.OutputValueExcelData;
 import com.qsy.edifice.domain.vo.OutputValueVo;
@@ -107,6 +109,9 @@ public class OutputValueServiceImpl implements OutputValueService {
 
     @Resource
     private BusinessRuleConfigService businessRuleConfigService;
+
+    @Resource
+    private ApprovalFlowService approvalFlowService;
 
     // ==================== 查询 ====================
 
@@ -283,6 +288,15 @@ public class OutputValueServiceImpl implements OutputValueService {
                 cumulative.basePart, cumulative.benefitPart,
                 companyReserve, sumActual);
 
+        // 同步提交到统一审批流（供统一待办/消息中心消费）
+        // L1 = 确认人（confirmUserId），后续 confirm→approve→pay 时分别流转
+        SubmitApprovalDto submit = new SubmitApprovalDto();
+        submit.setBizType(ApprovalBizType.OUTPUT.getExt());
+        submit.setBizId(ov.getOutputValueId());
+        submit.setFirstApproverId(dto.getConfirmUserId());
+        submit.setDescription("产值分配单待确认 · 季度 " + ov.getQuarter());
+        approvalFlowService.submit(submit, userId);
+
         return ov.getOutputValueId();
     }
 
@@ -392,6 +406,16 @@ public class OutputValueServiceImpl implements OutputValueService {
         ov.setApproveUserId(approveUserId);
         ov.setCurrentHandlerId(approveUserId);
         outputValueMapper.updateById(ov);
+
+        // 同步流转统一审批流：L1（确认）→ L2（审批），下一级审批人 = approveUserId
+        ApprovalRecords pending = approvalFlowService.getCurrentPending(ApprovalBizType.OUTPUT, outputValueId);
+        if (pending != null) {
+            ApproveDto approve = new ApproveDto();
+            approve.setRecordId(pending.getApprovalRecordId());
+            approve.setPass(true);
+            approve.setNextApproverId(approveUserId);
+            approvalFlowService.approve(approve, operatorId);
+        }
     }
 
     private boolean hasConfirmedStageOutputValue(List<OutputValue> outputValues, Long excludeOutputValueId) {
@@ -420,6 +444,16 @@ public class OutputValueServiceImpl implements OutputValueService {
         ov.setPayUserId(payUserId);
         ov.setCurrentHandlerId(payUserId);
         outputValueMapper.updateById(ov);
+
+        // 同步流转统一审批流：L2（审批）→ L3（发放），下一级审批人 = payUserId
+        ApprovalRecords pending = approvalFlowService.getCurrentPending(ApprovalBizType.OUTPUT, outputValueId);
+        if (pending != null) {
+            ApproveDto approve = new ApproveDto();
+            approve.setRecordId(pending.getApprovalRecordId());
+            approve.setPass(true);
+            approve.setNextApproverId(payUserId);
+            approvalFlowService.approve(approve, operatorId);
+        }
     }
 
     @Override
@@ -434,6 +468,16 @@ public class OutputValueServiceImpl implements OutputValueService {
         ov.setPaidTime(LocalDateTime.now());
         ov.setCurrentHandlerId(null);
         outputValueMapper.updateById(ov);
+
+        // 同步流转统一审批流：L3（发放）终审通过，流程结束
+        ApprovalRecords pending = approvalFlowService.getCurrentPending(ApprovalBizType.OUTPUT, outputValueId);
+        if (pending != null) {
+            ApproveDto approve = new ApproveDto();
+            approve.setRecordId(pending.getApprovalRecordId());
+            approve.setPass(true);
+            approve.setTerminate(true);
+            approvalFlowService.approve(approve, operatorId);
+        }
     }
 
     private void assertCurrentHandler(OutputValue ov, Long operatorId, String message) {
