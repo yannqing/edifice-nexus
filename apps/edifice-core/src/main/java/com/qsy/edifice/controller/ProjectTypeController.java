@@ -32,7 +32,7 @@ public class ProjectTypeController {
 
     @GetMapping("/list")
     @Operation(summary = "分页查询项目类型")
-    @PreAuthorize("hasAuthority('menu:project-type-config') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('menu:project-config') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Page<ProjectType>> list(
             @RequestParam(value = "keyword", required = false) String keyword,
             @RequestParam(value = "status", required = false) Integer status,
@@ -64,7 +64,7 @@ public class ProjectTypeController {
 
     @PostMapping("/create")
     @Operation(summary = "新增项目类型")
-    @PreAuthorize("hasAuthority('menu:project-type-config') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('menu:project-config') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> create(@RequestBody ProjectType projectType) {
         // 校验编码唯一性
         ProjectType existing = projectTypeService.getProjectTypeByCode(projectType.getProjectTypeCode());
@@ -78,7 +78,7 @@ public class ProjectTypeController {
 
     @PutMapping("/update")
     @Operation(summary = "修改项目类型")
-    @PreAuthorize("hasAuthority('menu:project-type-config') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('menu:project-config') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> update(@RequestBody ProjectType projectType) {
         if (projectType.getProjectTypeId() == null) {
             return ResultUtils.failure(Code.FAILURE, null, "类型ID不能为空");
@@ -95,7 +95,7 @@ public class ProjectTypeController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "删除项目类型")
-    @PreAuthorize("hasAuthority('menu:project-type-config') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('menu:project-config') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> delete(@PathVariable("id") Long id) {
         boolean ok = projectTypeService.deleteProjectType(id);
         return ok ? ResultUtils.success(Code.SUCCESS, true, "删除成功")

@@ -29,6 +29,7 @@ import {
   ListTodo,
   SlidersHorizontal,
   Archive,
+  Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -81,6 +82,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   ListTodo,
   SlidersHorizontal,
   Archive,
+  Settings2,
 };
 
 interface SidebarProps {

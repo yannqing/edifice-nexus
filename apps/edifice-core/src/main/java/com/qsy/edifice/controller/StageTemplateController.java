@@ -32,7 +32,7 @@ public class StageTemplateController {
 
     @GetMapping("/list")
     @Operation(summary = "分页查询阶段模板")
-    @PreAuthorize("hasAuthority('menu:stage-template-config') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('menu:project-config') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Page<ProjectStageTemplate>> list(
             @RequestParam(value = "projectTypeId", required = false) Long projectTypeId,
             @RequestParam(value = "status", required = false) Integer status,
@@ -68,7 +68,7 @@ public class StageTemplateController {
 
     @PostMapping("/create")
     @Operation(summary = "新增阶段模板")
-    @PreAuthorize("hasAuthority('menu:stage-template-config') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('menu:project-config') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> create(@RequestBody ProjectStageTemplate template) {
         if (template.getProjectTypeId() == null) {
             return ResultUtils.failure(Code.FAILURE, null, "项目类型不能为空");
@@ -80,7 +80,7 @@ public class StageTemplateController {
 
     @PutMapping("/update")
     @Operation(summary = "修改阶段模板")
-    @PreAuthorize("hasAuthority('menu:stage-template-config') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('menu:project-config') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> update(@RequestBody ProjectStageTemplate template) {
         if (template.getStageId() == null) {
             return ResultUtils.failure(Code.FAILURE, null, "阶段ID不能为空");
@@ -92,7 +92,7 @@ public class StageTemplateController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "删除阶段模板")
-    @PreAuthorize("hasAuthority('menu:stage-template-config') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAuthority('menu:project-config') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> delete(@PathVariable("id") Long id) {
         boolean ok = stageTemplateService.deleteProjectStageTemplate(id);
         return ok ? ResultUtils.success(Code.SUCCESS, true, "删除成功")
