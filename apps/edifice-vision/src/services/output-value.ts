@@ -45,6 +45,11 @@ export async function payOutputValue(id: string): Promise<BaseResponse<boolean>>
   return put<boolean>(`/output-value/pay/${id}`);
 }
 
+/** 终审产值分配单：当前处理人（确认人/审批人）直接终审，跳过后续环节，状态置为已发放 */
+export async function terminateOutputValue(id: string): Promise<BaseResponse<boolean>> {
+  return put<boolean>(`/output-value/terminate/${id}`);
+}
+
 export async function exportOutputValueExcel(status?: number, keyword?: string): Promise<void> {
   const params = new URLSearchParams();
   if (status !== undefined) params.set("status", String(status));

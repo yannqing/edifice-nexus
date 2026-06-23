@@ -96,4 +96,15 @@ public class OutputValueController {
         outputValueService.payOutputValue(id, loginUser.getUserId());
         return ResultUtils.success(Code.SUCCESS, true, "发放成功");
     }
+
+    @PutMapping("/terminate/{id}")
+    @Operation(summary = "终审产值分配单",
+            description = "当前处理人在确认/审批阶段直接终审，跳过后续环节，分配单状态直接置为已发放。" +
+                    "是否允许终审由流程配置中心的 output 节点 allow_terminate 决定。")
+    public BaseResponse<Boolean> terminate(@PathVariable("id") Long id, HttpServletRequest request) throws JsonProcessingException {
+        String token = request.getHeader("token");
+        SysUser loginUser = jwtUtils.getUserFromToken(token);
+        outputValueService.terminateOutputValue(id, loginUser.getUserId());
+        return ResultUtils.success(Code.SUCCESS, true, "终审通过，分配单已结束");
+    }
 }

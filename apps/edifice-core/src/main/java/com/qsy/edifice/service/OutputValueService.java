@@ -45,6 +45,15 @@ public interface OutputValueService {
     void payOutputValue(Long outputValueId, Long operatorId);
 
     /**
+     * 终审产值分配单：当前处理人在确认/审批阶段直接终审，
+     * 跳过后续环节，分配单状态直接置为已发放（3）。
+     * 仅当流程配置中心 output 流程当前节点 allow_terminate=1 时允许。
+     * @param outputValueId 分配单id
+     * @param operatorId    当前处理人（确认人 / 审批人）
+     */
+    void terminateOutputValue(Long outputValueId, Long operatorId);
+
+    /**
      * 统计数据
      * @return 各状态数量 + 已发放总额
      */

@@ -31,11 +31,14 @@ import {
   confirmOutputValue,
   approveOutputValue,
   payOutputValue,
+  terminateOutputValue,
   exportOutputValueExcel,
 } from "@/services/output-value";
+import { getEnabledFlowConfig } from "@/services/config-center";
 import { ResponseCode } from "@/types/api";
 import type { OutputValueVo, OutputValueStats } from "@/types/output-value";
 import type { UserListItem } from "@/types/project";
+import type { ApprovalFlowConfigVo } from "@/types/config-center";
 import {
   OUTPUT_VALUE_STATUS_MAP,
   WORK_TYPE_LABELS,
@@ -45,7 +48,7 @@ import { CreateOutputValueDialog } from "@/components/output-value/create-output
 import { useDetailLink } from "@/hooks/use-detail-link";
 
 type TabKey = "all" | "pending" | "review" | "approved" | "paid";
-type ActionKind = "confirm" | "approve" | "pay";
+type ActionKind = "confirm" | "approve" | "pay" | "terminate";
 
 const statusFilterMap: Record<TabKey, number | undefined> = {
   all: undefined,
@@ -92,15 +95,18 @@ export default function OutputValuePage() {
   const [actionTarget, setActionTarget] = useState<OutputValueVo | null>(null);
   const [actionKind, setActionKind] = useState<ActionKind | null>(null);
   const [nextUserId, setNextUserId] = useState("");
+  // 产值分配的流程配置：用于决定「确认/审批」节点是否允许终审
+  const [flowConfig, setFlowConfig] = useState<ApprovalFlowConfigVo | null>(null);
   useDetailLink(setExpandedId);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [listRes, statsRes, usersRes] = await Promise.all([
+      const [listRes, statsRes, usersRes, flowRes] = await Promise.all([
         getOutputValueList(statusFilterMap[activeTab]),
         getOutputValueStats(),
         getUserList(),
+        getEnabledFlowConfig("output"),
       ]);
       if (listRes.code === ResponseCode.SUCCESS) {
         setItems(listRes.data ?? []);
@@ -110,6 +116,9 @@ export default function OutputValuePage() {
       }
       if (usersRes.code === ResponseCode.SUCCESS && usersRes.data) {
         setUsers(usersRes.data.records ?? []);
+      }
+      if (flowRes.code === ResponseCode.SUCCESS && flowRes.data) {
+        setFlowConfig(flowRes.data);
       }
     } catch { /* 静默 */ }
     finally { setLoading(false); }
@@ -134,6 +143,15 @@ export default function OutputValuePage() {
     setNextUserId("");
   };
 
+  /** 当前节点是否允许终审：产值分配 status 0=L1（确认），1=L2（审批） */
+  const canTerminate = (status: number | undefined | null): boolean => {
+    if (!flowConfig) return false;
+    const nodeOrder = status === 0 ? 1 : status === 1 ? 2 : null;
+    if (nodeOrder == null) return false;
+    const node = flowConfig.nodes.find((n) => n.nodeOrder === nodeOrder);
+    return node?.allowTerminate === 1;
+  };
+
   const handleAction = async () => {
     if (!actionTarget || !actionKind) return;
     if ((actionKind === "confirm" || actionKind === "approve") && !nextUserId) {
@@ -144,13 +162,20 @@ export default function OutputValuePage() {
     const id = actionTarget.outputValueId;
     setActionLoading(id);
     try {
-      const labelMap = { confirm: "确认成功", approve: "审批通过", pay: "发放成功" };
+      const labelMap: Record<ActionKind, string> = {
+        confirm: "确认成功",
+        approve: "审批通过",
+        pay: "发放成功",
+        terminate: "终审通过，分配单已结束",
+      };
       const res =
         actionKind === "confirm"
           ? await confirmOutputValue(id, nextUserId)
           : actionKind === "approve"
             ? await approveOutputValue(id, nextUserId)
-            : await payOutputValue(id);
+            : actionKind === "pay"
+              ? await payOutputValue(id)
+              : await terminateOutputValue(id);
       if (res.code === ResponseCode.SUCCESS) {
         toast.success(labelMap[actionKind]);
         closeAction();
@@ -183,7 +208,13 @@ export default function OutputValuePage() {
     { key: "paid", label: "已发放", count: items.filter((i) => i.status === 3).length },
   ];
   const actionTitle =
-    actionKind === "confirm" ? "确认分配单" : actionKind === "approve" ? "审批分配单" : "发放产值";
+    actionKind === "confirm"
+      ? "确认分配单"
+      : actionKind === "approve"
+        ? "审批分配单"
+        : actionKind === "pay"
+          ? "发放产值"
+          : "终审分配单";
   const nextUserLabel = actionKind === "confirm" ? "审批人" : actionKind === "approve" ? "发放人" : "";
 
   return (
@@ -261,18 +292,27 @@ export default function OutputValuePage() {
                 确认后该分配单将进入已发放状态。
               </div>
             )}
+            {actionKind === "terminate" && (
+              <div className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                终审通过后，分配单将跳过后续环节，直接进入已发放状态。此操作不可撤销。
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-2 pt-4">
             <Button variant="outline" onClick={closeAction} disabled={!!actionLoading}>
               取消
             </Button>
             <Button
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className={
+                actionKind === "terminate"
+                  ? "bg-rose-600 hover:bg-rose-700 text-white"
+                  : "bg-blue-600 hover:bg-blue-700 text-white"
+              }
               onClick={handleAction}
               disabled={!!actionLoading}
             >
               {actionLoading && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
-              确认
+              {actionKind === "terminate" ? "终审通过" : "确认"}
             </Button>
           </div>
         </DialogContent>
@@ -428,10 +468,17 @@ export default function OutputValuePage() {
 
                         <div className="flex justify-end gap-3 mt-4">
                           {item.status === 0 && (
-                            <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={actionLoading === item.outputValueId}
+                            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white" disabled={actionLoading === item.outputValueId}
                               onClick={() => openAction(item, "confirm")}>
                               {actionLoading === item.outputValueId ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
                               确认分配
+                            </Button>
+                          )}
+                          {item.status === 0 && canTerminate(item.status) && (
+                            <Button className="bg-rose-600 hover:bg-rose-700 text-white" disabled={actionLoading === item.outputValueId}
+                              onClick={() => openAction(item, "terminate")}>
+                              {actionLoading === item.outputValueId ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                              终审通过
                             </Button>
                           )}
                           {item.status === 1 && (
@@ -439,6 +486,13 @@ export default function OutputValuePage() {
                               onClick={() => openAction(item, "approve")}>
                               {actionLoading === item.outputValueId ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
                               审批通过
+                            </Button>
+                          )}
+                          {item.status === 1 && canTerminate(item.status) && (
+                            <Button className="bg-rose-600 hover:bg-rose-700 text-white" disabled={actionLoading === item.outputValueId}
+                              onClick={() => openAction(item, "terminate")}>
+                              {actionLoading === item.outputValueId ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+                              终审通过
                             </Button>
                           )}
                           {item.status === 2 && (

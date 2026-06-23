@@ -480,6 +480,37 @@ public class OutputValueServiceImpl implements OutputValueService {
         }
     }
 
+    @Override
+    public void terminateOutputValue(Long outputValueId, Long operatorId) {
+        OutputValue ov = outputValueMapper.selectById(outputValueId);
+        if (ov == null) throw new BusinessException(ErrorType.OUTPUT_VALUE_NOT_FOUND);
+        // 仅 待确认(0) / 待审核(1) 状态可终审；已审批(2) 走正常 pay 即可
+        if (ov.getStatus() == null || ov.getStatus() >= 2) {
+            throw new BusinessException(ErrorType.OUTPUT_VALUE_STATUS_INVALID, "当前状态无法终审");
+        }
+        assertCurrentHandler(ov, operatorId, "您不是当前处理人，无法终审");
+
+        // 同步流转统一审批流：当前节点（L1 确认 / L2 审批）终审通过，流程结束。
+        // approvalFlowService.approve 内部会校验「当前节点 allow_terminate=1」，
+        // 若流程配置不允许终审会抛 BusinessException，由 GlobalExceptionHandler 兜底。
+        ApprovalRecords pending = approvalFlowService.getCurrentPending(ApprovalBizType.OUTPUT, outputValueId);
+        if (pending == null) {
+            throw new BusinessException(ErrorType.OUTPUT_VALUE_STATUS_INVALID, "未找到待审节点，无法终审");
+        }
+        ApproveDto approve = new ApproveDto();
+        approve.setRecordId(pending.getApprovalRecordId());
+        approve.setPass(true);
+        approve.setTerminate(true);
+        approvalFlowService.approve(approve, operatorId);
+
+        // 产值单状态直接置为 已发放（3），跳过后续审批/发放环节
+        ov.setStatus(3);
+        ov.setApprovedTime(LocalDateTime.now());
+        ov.setPaidTime(LocalDateTime.now());
+        ov.setCurrentHandlerId(null);
+        outputValueMapper.updateById(ov);
+    }
+
     private void assertCurrentHandler(OutputValue ov, Long operatorId, String message) {
         if (ov.getCurrentHandlerId() == null) {
             return;
