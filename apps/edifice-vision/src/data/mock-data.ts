@@ -377,6 +377,20 @@ export const navigationConfig: NavSection[] = [
         href: "/business-rule-config",
         permissionCode: "menu:business-rule-config",
       },
+      {
+        id: "project-type-config",
+        label: "项目类型管理",
+        icon: "Tag",
+        href: "/project-type-config",
+        permissionCode: "menu:project-type-config",
+      },
+      {
+        id: "stage-template-config",
+        label: "阶段模板管理",
+        icon: "Layers",
+        href: "/stage-template-config",
+        permissionCode: "menu:stage-template-config",
+      },
     ],
   },
 ];
