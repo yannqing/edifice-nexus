@@ -36,6 +36,7 @@ import {
 import { ResponseCode } from "@/types/api";
 import { PROJECT_STATUS_MAP } from "@/types/project";
 import { useAuth } from "@/store/auth-context";
+import { hasPermission } from "@/lib/permissions";
 
 const statusStyles: Record<string, string> = {
   未开始: "bg-slate-100 text-slate-500",
@@ -65,8 +66,9 @@ function formatTime(t: string | null) {
 }
 
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, roles, permissions } = useAuth();
   const router = useRouter();
+  const canManageAnnouncements = hasPermission(permissions, "menu:announcement-management", roles);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<DashboardData | null>(null);
 
@@ -139,6 +141,7 @@ export default function DashboardPage() {
       <AnnouncementCard
         loading={announcementLoading}
         items={announcements}
+        canManage={canManageAnnouncements}
         onCreate={() => setCreateOpen(true)}
         onDelete={handleDeleteAnnouncement}
       />
@@ -362,11 +365,13 @@ function formatPublishTime(t: string | null): string {
 function AnnouncementCard({
   loading,
   items,
+  canManage,
   onCreate,
   onDelete,
 }: {
   loading: boolean;
   items: AnnouncementVo[];
+  canManage: boolean;
   onCreate: () => void;
   onDelete: (id: string) => void;
 }) {
@@ -384,13 +389,15 @@ function AnnouncementCard({
             <p className="text-xs text-slate-400">{items.length} 条最新公告</p>
           </div>
         </div>
-        <Button
-          onClick={onCreate}
-          size="sm"
-          className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1"
-        >
-          <Plus className="w-4 h-4" /> 发布公告
-        </Button>
+        {canManage && (
+          <Button
+            onClick={onCreate}
+            size="sm"
+            className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1"
+          >
+            <Plus className="w-4 h-4" /> 发布公告
+          </Button>
+        )}
       </div>
 
       {loading && (
@@ -435,13 +442,15 @@ function AnnouncementCard({
                       <span className="text-xs text-slate-400">{formatPublishTime(a.publishTime)}</span>
                     </div>
                   </button>
-                  <button
-                    onClick={() => onDelete(a.announcementId)}
-                    title="删除"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-rose-500 shrink-0"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {canManage && (
+                    <button
+                      onClick={() => onDelete(a.announcementId)}
+                      title="删除"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-rose-500 shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
                 {isExpanded && (
                   <div className="mt-3 pl-16 pr-2 text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
