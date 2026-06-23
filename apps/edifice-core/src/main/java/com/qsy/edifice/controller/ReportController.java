@@ -84,30 +84,53 @@ public class ReportController {
     // ==================== 统计报表 ====================
 
     @GetMapping("/overview")
-    @Operation(summary = "统计总览", description = "项目总数、合同总额、已完成产值、回款率")
+    @Operation(summary = "统计总览", description = "项目总数、合同总额、已完成产值、产值总额")
     @PreAuthorize("hasAuthority('menu:statistics') or hasRole('SUPER_ADMIN')")
-    public BaseResponse<Map<String, Object>> getOverview() {
-        List<Project> projects = projectMapper.selectList(null);
-        int totalProjects = projects.size();
+    public BaseResponse<Map<String, Object>> getOverview(
+            @RequestParam(value = "quarter", required = false) String quarter) {
+        boolean filterByQuarter = quarter != null && !quarter.trim().isEmpty();
 
-        // 合同总额（批量）
-        Set<Long> projectIds = projects.stream().map(Project::getProjectId).collect(Collectors.toSet());
-        Map<Long, Contract> contractMap = loadContractsByProjectIds(projectIds);
-        BigDecimal totalContract = contractMap.values().stream()
-                .map(Contract::getContractAmount)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<Project> projects = projectMapper.selectList(null);
+
+        // 项目总数 & 合同总额：仅统计有该季度产值记录的项目
+        int totalProjects;
+        BigDecimal totalContract;
+        if (filterByQuarter) {
+            LambdaQueryWrapper<OutputValue> qOvW = new LambdaQueryWrapper<>();
+            qOvW.eq(OutputValue::getQuarter, quarter.trim());
+            Set<Long> quarterProjectIds = outputValueMapper.selectList(qOvW).stream()
+                    .map(OutputValue::getProjectId).collect(Collectors.toSet());
+            totalProjects = quarterProjectIds.size();
+            Map<Long, Contract> contractMap = loadContractsByProjectIds(quarterProjectIds);
+            totalContract = contractMap.values().stream()
+                    .map(Contract::getContractAmount).filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        } else {
+            totalProjects = projects.size();
+            Set<Long> projectIds = projects.stream().map(Project::getProjectId).collect(Collectors.toSet());
+            Map<Long, Contract> contractMap = loadContractsByProjectIds(projectIds);
+            totalContract = contractMap.values().stream()
+                    .map(Contract::getContractAmount).filter(Objects::nonNull)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
 
         // 已确认产值（status >= 2，即已审批 + 已发放）
         LambdaQueryWrapper<OutputValue> confirmedWrapper = new LambdaQueryWrapper<>();
         confirmedWrapper.ge(OutputValue::getStatus, 2);
+        if (filterByQuarter) {
+            confirmedWrapper.eq(OutputValue::getQuarter, quarter.trim());
+        }
         List<OutputValue> confirmedList = outputValueMapper.selectList(confirmedWrapper);
         BigDecimal confirmedAmount = confirmedList.stream()
                 .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 全部产值
-        List<OutputValue> allOv = outputValueMapper.selectList(null);
+        LambdaQueryWrapper<OutputValue> allOvWrapper = new LambdaQueryWrapper<>();
+        if (filterByQuarter) {
+            allOvWrapper.eq(OutputValue::getQuarter, quarter.trim());
+        }
+        List<OutputValue> allOv = outputValueMapper.selectList(allOvWrapper);
         BigDecimal totalOutputValue = allOv.stream()
                 .map(OutputValue::getTotalAmount).filter(Objects::nonNull)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -123,8 +146,22 @@ public class ReportController {
     @GetMapping("/project-stats")
     @Operation(summary = "项目产值统计", description = "每个项目的合同额、已完成产值、待处理产值")
     @PreAuthorize("hasAuthority('menu:statistics') or hasRole('SUPER_ADMIN')")
-    public BaseResponse<List<Map<String, Object>>> getProjectStats() {
-        List<Project> projects = projectMapper.selectList(null);
+    public BaseResponse<List<Map<String, Object>>> getProjectStats(
+            @RequestParam(value = "quarter", required = false) String quarter) {
+        boolean filterByQuarter = quarter != null && !quarter.trim().isEmpty();
+
+        // 若按季度过滤，只展示有该季度产值记录的项目
+        List<Project> projects;
+        if (filterByQuarter) {
+            LambdaQueryWrapper<OutputValue> qOvW = new LambdaQueryWrapper<>();
+            qOvW.eq(OutputValue::getQuarter, quarter.trim());
+            Set<Long> quarterProjectIds = outputValueMapper.selectList(qOvW).stream()
+                    .map(OutputValue::getProjectId).collect(Collectors.toSet());
+            if (quarterProjectIds.isEmpty()) return ResultUtils.success(Code.SUCCESS, Collections.emptyList());
+            projects = projectMapper.selectBatchIds(quarterProjectIds);
+        } else {
+            projects = projectMapper.selectList(null);
+        }
         if (projects.isEmpty()) return ResultUtils.success(Code.SUCCESS, Collections.emptyList());
 
         // 批量预取：合同 / 类型 / 产值分配单
@@ -133,7 +170,15 @@ public class ReportController {
                 .filter(Objects::nonNull).collect(Collectors.toSet());
         Map<Long, Contract> contractMap = loadContractsByProjectIds(projectIds);
         Map<Long, ProjectType> typeMap = loadTypesByIds(typeIds);
-        Map<Long, List<OutputValue>> ovByProject = loadOutputValuesByProjectIds(projectIds);
+
+        // 拉取产值列表，按需过滤季度
+        LambdaQueryWrapper<OutputValue> ovW = new LambdaQueryWrapper<>();
+        ovW.in(OutputValue::getProjectId, projectIds);
+        if (filterByQuarter) {
+            ovW.eq(OutputValue::getQuarter, quarter.trim());
+        }
+        Map<Long, List<OutputValue>> ovByProject = outputValueMapper.selectList(ovW).stream()
+                .collect(Collectors.groupingBy(OutputValue::getProjectId));
 
         List<Map<String, Object>> result = new ArrayList<>();
         for (Project p : projects) {
@@ -172,15 +217,51 @@ public class ReportController {
     @GetMapping("/category-stats")
     @Operation(summary = "项目分类统计")
     @PreAuthorize("hasAuthority('menu:statistics') or hasRole('SUPER_ADMIN')")
-    public BaseResponse<List<Map<String, Object>>> getCategoryStats() {
+    public BaseResponse<List<Map<String, Object>>> getCategoryStats(
+            @RequestParam(value = "quarter", required = false) String quarter) {
+        boolean filterByQuarter = quarter != null && !quarter.trim().isEmpty();
+
         List<ProjectType> types = projectTypeService.getAllEnabledProjectTypes();
-        List<Project> allProjects = projectMapper.selectList(null);
+
+        // 若按季度过滤，只展示有该季度产值记录的项目
+        List<Project> allProjects;
+        if (filterByQuarter) {
+            LambdaQueryWrapper<OutputValue> qOvW = new LambdaQueryWrapper<>();
+            qOvW.eq(OutputValue::getQuarter, quarter.trim());
+            Set<Long> quarterProjectIds = outputValueMapper.selectList(qOvW).stream()
+                    .map(OutputValue::getProjectId).collect(Collectors.toSet());
+            if (quarterProjectIds.isEmpty()) {
+                // 无数据时返回零值行
+                List<Map<String, Object>> emptyResult = new ArrayList<>();
+                for (ProjectType type : types) {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("category", type.getProjectTypeCode() + "类");
+                    item.put("name", type.getProjectTypeName());
+                    item.put("count", 0);
+                    item.put("contractTotal", BigDecimal.ZERO);
+                    item.put("completedTotal", BigDecimal.ZERO);
+                    item.put("percentage", BigDecimal.ZERO);
+                    emptyResult.add(item);
+                }
+                return ResultUtils.success(Code.SUCCESS, emptyResult);
+            }
+            allProjects = projectMapper.selectBatchIds(quarterProjectIds);
+        } else {
+            allProjects = projectMapper.selectList(null);
+        }
         int totalCount = allProjects.size();
 
-        // 批量预取合同 + 已发放产值
+        // 批量预取合同 + 产值
         Set<Long> projectIds = allProjects.stream().map(Project::getProjectId).collect(Collectors.toSet());
         Map<Long, Contract> contractMap = loadContractsByProjectIds(projectIds);
-        Map<Long, List<OutputValue>> ovByProject = loadOutputValuesByProjectIds(projectIds);
+
+        LambdaQueryWrapper<OutputValue> ovW = new LambdaQueryWrapper<>();
+        ovW.in(OutputValue::getProjectId, projectIds);
+        if (filterByQuarter) {
+            ovW.eq(OutputValue::getQuarter, quarter.trim());
+        }
+        Map<Long, List<OutputValue>> ovByProject = outputValueMapper.selectList(ovW).stream()
+                .collect(Collectors.groupingBy(OutputValue::getProjectId));
 
         List<Map<String, Object>> result = new ArrayList<>();
         for (ProjectType type : types) {

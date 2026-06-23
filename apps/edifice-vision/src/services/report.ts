@@ -48,16 +48,18 @@ export async function getDashboard(): Promise<BaseResponse<DashboardData>> {
 
 // ==================== 统计报表 ====================
 
-export async function getReportOverview(): Promise<BaseResponse<{
+export async function getReportOverview(quarter?: string): Promise<BaseResponse<{
   totalProjects: number;
   totalContractAmount: number;
   completedOutputValue: number;
   totalOutputValue: number;
 }>> {
-  return get("/report/overview");
+  const params: Record<string, string> = {};
+  if (quarter) params.quarter = quarter;
+  return get("/report/overview", { params });
 }
 
-export async function getProjectStats(): Promise<BaseResponse<{
+export async function getProjectStats(quarter?: string): Promise<BaseResponse<{
   projectId: string;
   projectName: string;
   category: string;
@@ -66,10 +68,12 @@ export async function getProjectStats(): Promise<BaseResponse<{
   outputValue: number;
   pendingValue: number;
 }[]>> {
-  return get("/report/project-stats");
+  const params: Record<string, string> = {};
+  if (quarter) params.quarter = quarter;
+  return get("/report/project-stats", { params });
 }
 
-export async function getCategoryStats(): Promise<BaseResponse<{
+export async function getCategoryStats(quarter?: string): Promise<BaseResponse<{
   category: string;
   name: string;
   count: number;
@@ -77,7 +81,9 @@ export async function getCategoryStats(): Promise<BaseResponse<{
   completedTotal: number;
   percentage: number;
 }[]>> {
-  return get("/report/category-stats");
+  const params: Record<string, string> = {};
+  if (quarter) params.quarter = quarter;
+  return get("/report/category-stats", { params });
 }
 
 export async function getPersonnelRanking(): Promise<BaseResponse<{

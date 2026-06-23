@@ -38,11 +38,11 @@ export default function StatisticsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // 概览和项目/分类统计不受季度影响
+      // 所有接口均按季度过滤
       const [ovRes, projRes, catRes] = await Promise.all([
-        getReportOverview(),
-        getProjectStats(),
-        getCategoryStats(),
+        getReportOverview(quarter),
+        getProjectStats(quarter),
+        getCategoryStats(quarter),
       ]);
       if (ovRes.code === ResponseCode.SUCCESS) setOverview(ovRes.data);
       if (projRes.code === ResponseCode.SUCCESS) setProjectData(projRes.data ?? []);
