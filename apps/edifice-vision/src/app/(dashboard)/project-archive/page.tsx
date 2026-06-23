@@ -396,10 +396,9 @@ export default function ProjectArchivePage() {
                   下载归档资料包
                 </Button>
               </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                 <SummaryCard label="合同金额" value={formatMoney(detail.summary.contractAmount)} />
                 <SummaryCard label="已发放产值" value={formatMoney(detail.summary.paidOutputAmount)} />
-                <SummaryCard label="累计回款" value={formatMoney(detail.summary.totalCollectionAmount)} />
                 <SummaryCard label="项目文件" value={`${detail.summary.projectFileCount ?? 0} 个`} />
               </div>
 
@@ -445,18 +444,6 @@ export default function ProjectArchivePage() {
                         <div className="text-xs text-slate-400 mt-1">{formatMoney(item.totalAmount)} · 发放：{formatDate(item.paidTime)}</div>
                       </div>
                       <Badge variant="secondary">{OUTPUT_VALUE_STATUS_MAP[item.status] ?? "未知"}</Badge>
-                    </div>
-                  ))}
-                </ArchiveTable>
-
-                <ArchiveTable title="回款记录" empty="暂无回款记录">
-                  {detail.collections.map((item) => (
-                    <div key={item.collectionRecordId} className="flex items-center justify-between gap-3 rounded-lg bg-white border border-slate-100 px-3 py-2">
-                      <div>
-                        <div className="font-medium text-slate-700">{formatMoney(item.amount)}</div>
-                        <div className="text-xs text-slate-400 mt-1">{item.stageName || "未关联阶段"} · {item.collectDate || "-"}</div>
-                      </div>
-                      <div className="text-xs text-slate-400">{item.recordUserName || "-"}</div>
                     </div>
                   ))}
                 </ArchiveTable>
