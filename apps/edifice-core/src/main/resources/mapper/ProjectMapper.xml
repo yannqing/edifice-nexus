@@ -69,5 +69,6 @@
         FROM project p
         LEFT JOIN contract c ON c.project_id = p.project_id AND c.is_delete = 0
         WHERE p.is_delete = 0
+          AND (p.archive_status IS NULL OR p.archive_status != 1)
     </select>
 </mapper>

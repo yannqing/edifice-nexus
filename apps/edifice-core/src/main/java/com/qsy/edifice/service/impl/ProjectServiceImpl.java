@@ -740,19 +740,19 @@ public class ProjectServiceImpl implements ProjectService {
             return vo;
         }
 
-        LambdaQueryWrapper<Project> baseWrapper = new LambdaQueryWrapper<>();
-        baseWrapper.in(Project::getProjectId, projectIds);
+        // 各状态统计排除已归档项目，archivedCount 单独统计
+        LambdaQueryWrapper<Project> nonArchived = new LambdaQueryWrapper<>();
+        nonArchived.in(Project::getProjectId, projectIds).ne(Project::getArchiveStatus, 1);
 
-        vo.setTotalCount(projectMapper.selectCount(
-                new LambdaQueryWrapper<Project>().in(Project::getProjectId, projectIds)));
+        vo.setTotalCount(projectMapper.selectCount(nonArchived));
         vo.setNotStartedCount(projectMapper.selectCount(
-                new LambdaQueryWrapper<Project>().in(Project::getProjectId, projectIds).eq(Project::getProjectStatus, 0)));
+                new LambdaQueryWrapper<Project>().in(Project::getProjectId, projectIds).ne(Project::getArchiveStatus, 1).eq(Project::getProjectStatus, 0)));
         vo.setProcessingCount(projectMapper.selectCount(
-                new LambdaQueryWrapper<Project>().in(Project::getProjectId, projectIds).eq(Project::getProjectStatus, 1)));
+                new LambdaQueryWrapper<Project>().in(Project::getProjectId, projectIds).ne(Project::getArchiveStatus, 1).eq(Project::getProjectStatus, 1)));
         vo.setPendingAcceptanceCount(projectMapper.selectCount(
-                new LambdaQueryWrapper<Project>().in(Project::getProjectId, projectIds).eq(Project::getProjectStatus, 2)));
+                new LambdaQueryWrapper<Project>().in(Project::getProjectId, projectIds).ne(Project::getArchiveStatus, 1).eq(Project::getProjectStatus, 2)));
         vo.setCompletedCount(projectMapper.selectCount(
-                new LambdaQueryWrapper<Project>().in(Project::getProjectId, projectIds).eq(Project::getProjectStatus, 4)));
+                new LambdaQueryWrapper<Project>().in(Project::getProjectId, projectIds).ne(Project::getArchiveStatus, 1).eq(Project::getProjectStatus, 4)));
         vo.setArchivedCount(projectMapper.selectCount(
                 new LambdaQueryWrapper<Project>().in(Project::getProjectId, projectIds).eq(Project::getArchiveStatus, 1)));
         vo.setTotalContractAmount(0.0);

@@ -96,6 +96,7 @@ const STATUS_FILTER_OPTIONS: { value: string; label: string; status?: number }[]
   { value: "1", label: "进行中", status: 1 },
   { value: "2", label: "待验收", status: 2 },
   { value: "4", label: "已完成", status: 4 },
+  { value: "archived", label: "已归档" },
 ];
 
 interface ProjectTypeOption {
@@ -146,7 +147,9 @@ export default function AllProjectsPage() {
       const response = await getAllProjects({
         keywords: debouncedSearch || undefined,
         projectStatus:
-          selectedStatus !== "all" ? Number(selectedStatus) : undefined,
+          selectedStatus !== "all" && selectedStatus !== "archived"
+            ? Number(selectedStatus)
+            : undefined,
         projectType:
           selectedType !== "all" ? Number(selectedType) : undefined,
         current: currentPage,
@@ -154,8 +157,13 @@ export default function AllProjectsPage() {
       }, signal);
 
       if (response.code === ResponseCode.SUCCESS && response.data) {
-        // 已归档项目不在全部项目中展示
-        const records = (response.data.records ?? []).filter((p) => p.archiveStatus !== 1);
+        let records = response.data.records ?? [];
+        // 归档筛选：已归档 tab 只显示已归档；其他 tab 排除已归档
+        if (selectedStatus === "archived") {
+          records = records.filter((p) => p.archiveStatus === 1);
+        } else {
+          records = records.filter((p) => p.archiveStatus !== 1);
+        }
         setProjects(records);
         setTotal(records.length);
       }
