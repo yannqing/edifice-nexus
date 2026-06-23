@@ -3,16 +3,20 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   ExternalLink,
   FileText,
   Inbox,
+  Search,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { TablePageSkeleton } from "@/components/ui/skeleton";
+import { isAbortError } from "@/lib/request";
 import { ResponseCode } from "@/types/api";
 import {
   getMyPendingProjectFiles,
@@ -20,12 +24,16 @@ import {
   getProjectFileList,
 } from "@/services/project-file";
 import type { ProjectFileVo } from "@/types/project-file";
-import { PROJECT_FILE_STATUS_MAP } from "@/types/project-file";
+import {
+  FILE_CATEGORY_OPTIONS,
+  PROJECT_FILE_STATUS_MAP,
+} from "@/types/project-file";
 import { ApproveProjectFileDialog } from "@/components/project-file/approve-project-file-dialog";
 import { ProjectFileDetailDialog } from "@/components/project-file/project-file-detail-dialog";
 import { useDetailLink } from "@/hooks/use-detail-link";
 
 type Tab = "pending" | "all" | "mine";
+const PAGE_SIZE = 10;
 
 function formatDate(d: string | null | undefined): string {
   if (!d) return "-";
@@ -56,30 +64,71 @@ export default function ProjectFilesApprovalPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [current, setCurrent] = useState<ProjectFileVo | null>(null);
   const [currentDetail, setCurrentDetail] = useState<ProjectFileVo | null>(null);
-  const [keyword, setKeyword] = useState("");
 
-  const fetchData = useCallback(async () => {
+  // 搜索 + 分类筛选 + 分页 state（仅 all/mine tab 用）
+  const [keyword, setKeyword] = useState("");
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
+  const [fileCategory, setFileCategory] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // 搜索防抖：输入变化 300ms 后才触发请求，同时重置页码
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedKeyword(keyword.trim());
+      setCurrentPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [keyword]);
+
+  // 切换分类筛选时重置页码
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [fileCategory]);
+
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
       if (tab === "pending") {
+        // 待审 tab 走独立接口（不分页，量小）
         const res = await getMyPendingProjectFiles();
-        if (res.code === ResponseCode.SUCCESS) setItems(res.data ?? []);
-      } else if (tab === "all") {
-        const res = await getProjectFileList({ keyword: keyword || undefined });
-        if (res.code === ResponseCode.SUCCESS) setItems(res.data ?? []);
+        if (!signal?.aborted && res.code === ResponseCode.SUCCESS) {
+          setItems(res.data ?? []);
+          setTotal(res.data?.length ?? 0);
+        }
       } else {
-        // "mine" 暂用全部 + 前端过滤上传人；后端可后续加 my-uploads
-        const res = await getProjectFileList({ keyword: keyword || undefined });
-        if (res.code === ResponseCode.SUCCESS) setItems(res.data ?? []);
+        // all / mine tab 走分页接口（mine 当前复用 all，权限下推后已经只可见自己有权看的）
+        const res = await getProjectFileList({
+          keyword: debouncedKeyword || undefined,
+          fileCategory: fileCategory || undefined,
+          current: currentPage,
+          pageSize: PAGE_SIZE,
+        }, signal);
+        if (!signal?.aborted && res.code === ResponseCode.SUCCESS && res.data) {
+          setItems(res.data.records ?? []);
+          setTotal(res.data.total ?? 0);
+        }
       }
+    } catch (err) {
+      if (isAbortError(err)) return;
+      setItems([]);
+      setTotal(0);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
-  }, [tab, keyword]);
+  }, [tab, debouncedKeyword, fileCategory, currentPage]);
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
   }, [fetchData]);
+
+  // 切 tab 重置页码
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [tab]);
 
   const handleOpenApprove = async (id: string) => {
     const res = await getProjectFileDetail(id);
@@ -169,13 +218,28 @@ export default function ProjectFilesApprovalPage() {
           ))}
         </div>
         {tab !== "pending" && (
-          <input
-            type="text"
-            placeholder="按分类 / 说明搜索..."
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            className="ml-auto px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white w-full sm:w-72"
-          />
+          <>
+            <div className="relative ml-auto">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="按分类 / 说明搜索..."
+                value={keyword}
+                onChange={(e) => setKeyword(e.target.value)}
+                className="pl-10 pr-4 py-2 rounded-lg border border-slate-200 text-sm bg-white w-full sm:w-72 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <select
+              value={fileCategory}
+              onChange={(e) => setFileCategory(e.target.value)}
+              className="px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">全部分类</option>
+              {FILE_CATEGORY_OPTIONS.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </>
         )}
       </div>
 
@@ -275,11 +339,37 @@ export default function ProjectFilesApprovalPage() {
         </div>
       )}
 
+      {/* 分页（仅 all/mine tab 显示，pending tab 是不分页的本地数据）*/}
+      {tab !== "pending" && !loading && total > 0 && (
+        <div className="flex items-center justify-between text-sm text-slate-500">
+          <span>共 {total} 条记录</span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((page) => page - 1)}
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span>{currentPage} / {totalPages}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((page) => page + 1)}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       <ApproveProjectFileDialog
         open={approveOpen}
         onOpenChange={setApproveOpen}
         file={current}
-        onSuccess={fetchData}
+        onSuccess={() => fetchData()}
       />
 
       <ProjectFileDetailDialog

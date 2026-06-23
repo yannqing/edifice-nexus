@@ -17,6 +17,9 @@ import {
   Eye,
   Download,
   XCircle,
+  Search,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DialogSkeleton } from "@/components/ui/skeleton";
@@ -30,6 +33,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { isAbortError } from "@/lib/request";
 import { getProjectDetail, startStages, restartStage } from "@/services/project";
 import {
   cancelProjectFile,
@@ -47,7 +51,10 @@ import {
   STAGE_COMPLETED_STATUSES,
 } from "@/types/project";
 import type { ProjectFileVo } from "@/types/project-file";
-import { PROJECT_FILE_STATUS_MAP } from "@/types/project-file";
+import {
+  FILE_CATEGORY_OPTIONS,
+  PROJECT_FILE_STATUS_MAP,
+} from "@/types/project-file";
 import type { ProjectStatus, ProjectCategory } from "@/types";
 import { UploadProjectFileDialog } from "@/components/project-file/upload-project-file-dialog";
 import { useAuth } from "@/store/auth-context";
@@ -305,7 +312,7 @@ export function ProjectDetailDialog({
   );
 }
 
-/** 项目文件 section：列出归档文件 + 顶部上传按钮 */
+/** 项目文件 section：列出归档文件 + 顶部上传按钮（分页 + 搜索 + 分类筛选）*/
 function ProjectFilesSection({
   projectId,
   projectName,
@@ -313,25 +320,60 @@ function ProjectFilesSection({
   projectId: string;
   projectName: string;
 }) {
+  const SECTION_PAGE_SIZE = 5;
   const [items, setItems] = useState<ProjectFileVo[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const { user } = useAuth();
 
-  const fetchData = useCallback(async () => {
+  const [keyword, setKeyword] = useState("");
+  const [debouncedKeyword, setDebouncedKeyword] = useState("");
+  const [fileCategory, setFileCategory] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(total / SECTION_PAGE_SIZE));
+
+  // 搜索防抖
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedKeyword(keyword.trim());
+      setCurrentPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [keyword]);
+
+  // 切分类重置页码
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [fileCategory]);
+
+  const fetchData = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     try {
-      const res = await getProjectFileList({ projectId });
-      if (res.code === ResponseCode.SUCCESS) {
-        setItems(res.data ?? []);
+      const res = await getProjectFileList({
+        projectId,
+        keyword: debouncedKeyword || undefined,
+        fileCategory: fileCategory || undefined,
+        current: currentPage,
+        pageSize: SECTION_PAGE_SIZE,
+      }, signal);
+      if (!signal?.aborted && res.code === ResponseCode.SUCCESS && res.data) {
+        setItems(res.data.records ?? []);
+        setTotal(res.data.total ?? 0);
       }
+    } catch (err) {
+      if (isAbortError(err)) return;
+      setItems([]);
+      setTotal(0);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, debouncedKeyword, fileCategory, currentPage]);
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
   }, [fetchData]);
 
   return (
@@ -340,7 +382,7 @@ function ProjectFilesSection({
         <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
           <Paperclip className="w-4 h-4 text-slate-400" /> 项目文件
           <span className="text-xs font-normal text-slate-400 ml-1">
-            {items.length}
+            共 {total} 项
           </span>
         </h4>
         <Button
@@ -351,6 +393,30 @@ function ProjectFilesSection({
         </Button>
       </div>
 
+      {/* 搜索 + 分类筛选 */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="按分类 / 说明搜索..."
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            className="w-full pl-8 pr-3 py-1.5 rounded-md border border-slate-200 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+        </div>
+        <select
+          value={fileCategory}
+          onChange={(e) => setFileCategory(e.target.value)}
+          className="px-2 py-1.5 rounded-md border border-slate-200 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+        >
+          <option value="">全部分类</option>
+          {FILE_CATEGORY_OPTIONS.map((c) => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+      </div>
+
       {loading ? (
         <p className="text-xs text-slate-400 text-center py-4">加载中...</p>
       ) : items.length === 0 ? (
@@ -358,16 +424,46 @@ function ProjectFilesSection({
           暂无文件，点击右上角上传文件开始
         </p>
       ) : (
-        <div className="space-y-1.5 max-h-64 overflow-y-auto">
-          {items.map((f) => (
-            <ProjectFileRow
-              key={f.projectFileId}
-              file={f}
-              currentUserId={user?.userId}
-              onCancelled={fetchData}
-            />
-          ))}
-        </div>
+        <>
+          <div className="space-y-1.5">
+            {items.map((f) => (
+              <ProjectFileRow
+                key={f.projectFileId}
+                file={f}
+                currentUserId={user?.userId}
+                onCancelled={() => fetchData()}
+              />
+            ))}
+          </div>
+
+          {/* 分页 */}
+          {total > SECTION_PAGE_SIZE && (
+            <div className="flex items-center justify-between text-xs text-slate-500 mt-3">
+              <span>共 {total} 条</span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-2"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                >
+                  <ChevronLeft className="w-3 h-3" />
+                </Button>
+                <span>{currentPage} / {totalPages}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-2"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                >
+                  <ChevronRight className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <UploadProjectFileDialog
@@ -375,7 +471,7 @@ function ProjectFilesSection({
         onOpenChange={setUploadOpen}
         lockedProjectId={projectId}
         lockedProjectName={projectName}
-        onSuccess={fetchData}
+        onSuccess={() => fetchData()}
       />
     </section>
   );

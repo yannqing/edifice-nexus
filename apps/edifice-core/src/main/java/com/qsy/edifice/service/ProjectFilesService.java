@@ -3,6 +3,7 @@ package com.qsy.edifice.service;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.ApproveDto;
 import com.qsy.edifice.domain.dto.CreateProjectFileDto;
+import com.qsy.edifice.domain.dto.GetProjectFileListDto;
 import com.qsy.edifice.domain.entity.ProjectFiles;
 import com.qsy.edifice.domain.vo.ProjectFileVo;
 
@@ -64,6 +65,18 @@ public interface ProjectFilesService {
     List<ProjectFileVo> listProjectFiles(Long projectId, Integer approvalStatus, String keyword);
 
     List<ProjectFileVo> listProjectFiles(Long projectId, Integer approvalStatus, String keyword, Long userId, boolean canViewAll);
+
+    /**
+     * 按条件分页查询项目文件列表（推荐入口）。
+     *
+     * <p>权限过滤已下推到 SQL：非 canViewAll 的用户只能看到「本人上传」或「本人所在项目」的文件，
+     * 避免内存 stream filter 破坏分页 total/records 的一致性。
+     *
+     * @param dto         查询条件 + 分页参数
+     * @param userId      当前登录用户
+     * @param canViewAll  是否有查看全部的权限（用户管理/全部项目菜单或超管）
+     */
+    Page<ProjectFileVo> listProjectFilesPage(GetProjectFileListDto dto, Long userId, boolean canViewAll);
 
     /**
      * 详情 + 审批链

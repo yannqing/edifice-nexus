@@ -1,10 +1,12 @@
 package com.qsy.edifice.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.common.Code;
 import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.dto.ApproveDto;
 import com.qsy.edifice.domain.dto.CreateProjectFileDto;
+import com.qsy.edifice.domain.dto.GetProjectFileListDto;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.domain.vo.ProjectFileVo;
 import com.qsy.edifice.service.ProjectFilesService;
@@ -79,17 +81,13 @@ public class ProjectFilesController {
     }
 
     @GetMapping("/list")
-    @Operation(summary = "项目文件列表", description = "支持按 projectId / approvalStatus / keyword 过滤")
+    @Operation(summary = "项目文件列表", description = "支持按 projectId / approvalStatus / fileCategory / keyword 过滤；分页")
     @PreAuthorize("isAuthenticated()")
-    public BaseResponse<List<ProjectFileVo>> list(
-            @RequestParam(value = "projectId", required = false) Long projectId,
-            @RequestParam(value = "approvalStatus", required = false) Integer approvalStatus,
-            @RequestParam(value = "keyword", required = false) String keyword,
-            HttpServletRequest request) throws JsonProcessingException {
+    public BaseResponse<Page<ProjectFileVo>> list(GetProjectFileListDto dto,
+                                                  HttpServletRequest request) throws JsonProcessingException {
         SysUser loginUser = jwtUtils.getUserFromToken(request.getHeader("token"));
         return ResultUtils.success(Code.SUCCESS,
-                projectFilesService.listProjectFiles(projectId, approvalStatus, keyword,
-                        loginUser.getUserId(), canViewAllProjectFiles()));
+                projectFilesService.listProjectFilesPage(dto, loginUser.getUserId(), canViewAllProjectFiles()));
     }
 
     @GetMapping("/{id}")

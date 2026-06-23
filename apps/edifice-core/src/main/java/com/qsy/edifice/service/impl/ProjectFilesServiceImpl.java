@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.ApproveDto;
 import com.qsy.edifice.domain.dto.CreateProjectFileDto;
+import com.qsy.edifice.domain.dto.GetProjectFileListDto;
 import com.qsy.edifice.domain.dto.SubmitApprovalDto;
 import com.qsy.edifice.domain.entity.*;
 import com.qsy.edifice.domain.vo.ApprovalRecordVo;
@@ -246,6 +247,45 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
         w.orderByDesc(ProjectFiles::getCreatedTime);
         List<ProjectFiles> list = projectFilesMapper.selectList(w);
         return toVos(list, false);
+    }
+
+    @Override
+    public Page<ProjectFileVo> listProjectFilesPage(GetProjectFileListDto dto, Long userId, boolean canViewAll) {
+        int current = dto.getCurrent() != null && dto.getCurrent() > 0 ? dto.getCurrent() : 1;
+        int pageSize = dto.getPageSize() != null && dto.getPageSize() > 0 ? dto.getPageSize() : 10;
+
+        LambdaQueryWrapper<ProjectFiles> w = new LambdaQueryWrapper<>();
+        if (dto.getProjectId() != null) {
+            w.eq(ProjectFiles::getProjectId, String.valueOf(dto.getProjectId()));
+        }
+        if (dto.getApprovalStatus() != null) {
+            w.eq(ProjectFiles::getApprovalStatus, dto.getApprovalStatus());
+        }
+        if (StringUtils.hasText(dto.getFileCategory())) {
+            w.eq(ProjectFiles::getFileCategory, dto.getFileCategory().trim());
+        }
+        if (StringUtils.hasText(dto.getKeyword())) {
+            String kw = dto.getKeyword().trim();
+            w.and(ww -> ww.like(ProjectFiles::getDescription, kw)
+                    .or().like(ProjectFiles::getFileCategory, kw));
+        }
+
+        // 权限下推到 SQL：非 canViewAll 的用户只能看到「本人上传」或「本人所在项目」的文件
+        // 注意 ProjectFiles.project_id 是 varchar，ProjectMember.project_id 是 bigint，需要 CAST
+        if (!canViewAll && userId != null) {
+            String uid = String.valueOf(userId);
+            w.and(ww -> ww.eq(ProjectFiles::getUploadUserId, userId)
+                    .or().apply(
+                            "project_id IN (SELECT CAST(project_id AS CHAR) FROM project_member "
+                                    + "WHERE user_id = {0} AND is_delete = 0)",
+                            uid));
+        }
+
+        w.orderByDesc(ProjectFiles::getCreatedTime);
+
+        Page<ProjectFiles> entityPage = projectFilesMapper.selectPage(new Page<>(current, pageSize), w);
+        List<ProjectFileVo> voRecords = toVos(entityPage.getRecords(), false);
+        return new Page<ProjectFileVo>(current, pageSize, entityPage.getTotal()).setRecords(voRecords);
     }
 
     @Override
