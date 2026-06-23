@@ -62,31 +62,7 @@
 		</tr>
 		{else/}
 		<tr>
-			<td class="layui-td-gray">项目类型</td>
-			<td>
-				<select id="engineeringProjectType">
-					<option value="">请选择项目类型</option>
-					{volist name="$engineering_project_types" id="type"}
-					<option value="{$type.projectTypeId}">{$type.projectTypeName}</option>
-					{/volist}
-				</select>
-			</td>
-			<td class="layui-td-gray">收费模式</td>
-			<td>
-				<select id="engineeringContractType">
-					<option value="0">基本收费</option>
-					<option value="1">基本 + 效益</option>
-				</select>
-			</td>
-			<td class="layui-td-gray">操作</td>
-			<td><button type="button" class="layui-btn layui-btn-normal layui-btn-sm" id="createEngineeringProject">创建工程项目</button></td>
-		</tr>
-		<tr id="engineeringBenefitRow" style="display:none;">
-			<td class="layui-td-gray">基本金额</td>
-			<td><input type="number" min="0" step="0.01" id="engineeringBaseAmount" value="{$detail.cost}" class="layui-input"></td>
-			<td class="layui-td-gray">预计效益金额</td>
-			<td><input type="number" min="0" step="0.01" id="engineeringBenefitAmount" value="0" class="layui-input"></td>
-			<td colspan="2"><span class="layui-font-gray">工程项目创建后，合同与项目保持唯一关联。</span></td>
+			<td colspan="6"><span class="layui-font-gray">该合同暂未关联工程项目。</span></td>
 		</tr>
 		{/if}
 		{/if}
@@ -317,35 +293,6 @@
 	function gouguInit() {
 		var tool = layui.tool,element = layui.element,oaCheck=layui.oaCheck,oaPicker=layui.oaPicker,uploadPlus=layui.uploadPlus;	
 
-		$('body').on('change', '#engineeringContractType', function () {
-			$('#engineeringBenefitRow').toggle($(this).val() === '1');
-		});
-
-		$('body').on('click', '#createEngineeringProject', function () {
-			let projectTypeId = $('#engineeringProjectType').val();
-			if (!projectTypeId) {
-				layer.msg('请选择项目类型');
-				return;
-			}
-			let contractType = parseInt($('#engineeringContractType').val() || '0');
-			let data = {
-				id: contract_id,
-				project_type_id: projectTypeId,
-				contract_type: contractType,
-				base_amount: contractType === 1 ? $('#engineeringBaseAmount').val() : null,
-				benefit_amount: contractType === 1 ? $('#engineeringBenefitAmount').val() : null
-			};
-			layer.confirm('创建后该 OA 合同将与工程项目唯一关联，确定继续？', {icon: 3, title: '创建工程项目'}, function(index) {
-				tool.post('/contract/contract/create_engineering_project', data, function(e) {
-					layer.msg(e.msg);
-					if (e.code === 0) {
-						setTimeout(function() { location.reload(); }, 800);
-					}
-				});
-				layer.close(index);
-			});
-		});
-		
 		var attachment = new uploadPlus({
 			"attachment":{
 				"uidDelete":true,//是否开启只有上传人自己才能删除自己的附件

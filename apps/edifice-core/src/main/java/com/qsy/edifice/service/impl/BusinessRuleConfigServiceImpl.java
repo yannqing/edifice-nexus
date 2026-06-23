@@ -30,12 +30,27 @@ public class BusinessRuleConfigServiceImpl implements BusinessRuleConfigService 
 
     private static final Set<String> VALUE_TYPES = Set.of("boolean", "number", "string", "json");
     private static final List<BusinessRuleTemplateVo> RULE_TEMPLATES = List.of(
-            template("inspection", "require_materials", "验工材料必填", "boolean", "true",
-                    "控制发起验工单时是否必须上传验收材料。"),
+            // 产值分配 (output)
+            template("output", "require_stage_inspection_passed", "产值分配前必须验工通过", "boolean", "true",
+                    "只有验工单通过的项目阶段才允许新建产值分配单。"),
+            template("output", "prevent_duplicate_confirmed_stage", "禁止同阶段重复确认产值", "boolean", "true",
+                    "同一项目阶段已有确认中或已确认分配单时，不允许重复确认。"),
             template("output", "allow_negative_output", "允许负产值", "boolean", "false",
-                    "控制产值分配单计算结果为负数时是否允许创建。"),
-            template("output", "require_stage_inspection_passed", "阶段必须验工通过", "boolean", "true",
-                    "控制产值分配是否只允许选择已完成/验工通过的项目阶段。")
+                    "控制产值计算结果为负时是否允许继续提交。"),
+            template("output", "block_after_project_archive", "项目归档后禁止产值分配", "boolean", "true",
+                    "项目归档后禁止继续发起产值分配。"),
+            // 验工单 (inspection)
+            template("inspection", "require_materials", "验工材料必填", "boolean", "true",
+                    "发起验工时必须上传验收材料。"),
+            template("inspection", "block_after_project_archive", "项目归档后禁止发起验工", "boolean", "true",
+                    "项目归档后禁止继续发起验工。"),
+            // 项目文件 (file)
+            template("file", "require_approval", "项目文件上传必须审批", "boolean", "true",
+                    "项目文件上传后进入审批流程，通过后才归档为正式文件。"),
+            template("file", "allow_image_upload", "允许上传图片文件", "boolean", "true",
+                    "控制项目文件上传入口是否允许图片类型。"),
+            template("file", "block_after_project_archive", "项目归档后禁止上传文件", "boolean", "true",
+                    "项目归档后禁止继续上传项目文件。")
     );
     private static final TypeReference<Map<String, Object>> JSON_MAP_TYPE = new TypeReference<>() {};
 
