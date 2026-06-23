@@ -22,7 +22,6 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "流程配置中心")
 @RestController
 @RequestMapping("/flow-config")
-@PreAuthorize("hasAuthority('menu:flow-config') or hasRole('SUPER_ADMIN')")
 public class ApprovalFlowConfigController {
 
     @Resource
@@ -33,24 +32,35 @@ public class ApprovalFlowConfigController {
 
     @GetMapping("/list")
     @Operation(summary = "流程配置列表")
+    @PreAuthorize("hasAuthority('menu:flow-config') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Page<ApprovalFlowConfigVo>> list(GetApprovalFlowConfigListDto dto) {
         return ResultUtils.success(Code.SUCCESS, approvalFlowConfigService.list(dto));
     }
 
     @GetMapping("/{id}")
     @Operation(summary = "流程配置详情")
+    @PreAuthorize("hasAuthority('menu:flow-config') or hasRole('SUPER_ADMIN')")
     public BaseResponse<ApprovalFlowConfigVo> detail(@PathVariable Long id) {
         return ResultUtils.success(Code.SUCCESS, approvalFlowConfigService.detail(id));
     }
 
     @GetMapping("/enabled/{bizType}")
     @Operation(summary = "按业务类型获取启用流程配置")
+    @PreAuthorize("hasRole('SUPER_ADMIN') or hasAuthority('menu:flow-config') "
+            + "or (#bizType == 'file' and hasAuthority('menu:project-files-approval')) "
+            + "or (#bizType == 'inspection' and hasAuthority('menu:inspection-approval')) "
+            + "or (#bizType == 'output' and hasAuthority('menu:output-value')) "
+            + "or (#bizType == 'timesheet' and hasAuthority('menu:timesheet')) "
+            + "or (#bizType == 'bid' and hasAuthority('menu:bids')) "
+            + "or (#bizType == 'acceptance' and hasAuthority('menu:oa-applications')) "
+            + "or (#bizType == 'oa_application' and hasAuthority('menu:oa-applications'))")
     public BaseResponse<ApprovalFlowConfigVo> enabled(@PathVariable String bizType) {
         return ResultUtils.success(Code.SUCCESS, approvalFlowConfigService.getEnabledByBizType(bizType));
     }
 
     @PostMapping("/save")
     @Operation(summary = "保存流程配置")
+    @PreAuthorize("hasAuthority('menu:flow-config') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Long> save(@RequestBody SaveApprovalFlowConfigDto dto, HttpServletRequest request)
             throws JsonProcessingException {
         return ResultUtils.success(Code.SUCCESS, approvalFlowConfigService.save(dto, userId(request)), "保存成功");
@@ -58,6 +68,7 @@ public class ApprovalFlowConfigController {
 
     @PutMapping("/toggle/{id}")
     @Operation(summary = "启停流程配置")
+    @PreAuthorize("hasAuthority('menu:flow-config') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> toggle(@PathVariable Long id,
                                         @RequestBody ToggleConfigStatusDto dto,
                                         HttpServletRequest request) throws JsonProcessingException {
@@ -67,6 +78,7 @@ public class ApprovalFlowConfigController {
 
     @DeleteMapping("/{id}")
     @Operation(summary = "删除流程配置")
+    @PreAuthorize("hasAuthority('menu:flow-config') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> delete(@PathVariable Long id) {
         approvalFlowConfigService.delete(id);
         return ResultUtils.success(Code.SUCCESS, true, "删除成功");

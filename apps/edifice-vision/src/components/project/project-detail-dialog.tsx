@@ -751,6 +751,9 @@ function ContractAttachmentRow({
   );
 }
 
+/** 项目经理角色ID（对应 sys_role.role_id = 101） */
+const ROLE_PROJECT_MANAGER = 101;
+
 /** 详情内容 */
 function ProjectDetailContent({
   detail,
@@ -763,6 +766,16 @@ function ProjectDetailContent({
   onStartStages: (stageIds: string[]) => void;
   onRestartStage: (stageId: string) => void;
 }) {
+  const { user } = useAuth();
+
+  /** 判断当前用户是否为该项目的项目经理 */
+  const isManager = (() => {
+    if (!user || !detail.projectMemberList) return false;
+    return detail.projectMemberList.some(
+      (m) => String(m.userId) === String(user.userId) && Number(m.projectRoleId) === ROLE_PROJECT_MANAGER
+    );
+  })();
+
   const statusLabel = getStatusLabel(detail.projectStatus);
   const category = getCategoryLabel(detail.projectType?.projectTypeCode ?? "");
   const typeName = detail.projectType?.projectTypeName ?? "";
@@ -861,7 +874,7 @@ function ProjectDetailContent({
 
         {/* v0.4 效益管理（仅基本+效益类型显示） */}
         {contract && contract.contractType === 1 && (
-          <ContractBenefitSection contract={contract} />
+          <ContractBenefitSection contract={contract} isManager={isManager} />
         )}
 
         {/* 阶段进度 */}
@@ -879,7 +892,7 @@ function ProjectDetailContent({
                     {completedStages}/{stages.length}
                   </span>
                 </h4>
-                {notStartedIds.length > 0 && (
+                {isManager && notStartedIds.length > 0 && (
                   <Button
                     className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
                     disabled={stageActionLoading}
@@ -942,8 +955,8 @@ function ProjectDetailContent({
                       >
                         {stageStatusLabels[stage.stageStatus] ?? "未知"}
                       </span>
-                      {/* 未开始 → 可单独启动 */}
-                      {stage.stageStatus === 0 && (
+                      {/* 未开始 → 可单独启动（仅项目经理） */}
+                      {isManager && stage.stageStatus === 0 && (
                         <button
                           disabled={stageActionLoading}
                           onClick={() => onStartStages([stage.projectStageId])}
@@ -952,8 +965,8 @@ function ProjectDetailContent({
                           启动
                         </button>
                       )}
-                      {/* 已驳回 → 可重启 */}
-                      {stage.stageStatus === 4 && (
+                      {/* 已驳回 → 可重启（仅项目经理） */}
+                      {isManager && stage.stageStatus === 4 && (
                         <button
                           disabled={stageActionLoading}
                           onClick={() => onRestartStage(stage.projectStageId)}
@@ -1028,8 +1041,10 @@ function ProjectDetailContent({
 /** v0.4：合同效益管理 Section（含修正历史 + 修正按钮） */
 function ContractBenefitSection({
   contract,
+  isManager,
 }: {
   contract: NonNullable<ProjectDetailVo["contract"]>;
+  isManager: boolean;
 }) {
   const [history, setHistory] = useState<ContractBenefitRevisionVo[]>([]);
   const [reviseOpen, setReviseOpen] = useState(false);
@@ -1071,7 +1086,7 @@ function ContractBenefitSection({
             </span>
           )}
         </h4>
-        {!isFinal && (
+        {isManager && !isFinal && (
           <Button
             className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
             onClick={() => setReviseOpen(true)}
