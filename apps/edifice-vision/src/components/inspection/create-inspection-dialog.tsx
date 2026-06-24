@@ -316,7 +316,7 @@ export function CreateInspectionDialog({
               <input
                 type="file"
                 className="hidden"
-                accept=".pdf,.doc,.docx,.xls,.xlsx"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.rtf,.odt,.ods,.odp,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.tiff,.tif,.zip,.rar,.7z,.mp3,.wav"
                 disabled={uploading}
                 onChange={(event) => {
                   const file = event.target.files?.[0];
