@@ -53,4 +53,9 @@ public class ProjectStageVo implements Serializable {
      */
     private BigDecimal benefitInclusionRatio;
 
+    /**
+     * 已审批通过的累计完成比例（%，0-100）
+     */
+    private BigDecimal completionRatio;
+
 }

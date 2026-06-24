@@ -62,6 +62,8 @@ public class CollectionServiceImpl implements CollectionService {
 
     /** 阶段被视为"已完成"的状态集合：3-已验收 / 6-已完成 */
     private static final Set<Integer> STAGE_COMPLETED_STATUSES = Set.of(3, 6);
+    private static final java.math.BigDecimal BD_100 = new java.math.BigDecimal("100");
+    private static final java.math.BigDecimal BD_10000 = new java.math.BigDecimal("10000");
 
     @Resource
     private CollectionRecordMapper collectionRecordMapper;
@@ -364,24 +366,50 @@ public class CollectionServiceImpl implements CollectionService {
         BigDecimal benefitAmt = contract.getBenefitAmount() != null
                 ? contract.getBenefitAmount() : BigDecimal.ZERO;
 
-        BigDecimal maxCompletedBaseRatio = stages.stream()
-                .filter(s -> STAGE_COMPLETED_STATUSES.contains(s.getStageStatus()))
-                .map(s -> s.getStageOutput() != null ? s.getStageOutput() : BigDecimal.ZERO)
+        // 计算每个阶段的有效比例：stage_output × completion_ratio / 100
+        // 包含已完成(status=6)和部分完成(status=1, completion_ratio>0)的阶段
+        BigDecimal maxEffectiveBaseRatio = stages.stream()
+                .filter(s -> {
+                    int status = s.getStageStatus() != null ? s.getStageStatus() : 0;
+                    if (STAGE_COMPLETED_STATUSES.contains(status)) return true;
+                    if (status == 1 && s.getCompletionRatio() != null && s.getCompletionRatio().signum() > 0) return true;
+                    return false;
+                })
+                .map(s -> {
+                    BigDecimal base = s.getStageOutput() != null ? s.getStageOutput() : BigDecimal.ZERO;
+                    BigDecimal cr = s.getCompletionRatio();
+                    if (cr == null || cr.signum() <= 0) {
+                        // 兼容旧数据：status=6 时按 100%
+                        cr = (s.getStageStatus() != null && s.getStageStatus() == 6) ? BD_100 : BigDecimal.ZERO;
+                    }
+                    return base.multiply(cr).divide(BD_100, 4, java.math.RoundingMode.HALF_UP);
+                })
                 .max(BigDecimal::compareTo)
                 .orElse(BigDecimal.ZERO);
 
-        BigDecimal maxCompletedBenefitRatio = stages.stream()
-                .filter(s -> STAGE_COMPLETED_STATUSES.contains(s.getStageStatus()))
-                .map(s -> resolveBenefitRatio(
-                        s.getBenefitInclusionRatio(),
-                        s.getStageOutput() != null ? s.getStageOutput() : BigDecimal.ZERO))
+        BigDecimal maxEffectiveBenefitRatio = stages.stream()
+                .filter(s -> {
+                    int status = s.getStageStatus() != null ? s.getStageStatus() : 0;
+                    if (STAGE_COMPLETED_STATUSES.contains(status)) return true;
+                    if (status == 1 && s.getCompletionRatio() != null && s.getCompletionRatio().signum() > 0) return true;
+                    return false;
+                })
+                .map(s -> {
+                    BigDecimal base = s.getStageOutput() != null ? s.getStageOutput() : BigDecimal.ZERO;
+                    BigDecimal benefit = resolveBenefitRatio(s.getBenefitInclusionRatio(), base);
+                    BigDecimal cr = s.getCompletionRatio();
+                    if (cr == null || cr.signum() <= 0) {
+                        cr = (s.getStageStatus() != null && s.getStageStatus() == 6) ? BD_100 : BigDecimal.ZERO;
+                    }
+                    return benefit.multiply(cr).divide(BD_100, 4, java.math.RoundingMode.HALF_UP);
+                })
                 .max(BigDecimal::compareTo)
                 .orElse(BigDecimal.ZERO);
 
-        BigDecimal baseExpected = baseAmt.multiply(maxCompletedBaseRatio)
-                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-        BigDecimal benefitExpected = benefitAmt.multiply(maxCompletedBenefitRatio)
-                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        BigDecimal baseExpected = baseAmt.multiply(maxEffectiveBaseRatio)
+                .divide(BD_100, 2, java.math.RoundingMode.HALF_UP);
+        BigDecimal benefitExpected = benefitAmt.multiply(maxEffectiveBenefitRatio)
+                .divide(BD_100, 2, java.math.RoundingMode.HALF_UP);
 
         return baseExpected.add(benefitExpected);
     }

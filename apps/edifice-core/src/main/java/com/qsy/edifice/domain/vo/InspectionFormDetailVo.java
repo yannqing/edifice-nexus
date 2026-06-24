@@ -55,6 +55,9 @@ public class InspectionFormDetailVo implements Serializable {
     @Schema(description = "阶段产值比例")
     private BigDecimal stageOutput;
 
+    @Schema(description = "本次完成比例（%）")
+    private BigDecimal completionRatio;
+
     @Schema(description = "合同金额")
     private BigDecimal contractAmount;
 

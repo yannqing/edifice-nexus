@@ -1269,6 +1269,7 @@ public class ProjectServiceImpl implements ProjectService {
             vo.setStageStatus(stage.getStageStatus());
             vo.setStageOutput(stage.getStageOutput());
             vo.setBenefitInclusionRatio(stage.getBenefitInclusionRatio());
+            vo.setCompletionRatio(stage.getCompletionRatio());
             vo.setInspectionCount(stageInspections.size());
             vo.setLatestInspectionStatus(stageInspections.stream()
                     .sorted(Comparator.comparing(InspectionForm::getUpdatedTime,

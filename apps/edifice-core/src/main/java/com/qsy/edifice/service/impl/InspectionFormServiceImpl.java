@@ -479,14 +479,30 @@ public class InspectionFormServiceImpl implements InspectionFormService {
                     "阶段[" + stage.getStageName() + "]当前状态不是[进行中]，无法提交验工");
         }
 
-        // 校验该阶段是否有未完成的验工单
-        List<InspectionForm> pendingForms = inspectionFormMapper.selectByProjectStageId(dto.getProjectStageId());
-        if (pendingForms != null) {
-            boolean hasPending = pendingForms.stream()
-                    .anyMatch(f -> f.getInspectionFormStatus() == 0 || f.getInspectionFormStatus() == 1);
-            if (hasPending) {
-                throw new BusinessException(ErrorType.STAGE_HAS_PENDING_INSPECTION);
+        // 校验完成比例：已审批 + 待审核 + 本次申请 ≤ 100%
+        BigDecimal applyRatio = dto.getCompletionRatio() != null && dto.getCompletionRatio().signum() > 0
+                ? dto.getCompletionRatio() : new BigDecimal("100");
+        if (applyRatio.compareTo(new BigDecimal("100")) > 0) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "完成比例不能超过100%");
+        }
+        List<InspectionForm> existingForms = inspectionFormMapper.selectByProjectStageId(dto.getProjectStageId());
+        BigDecimal approvedSum = BigDecimal.ZERO;
+        BigDecimal pendingSum = BigDecimal.ZERO;
+        if (existingForms != null) {
+            for (InspectionForm f : existingForms) {
+                BigDecimal r = f.getCompletionRatio() != null ? f.getCompletionRatio() : new BigDecimal("100");
+                if (f.getInspectionFormStatus() == 3) {
+                    approvedSum = approvedSum.add(r);
+                } else if (f.getInspectionFormStatus() == 0 || f.getInspectionFormStatus() == 1) {
+                    pendingSum = pendingSum.add(r);
+                }
             }
+        }
+        BigDecimal totalRatio = approvedSum.add(pendingSum).add(applyRatio);
+        if (totalRatio.compareTo(new BigDecimal("100")) > 0) {
+            BigDecimal remaining = new BigDecimal("100").subtract(approvedSum).subtract(pendingSum);
+            throw new BusinessException(ErrorType.ARGS_INVALID,
+                    "该阶段已完成" + approvedSum + "%、待审核" + pendingSum + "%，本次最多可申请" + remaining + "%");
         }
 
         // 生成验工单编号
@@ -500,6 +516,7 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         form.setApplyUserId(userId);
         form.setInspectionFormStatus(0); // 待审核
         form.setFileIds(dto.getFileIds());
+        form.setCompletionRatio(applyRatio);
 
         inspectionFormMapper.insert(form);
 
@@ -510,14 +527,10 @@ public class InspectionFormServiceImpl implements InspectionFormService {
                 dto.getInspectionFormDescription()
         );
         ApprovalRecords record = approvalFlowService.submit(submit, userId);
-        log.info("验工单已提交审批 inspectionId={} firstApprover={} recordId={}",
-                form.getInspectionFormId(), dto.getFirstApproverId(), record.getApprovalRecordId());
+        log.info("验工单已提交审批 inspectionId={} firstApprover={} recordId={} completionRatio={}%",
+                form.getInspectionFormId(), dto.getFirstApproverId(), record.getApprovalRecordId(), applyRatio);
 
-        // 阶段状态：1(进行中) → 2(待验收)
-        stage.setStageStatus(2);
-        projectStageService.updateProjectStage(stage);
-        log.info("提交验工单，阶段状态变更为待验收: stageId={}, stageName={}", stage.getProjectStageId(), stage.getStageName());
-
+        // 阶段状态保持 1(进行中)，不再变更为 2(待验收)——部分完成模式下阶段始终处于进行中
         return form.getInspectionFormId();
     }
 
@@ -603,9 +616,24 @@ public class InspectionFormServiceImpl implements InspectionFormService {
                     log.info("验工审批驳回: stageId={}, stageName={}",
                             stage.getProjectStageId(), stage.getStageName());
                 } else {
-                    stage.setStageStatus(6); // 已完成
-                    log.info("验工审批通过，阶段已完成: stageId={}, stageName={}",
-                            stage.getProjectStageId(), stage.getStageName());
+                    // 终审通过：累加完成比例
+                    BigDecimal formRatio = form.getCompletionRatio() != null
+                            ? form.getCompletionRatio() : new BigDecimal("100");
+                    BigDecimal currentRatio = stage.getCompletionRatio() != null
+                            ? stage.getCompletionRatio() : BigDecimal.ZERO;
+                    BigDecimal newRatio = currentRatio.add(formRatio);
+                    if (newRatio.compareTo(new BigDecimal("100")) >= 0) {
+                        newRatio = new BigDecimal("100");
+                        stage.setStageStatus(6); // 已完成（100%）
+                        log.info("验工审批通过，阶段已完成(100%): stageId={}, stageName={}",
+                                stage.getProjectStageId(), stage.getStageName());
+                    } else {
+                        // 部分完成，阶段保持 1(进行中)，可继续提交验工单
+                        stage.setStageStatus(1);
+                        log.info("验工审批通过，阶段部分完成({}%): stageId={}, stageName={}",
+                                newRatio, stage.getProjectStageId(), stage.getStageName());
+                    }
+                    stage.setCompletionRatio(newRatio);
                 }
                 projectStageService.updateProjectStage(stage);
                 projectStageService.syncProjectStatus(stage.getProjectId());
@@ -805,7 +833,7 @@ public class InspectionFormServiceImpl implements InspectionFormService {
             }
         }
 
-        // 阶段信息 + 阶段金额
+        // 阶段信息 + 阶段金额（按完成比例折算）
         if (form.getProjectStageId() != null) {
             ProjectStage stage = cache.stages.computeIfAbsent(
                     form.getProjectStageId(), projectStageService::getProjectStageById);
@@ -813,9 +841,11 @@ public class InspectionFormServiceImpl implements InspectionFormService {
                 data.setStageName(stage.getStageName());
                 data.setStageOutput(stage.getStageOutput());
                 if (data.getContractAmount() != null && stage.getStageOutput() != null) {
+                    BigDecimal cr = form.getCompletionRatio() != null && form.getCompletionRatio().signum() > 0
+                            ? form.getCompletionRatio() : new BigDecimal("100");
                     BigDecimal stageAmount = data.getContractAmount()
-                            .multiply(stage.getStageOutput())
-                            .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+                            .multiply(stage.getStageOutput()).multiply(cr)
+                            .divide(new BigDecimal("10000"), 2, RoundingMode.HALF_UP);
                     data.setStageAmount(stageAmount);
                 }
             }

@@ -10,6 +10,7 @@ export interface InspectionFormListVo {
   projectStageId: string;
   stageName: string;
   stageOutput: number;
+  completionRatio?: number;
   contractAmount: number;
   applyUserId: string;
   applyUserName: string;
@@ -78,6 +79,7 @@ export interface ApplyInspectionParams {
   inspectionFormDescription?: string;
   fileIds?: string;
   firstApproverId: string;
+  completionRatio?: number;
 }
 
 // ==================== 审批参数 ====================

@@ -5,6 +5,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 /**
  * 提交验工单 DTO
  */
@@ -28,4 +30,7 @@ public class ApplyInspectionDto {
 
     @Schema(description = "一级审批人id", requiredMode = Schema.RequiredMode.REQUIRED)
     private Long firstApproverId;
+
+    @Schema(description = "本次完成比例（%，0-100）。不填默认100。")
+    private BigDecimal completionRatio;
 }

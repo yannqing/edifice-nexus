@@ -72,6 +72,12 @@ public class InspectionForm implements Serializable {
     private String fileIds;
 
     /**
+     * 本次验工申请的完成比例（%，0-100）。历史数据默认 100。
+     */
+    @TableField("completion_ratio")
+    private java.math.BigDecimal completionRatio;
+
+    /**
      * 创建时间
      */
     @TableField(value = "created_time", fill = FieldFill.INSERT)

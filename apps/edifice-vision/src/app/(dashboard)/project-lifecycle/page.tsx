@@ -92,8 +92,13 @@ function eventAccentClass(type: string) {
 
 function completedStagePercent(stages?: ProjectStageVo[] | null) {
   if (!stages?.length) return 0;
-  const completed = stages.filter((stage) => STAGE_COMPLETED_STATUSES.includes(stage.stageStatus)).length;
-  return Math.round((completed / stages.length) * 100);
+  // 按完成比例加权计算：已完成的算100%，部分完成的按比例，未开始的算0%
+  const totalRatio = stages.reduce((sum, stage) => {
+    if (STAGE_COMPLETED_STATUSES.includes(stage.stageStatus)) return sum + 100;
+    const cr = stage.completionRatio ?? 0;
+    return sum + cr;
+  }, 0);
+  return Math.round(totalRatio / stages.length);
 }
 
 export default function ProjectLifecyclePage() {
@@ -420,6 +425,7 @@ function StageNode({ stage }: { stage: LifecycleStageVo }) {
       <div className="grid grid-cols-2 gap-3 text-sm mt-4">
         <MiniMetric label="基本比例" value={percentText(stage.stageOutput)} />
         <MiniMetric label="效益比例" value={percentText(stage.benefitInclusionRatio ?? stage.stageOutput)} />
+        <MiniMetric label="完成进度" value={percentText(stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0))} />
         <MiniMetric label="验工单" value={`${stage.inspectionCount} 个`} />
         <MiniMetric label="产值单" value={`${stage.outputValueCount} 个`} />
         <MiniMetric label="已发放" value={formatMoney(stage.paidOutputAmount)} />

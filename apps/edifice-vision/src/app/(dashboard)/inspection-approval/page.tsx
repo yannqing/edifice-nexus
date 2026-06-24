@@ -390,8 +390,9 @@ export default function InspectionApprovalPage() {
         <div className="md:hidden space-y-3">
           {inspections.map((item) => {
             const statusLabel = getStatusLabel(item.inspectionFormStatus);
+            const cr = item.completionRatio ?? 100;
             const phaseAmount = item.contractAmount && item.stageOutput
-              ? (item.contractAmount * item.stageOutput) / 100
+              ? (item.contractAmount * item.stageOutput * cr) / 10000
               : 0;
             return (
               <button
@@ -453,8 +454,9 @@ export default function InspectionApprovalPage() {
             <tbody className="divide-y divide-slate-100">
               {inspections.map((item) => {
                 const statusLabel = getStatusLabel(item.inspectionFormStatus);
+                const cr = item.completionRatio ?? 100;
                 const phaseAmount = item.contractAmount && item.stageOutput
-                  ? (item.contractAmount * item.stageOutput) / 100
+                  ? (item.contractAmount * item.stageOutput * cr) / 10000
                   : 0;
 
                 return (
@@ -467,7 +469,7 @@ export default function InspectionApprovalPage() {
                       <span className="text-sm text-slate-600">{item.stageName || "-"}</span>
                       {item.projectTypeName && (
                         <p className="text-xs text-slate-400 mt-0.5">
-                          {item.projectTypeName} · 产值比例 {item.stageOutput ?? 0}%
+                          {item.projectTypeName} · 产值比例 {item.stageOutput ?? 0}% · 本次完成 {cr}%
                         </p>
                       )}
                     </td>
@@ -595,6 +597,7 @@ export default function InspectionApprovalPage() {
                   <InfoItem label="项目分类" value={detail.projectTypeName || "-"} />
                   <InfoItem label="验工阶段" value={detail.stageName || "-"} />
                   <InfoItem label="阶段产值比例" value={detail.stageOutput ? `${detail.stageOutput}%` : "-"} />
+                  <InfoItem label="本次完成比例" value={detail.completionRatio ? `${detail.completionRatio}%` : "100%"} />
                   <InfoItem label="发起人" value={detail.applyUserName || "-"} />
                   <InfoItem label="发起时间" value={formatDate(detail.createdTime)} />
                 </div>

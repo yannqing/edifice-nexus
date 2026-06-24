@@ -61,6 +61,12 @@ public class ProjectStage implements Serializable {
     private BigDecimal benefitInclusionRatio;
 
     /**
+     * 已审批通过的累计完成比例（%，0-100）。部分完成时 < 100，满 100 时阶段状态变为 6(已完成)。
+     */
+    @TableField("completion_ratio")
+    private BigDecimal completionRatio;
+
+    /**
      * 创建时间
      */
     @TableField(value = "created_time", fill = FieldFill.INSERT)

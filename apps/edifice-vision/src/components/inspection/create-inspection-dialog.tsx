@@ -43,6 +43,7 @@ export function CreateInspectionDialog({
   const [files, setFiles] = useState<FilesVo[]>([]);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [completionRatio, setCompletionRatio] = useState("100");
 
   useEffect(() => {
     if (!open) {
@@ -53,6 +54,7 @@ export function CreateInspectionDialog({
       setStages([]);
       setFirstApproverId("");
       setProjects([]);
+      setCompletionRatio("100");
       return;
     }
 
@@ -153,6 +155,7 @@ export function CreateInspectionDialog({
         inspectionFormDescription: description,
         fileIds,
         firstApproverId,
+        completionRatio: Number(completionRatio) || 100,
       });
 
       if (res.code === ResponseCode.SUCCESS) {
@@ -216,6 +219,38 @@ export function CreateInspectionDialog({
                 该项目暂无进行中的阶段，请先在项目详情中启动阶段
               </p>
             )}
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+              本次完成比例 (%) <span className="text-rose-500">*</span>
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+                value={completionRatio}
+                onChange={(e) => setCompletionRatio(e.target.value)}
+                placeholder="1-100"
+                className="form-input w-32"
+              />
+              <span className="text-sm text-slate-500">%</span>
+              {(() => {
+                const selectedStage = stages.find((s) => String(s.projectStageId) === selectedStageId);
+                if (selectedStage) {
+                  const used = selectedStage.completionRatio ?? 0;
+                  const remaining = 100 - used;
+                  return (
+                    <span className="text-xs text-slate-400">
+                      该阶段已完成 {used}%，剩余可申请 {remaining}%
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+            </div>
           </div>
 
           <div>

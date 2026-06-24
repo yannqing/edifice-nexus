@@ -19,6 +19,8 @@ export interface ProjectStageVo {
   stageOutput: number;
   /** 效益部分累计计入比例（%，0-100），v0.4 新增 */
   benefitInclusionRatio?: number;
+  /** 已审批通过的累计完成比例（%，0-100） */
+  completionRatio?: number;
 }
 
 // ==================== 合同 VO ====================

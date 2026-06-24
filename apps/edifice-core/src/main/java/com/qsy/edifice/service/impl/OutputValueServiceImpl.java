@@ -63,6 +63,7 @@ public class OutputValueServiceImpl implements OutputValueService {
     /** 员工池比例（%）— v0.4 修订：40% */
     private static final BigDecimal PERSONAL_POOL_RATE = new BigDecimal("40");
     private static final BigDecimal BD_100 = new BigDecimal("100");
+    private static final BigDecimal BD_10000 = new BigDecimal("10000");
     /** 守恒校验容差（元），避免 BigDecimal 舍入带来的微分误差误报 */
     private static final BigDecimal INVARIANT_TOLERANCE = new BigDecimal("0.05");
     /** 分配比例合计校验容差（百分点） */
@@ -72,8 +73,8 @@ public class OutputValueServiceImpl implements OutputValueService {
     private static final int DIST_TYPE_NORMAL = 0;
     private static final int DIST_TYPE_DOWNGRADE = 1;
     private static final int DIST_TYPE_OTHER = 4;
-    /** 可创建产值分配的阶段状态：3-已验收 / 6-已完成 */
-    private static final Set<Integer> OUTPUT_VALUE_ALLOWED_STAGE_STATUSES = Set.of(3, 6);
+    /** 可创建产值分配的阶段状态：1-进行中（部分完成）/ 3-已验收 / 6-已完成 */
+    private static final Set<Integer> OUTPUT_VALUE_ALLOWED_STAGE_STATUSES = Set.of(1, 3, 6);
     private static final DateTimeFormatter EXPORT_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final Map<Integer, String> STATUS_LABELS = Map.of(
             0, "待确认", 1, "待审核", 2, "已审批", 3, "已发放"
@@ -354,10 +355,17 @@ public class OutputValueServiceImpl implements OutputValueService {
                 ? resolveBenefitRatio(stage.getBenefitInclusionRatio(), baseRatio)
                 : BigDecimal.ZERO;
 
-        BigDecimal basePart = baseAmt.multiply(baseRatio)
-                .divide(BD_100, 2, RoundingMode.HALF_UP);
-        BigDecimal benefitPart = benefitAmt.multiply(benefitRatio)
-                .divide(BD_100, 2, RoundingMode.HALF_UP);
+        // 部分完成：按实际完成比例折算（兼容旧数据：completionRatio 为 null 或 0 且 status=6 时按 100% 计算）
+        BigDecimal completionRatio = stage.getCompletionRatio();
+        if (completionRatio == null || completionRatio.signum() <= 0) {
+            completionRatio = (stage.getStageStatus() != null && stage.getStageStatus() == 6)
+                    ? new BigDecimal("100") : BigDecimal.ZERO;
+        }
+
+        BigDecimal basePart = baseAmt.multiply(baseRatio).multiply(completionRatio)
+                .divide(BD_10000, 2, RoundingMode.HALF_UP);
+        BigDecimal benefitPart = benefitAmt.multiply(benefitRatio).multiply(completionRatio)
+                .divide(BD_10000, 2, RoundingMode.HALF_UP);
         BigDecimal currentStageAmount = basePart.add(benefitPart).setScale(2, RoundingMode.HALF_UP);
         List<OutputValueAdjustmentDetail> adjustmentDetails = calcAdjustmentDetails(
                 projectId, stageId, baseAmt, benefitAmt);
@@ -408,7 +416,13 @@ public class OutputValueServiceImpl implements OutputValueService {
             BigDecimal baseRatio = sourceStage.getStageOutput() != null
                     ? sourceStage.getStageOutput() : BigDecimal.ZERO;
             BigDecimal benefitRatio = resolveBenefitRatio(sourceStage.getBenefitInclusionRatio(), baseRatio);
-            BigDecimal newStageAmount = calculateStageAmount(baseAmt, benefitAmt, baseRatio, benefitRatio);
+            // 兼容旧数据：completionRatio 为 null 或 0 且 status=6 时按 100% 计算
+            BigDecimal sourceCompletion = sourceStage.getCompletionRatio();
+            if (sourceCompletion == null || sourceCompletion.signum() <= 0) {
+                sourceCompletion = (sourceStage.getStageStatus() != null && sourceStage.getStageStatus() == 6)
+                        ? new BigDecimal("100") : BigDecimal.ZERO;
+            }
+            BigDecimal newStageAmount = calculateStageAmount(baseAmt, benefitAmt, baseRatio, benefitRatio, sourceCompletion);
             BigDecimal oldStageAmount = resolveOriginalStageAmount(historical);
             BigDecimal alreadyAdjusted = adjustmentDetailMapper
                     .sumApprovedAdjustmentBySource(historical.getOutputValueId());
@@ -444,11 +458,13 @@ public class OutputValueServiceImpl implements OutputValueService {
     private BigDecimal calculateStageAmount(BigDecimal baseAmt,
                                             BigDecimal benefitAmt,
                                             BigDecimal baseRatio,
-                                            BigDecimal benefitRatio) {
-        BigDecimal basePart = baseAmt.multiply(baseRatio)
-                .divide(BD_100, 2, RoundingMode.HALF_UP);
-        BigDecimal benefitPart = benefitAmt.multiply(benefitRatio)
-                .divide(BD_100, 2, RoundingMode.HALF_UP);
+                                            BigDecimal benefitRatio,
+                                            BigDecimal completionRatio) {
+        if (completionRatio == null) completionRatio = new BigDecimal("100");
+        BigDecimal basePart = baseAmt.multiply(baseRatio).multiply(completionRatio)
+                .divide(BD_10000, 2, RoundingMode.HALF_UP);
+        BigDecimal benefitPart = benefitAmt.multiply(benefitRatio).multiply(completionRatio)
+                .divide(BD_10000, 2, RoundingMode.HALF_UP);
         return basePart.add(benefitPart).setScale(2, RoundingMode.HALF_UP);
     }
 
