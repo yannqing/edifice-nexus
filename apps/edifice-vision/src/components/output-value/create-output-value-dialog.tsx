@@ -196,7 +196,6 @@ export function CreateOutputValueDialog({
       cancelled = true;
     };
   }, [projectId, isStageAvailable]);
-  }, [projectId, isStageAvailable]);
 
   useEffect(() => {
     if (!projectId || !stageId) {
