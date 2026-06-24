@@ -74,6 +74,8 @@ export interface OutputValueVo {
   adjustmentAmount: number | null;
   /** 创建时阶段的完成比例（%，0-100） */
   stageCompletionRatio?: number | null;
+  /** 本次增量完成比例（%，0-100） */
+  stageIncrementalRatio?: number | null;
   /** 快照：本单创建时合同的基本金额 */
   baseAmountSnapshot: number | null;
   /** 快照：本单创建时合同的效益金额 */

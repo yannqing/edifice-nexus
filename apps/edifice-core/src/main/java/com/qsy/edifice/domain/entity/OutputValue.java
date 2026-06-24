@@ -113,6 +113,10 @@ public class OutputValue implements Serializable {
     @TableField("stage_completion_ratio")
     private BigDecimal stageCompletionRatio;
 
+    /** 本次增量完成比例（%，0-100） */
+    @TableField("stage_incremental_ratio")
+    private BigDecimal stageIncrementalRatio;
+
     /** 快照：本单创建时合同的基本金额 */
     @TableField("base_amount_snapshot")
     private BigDecimal baseAmountSnapshot;

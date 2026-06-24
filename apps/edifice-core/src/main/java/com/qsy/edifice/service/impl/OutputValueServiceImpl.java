@@ -301,6 +301,7 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .currentStageAmount(calculation.currentStageAmount)
                 .adjustmentAmount(calculation.adjustmentAmount)
                 .stageCompletionRatio(calculation.completionRatio)
+                .stageIncrementalRatio(calculation.incrementalRatio)
                 .baseAmountSnapshot(calculation.baseAmount)
                 .benefitAmountSnapshot(calculation.benefitAmount)
                 .calculationVersion("output_adjustment_v1")
@@ -874,6 +875,7 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setCurrentStageAmount(ov.getCurrentStageAmount());
         vo.setAdjustmentAmount(ov.getAdjustmentAmount());
         vo.setStageCompletionRatio(ov.getStageCompletionRatio());
+        vo.setStageIncrementalRatio(ov.getStageIncrementalRatio());
         vo.setBaseAmountSnapshot(ov.getBaseAmountSnapshot());
         vo.setBenefitAmountSnapshot(ov.getBenefitAmountSnapshot());
         vo.setCalculationVersion(ov.getCalculationVersion());

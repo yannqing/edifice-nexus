@@ -381,7 +381,7 @@ export default function OutputValuePage() {
                             <><span>·</span><span>产值比例 {item.stageOutput}%</span></>
                           )}
                           {item.stageCompletionRatio != null && item.stageCompletionRatio < 100 && (
-                            <><span>·</span><span className="text-amber-600">阶段完成 {item.stageCompletionRatio}%</span></>
+                            <><span>·</span><span className="text-amber-600">阶段完成 {item.stageIncrementalRatio ?? item.stageCompletionRatio}%</span></>
                           )}
                         </div>
                       </div>

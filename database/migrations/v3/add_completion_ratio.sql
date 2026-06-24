@@ -17,3 +17,8 @@ ALTER TABLE inspection_form
 ALTER TABLE output_value
     ADD COLUMN stage_completion_ratio DECIMAL(5,2) NOT NULL DEFAULT 100.00 COMMENT '创建时阶段的完成比例（%，0-100），历史数据默认100'
     AFTER adjustment_amount;
+
+-- output_value 加 stage_incremental_ratio：本次增量完成比例
+ALTER TABLE output_value
+    ADD COLUMN stage_incremental_ratio DECIMAL(5,2) NOT NULL DEFAULT 100.00 COMMENT '本次增量完成比例（%，0-100），历史数据默认100'
+    AFTER stage_completion_ratio;
