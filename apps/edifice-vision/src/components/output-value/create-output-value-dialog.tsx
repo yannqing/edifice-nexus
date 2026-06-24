@@ -476,6 +476,10 @@ export function CreateOutputValueDialog({
             <div className={cn("grid grid-cols-1 gap-2 text-slate-600", hasBenefit && "sm:grid-cols-2")}>
               <div>
                 基本部分：¥{preview.baseAmount.toLocaleString()} × {preview.baseRatio}%
+                {selectedStage && (selectedStage.completionRatio ?? (selectedStage.stageStatus === 6 ? 100 : 0)) > 0
+                  && (selectedStage.completionRatio ?? (selectedStage.stageStatus === 6 ? 100 : 0)) < 100 && (
+                  <span> × {selectedStage.completionRatio ?? 100}%（完成比例）</span>
+                )}
                 <span className="font-semibold text-slate-800 ml-1">
                   = ¥{preview.basePart.toLocaleString()}
                 </span>
@@ -483,6 +487,10 @@ export function CreateOutputValueDialog({
               {hasBenefit && (
                 <div>
                   效益部分：¥{preview.benefitAmount.toLocaleString()} × {preview.benefitRatio}%
+                  {selectedStage && (selectedStage.completionRatio ?? (selectedStage.stageStatus === 6 ? 100 : 0)) > 0
+                    && (selectedStage.completionRatio ?? (selectedStage.stageStatus === 6 ? 100 : 0)) < 100 && (
+                    <span> × {selectedStage.completionRatio ?? 100}%（完成比例）</span>
+                  )}
                   <span className="font-semibold text-slate-800 ml-1">
                     = ¥{preview.benefitPart.toLocaleString()}
                   </span>
