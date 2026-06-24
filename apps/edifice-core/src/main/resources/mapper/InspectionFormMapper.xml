@@ -12,6 +12,7 @@
         <result column="apply_user_id" property="applyUserId" jdbcType="BIGINT"/>
         <result column="inspection_form_status" property="inspectionFormStatus" jdbcType="TINYINT"/>
         <result column="file_ids" property="fileIds" jdbcType="VARCHAR"/>
+        <result column="completion_ratio" property="completionRatio" jdbcType="DECIMAL"/>
         <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
         <result column="updated_time" property="updatedTime" jdbcType="TIMESTAMP"/>
         <result column="is_delete" property="isDelete" jdbcType="TINYINT"/>
@@ -21,7 +22,7 @@
     <sql id="Base_Column_List">
         inspection_form_id, inspection_form_code, project_id, project_stage_id,
         inspection_form_description, apply_user_id, inspection_form_status, file_ids,
-        created_time, updated_time, is_delete
+        completion_ratio, created_time, updated_time, is_delete
     </sql>
 
     <!-- 根据验工单编号查询验工单 -->
