@@ -382,21 +382,25 @@ public class OutputValueServiceImpl implements OutputValueService {
         LambdaQueryWrapper<OutputValue> allocatedW = new LambdaQueryWrapper<>();
         allocatedW.eq(OutputValue::getProjectStageId, stageId)
                 .ge(OutputValue::getStatus, 2);
-        BigDecimal alreadyAllocated = outputValueMapper.selectList(allocatedW).stream()
+        List<OutputValue> allocatedList = outputValueMapper.selectList(allocatedW);
+        BigDecimal alreadyAllocated = allocatedList.stream()
                 .map(ov -> ov.getCurrentStageAmount() != null ? ov.getCurrentStageAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        // 计算增量完成比例（本次新增的完成部分）
-        BigDecimal alreadyRatio = BigDecimal.ZERO;
-        if (alreadyAllocated.signum() > 0 && baseRatio.signum() > 0) {
-            BigDecimal cumulativeForRatio = baseAmt.multiply(baseRatio).divide(BD_100, 2, RoundingMode.HALF_UP);
-            if (cumulativeForRatio.signum() > 0) {
-                alreadyRatio = alreadyAllocated.multiply(BD_100)
-                        .divide(cumulativeForRatio, 2, RoundingMode.HALF_UP);
-            }
+        // 计算增量完成比例：当前累计比例 - 已分配的累计比例之和
+        BigDecimal alreadyCompletionRatio = allocatedList.stream()
+                .map(ov -> ov.getStageCompletionRatio() != null ? ov.getStageCompletionRatio() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        // 兼容旧数据：如果没有 stage_completion_ratio，用 stage_incremental_ratio 累加
+        if (alreadyCompletionRatio.signum() == 0 && !allocatedList.isEmpty()) {
+            alreadyCompletionRatio = allocatedList.stream()
+                    .map(ov -> ov.getStageIncrementalRatio() != null ? ov.getStageIncrementalRatio() : BigDecimal.ZERO)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    .setScale(2, RoundingMode.HALF_UP);
         }
-        BigDecimal incrementalRatio = completionRatio.subtract(alreadyRatio).max(BigDecimal.ZERO);
+        BigDecimal incrementalRatio = completionRatio.subtract(alreadyCompletionRatio).max(BigDecimal.ZERO);
 
         BigDecimal basePart = baseAmt.multiply(baseRatio).multiply(incrementalRatio)
                 .divide(BD_10000, 2, RoundingMode.HALF_UP);
