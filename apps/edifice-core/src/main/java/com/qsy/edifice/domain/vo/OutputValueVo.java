@@ -79,6 +79,9 @@ public class OutputValueVo implements Serializable {
     /** 历史阶段补差合计，可正可负 */
     private BigDecimal adjustmentAmount;
 
+    /** 创建时阶段的完成比例（%，0-100） */
+    private BigDecimal stageCompletionRatio;
+
     /** 快照：本单创建时合同的基本金额 */
     private BigDecimal baseAmountSnapshot;
 

@@ -286,6 +286,7 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .benefitSnapshot(calculation.benefitAmount)
                 .currentStageAmount(calculation.currentStageAmount)
                 .adjustmentAmount(calculation.adjustmentAmount)
+                .stageCompletionRatio(calculation.completionRatio)
                 .baseAmountSnapshot(calculation.baseAmount)
                 .benefitAmountSnapshot(calculation.benefitAmount)
                 .calculationVersion("output_adjustment_v1")
@@ -386,7 +387,8 @@ public class OutputValueServiceImpl implements OutputValueService {
                 currentStageAmount,
                 adjustmentAmount,
                 totalAmount,
-                adjustmentDetails
+                adjustmentDetails,
+                completionRatio
         );
     }
 
@@ -543,7 +545,8 @@ public class OutputValueServiceImpl implements OutputValueService {
             BigDecimal currentStageAmount,
             BigDecimal adjustmentAmount,
             BigDecimal totalAmount,
-            List<OutputValueAdjustmentDetail> adjustmentDetails
+            List<OutputValueAdjustmentDetail> adjustmentDetails,
+            BigDecimal completionRatio
     ) {}
 
     /** 在职状态：优先 DTO 传入，其次查 sys_user.employment_status，默认 1（在职） */

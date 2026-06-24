@@ -109,6 +109,10 @@ public class OutputValue implements Serializable {
     @TableField("adjustment_amount")
     private BigDecimal adjustmentAmount;
 
+    /** 创建时阶段的完成比例（%，0-100） */
+    @TableField("stage_completion_ratio")
+    private BigDecimal stageCompletionRatio;
+
     /** 快照：本单创建时合同的基本金额 */
     @TableField("base_amount_snapshot")
     private BigDecimal baseAmountSnapshot;

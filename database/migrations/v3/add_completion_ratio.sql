@@ -12,3 +12,8 @@ UPDATE project_stage SET completion_ratio = 100.00 WHERE stage_status = 6;
 ALTER TABLE inspection_form
     ADD COLUMN completion_ratio DECIMAL(5,2) NOT NULL DEFAULT 100.00 COMMENT '本次验工申请的完成比例（%，0-100），历史数据默认100'
     AFTER file_ids;
+
+-- output_value 加 stage_completion_ratio：创建时阶段的完成比例
+ALTER TABLE output_value
+    ADD COLUMN stage_completion_ratio DECIMAL(5,2) NOT NULL DEFAULT 100.00 COMMENT '创建时阶段的完成比例（%，0-100），历史数据默认100'
+    AFTER adjustment_amount;

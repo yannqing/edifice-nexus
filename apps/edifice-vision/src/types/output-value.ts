@@ -72,6 +72,8 @@ export interface OutputValueVo {
   currentStageAmount: number | null;
   /** 历史阶段补差合计，可正可负 */
   adjustmentAmount: number | null;
+  /** 创建时阶段的完成比例（%，0-100） */
+  stageCompletionRatio?: number | null;
   /** 快照：本单创建时合同的基本金额 */
   baseAmountSnapshot: number | null;
   /** 快照：本单创建时合同的效益金额 */

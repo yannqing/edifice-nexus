@@ -143,23 +143,30 @@ export function CreateOutputValueDialog({
     }
   }, []);
 
-  const confirmedStageIds = useMemo(() => {
-    return new Set(
-      outputValues
-        .filter((item) => item.status >= 1)
-        .map((item) => item.projectStageId),
-    );
+  // 记录每个阶段已确认的最大分配完成比例
+  const confirmedStageMaxRatio = useMemo(() => {
+    const map = new Map<string, number>();
+    outputValues
+      .filter((item) => item.status >= 1)
+      .forEach((item) => {
+        const ratio = item.stageCompletionRatio ?? 100;
+        const prev = map.get(item.projectStageId) ?? 0;
+        if (ratio > prev) map.set(item.projectStageId, ratio);
+      });
+    return map;
   }, [outputValues]);
 
   const isStageAvailable = useCallback(
     (stage: ProjectStageVo) => {
       if (!isCompletedStage(stage)) return false;
-      if (!confirmedStageIds.has(stage.projectStageId)) return true;
-      // 已有产值分配但阶段部分完成（<100%），仍可继续分配剩余部分
-      const cr = stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0);
-      return cr > 0 && cr < 100;
+      const maxAllocated = confirmedStageMaxRatio.get(stage.projectStageId);
+      // 阶段没有已确认的产值分配 → 可选
+      if (!maxAllocated) return true;
+      // 阶段已有分配：只有当前完成比例 > 已分配比例时才有新增可分配部分
+      const currentRatio = stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0);
+      return currentRatio > maxAllocated;
     },
-    [confirmedStageIds],
+    [confirmedStageMaxRatio],
   );
 
   useEffect(() => {
