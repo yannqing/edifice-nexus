@@ -333,6 +333,8 @@ public class OutputValueServiceImpl implements OutputValueService {
         if (stage == null || !projectId.equals(stage.getProjectId())) {
             throw new BusinessException(ErrorType.STAGE_NOT_FOUND);
         }
+        log.info("[DEBUG] stageId={}, stageName={}, stageStatus={}, completionRatio={}, stageOutput={}",
+                stageId, stage.getStageName(), stage.getStageStatus(), stage.getCompletionRatio(), stage.getStageOutput());
         boolean requireStageInspectionPassed = businessRuleConfigService.booleanValue(
                 ApprovalBizType.OUTPUT.getExt(), "require_stage_inspection_passed", true);
         if (requireStageInspectionPassed && !OUTPUT_VALUE_ALLOWED_STAGE_STATUSES.contains(stage.getStageStatus())) {
