@@ -24,6 +24,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -68,6 +69,9 @@ public class FileServiceImpl extends ServiceImpl<FilesMapper, Files> implements 
 
     @Value("${file.storage-type:local}")
     private String storageType;
+
+    @Value("${file.upload-common-url:.}")
+    private String uploadCommonPath;
 
     @Resource
     private JwtUtils jwtUtils;
@@ -288,6 +292,15 @@ public class FileServiceImpl extends ServiceImpl<FilesMapper, Files> implements 
 
         String accessUrl = fileUtils.uploadFile(file, subPath, type, fileName, newFilename, fileExtension);
 
+        // 图片类型生成缩略图
+        String thumbnailUrl = null;
+        if (IMAGE_FILE_TYPE.equals(type)) {
+            File sourceFile = new File(uploadCommonPath + File.separator + subPath
+                    + File.separator + java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd"))
+                    + File.separator + newFilename);
+            thumbnailUrl = fileUtils.generateThumbnail(sourceFile, subPath, newFilename);
+        }
+
         // 获取文件 md5 和 SHA-256
         String fileMd5 = DigestUtils.md5Hex(file.getInputStream());
         String fileHash = DigestUtils.sha256Hex(file.getInputStream());
@@ -303,6 +316,7 @@ public class FileServiceImpl extends ServiceImpl<FilesMapper, Files> implements 
             fileExtension,
             accessUrl,
             fullUrl,
+            thumbnailUrl,
             fileMd5,
             fileHash,
             file.getSize(),
@@ -341,7 +355,7 @@ public class FileServiceImpl extends ServiceImpl<FilesMapper, Files> implements 
     /**
      * 保存文件到数据库
      */
-    private FilesVo saveFileRecord(Long uploadUserId, String fileName, String OriginalName, String fileExtension, String filePath, String fileUrl, String fileMd5, String fileHash, Long fileSize, String mimeType, String fileType, HttpServletRequest request) {
+    private FilesVo saveFileRecord(Long uploadUserId, String fileName, String OriginalName, String fileExtension, String filePath, String fileUrl, String thumbnailUrl, String fileMd5, String fileHash, Long fileSize, String mimeType, String fileType, HttpServletRequest request) {
         Files file = new Files();
         file.setUploadUserId(uploadUserId);
         file.setFileType(fileType);
@@ -351,6 +365,7 @@ public class FileServiceImpl extends ServiceImpl<FilesMapper, Files> implements 
         file.setFileExtension(fileExtension);
         file.setFileUrl(fileUrl);
         file.setFilePath(filePath);
+        file.setThumbnailUrl(thumbnailUrl);
         file.setFileSize(fileSize);
         file.setFileMd5(fileMd5);
         file.setFileHash(fileHash);

@@ -183,6 +183,8 @@ export interface FilesVo {
   displayName: string;
   fileExtension: string;
   fileUrl: string;
+  filePath?: string;
+  thumbnailUrl?: string;
   fileSize: string;
   status: number;
 }

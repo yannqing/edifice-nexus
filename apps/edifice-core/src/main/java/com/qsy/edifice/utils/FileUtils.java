@@ -109,33 +109,73 @@ public class FileUtils {
     }
 
     /**
-     * 根据文件名称，路径，下载图片
-     * @param files 文件
-     * @return 返回文件
+     * 为图片生成缩略图（JPEG 压缩，最大宽度 1200px）
+     * @param sourceFile 原始图片文件
+     * @param subPath 子路径
+     * @param newFileName 新文件名
+     * @return 缩略图的访问路径，失败返回 null
+     */
+    public String generateThumbnail(File sourceFile, String subPath, String newFileName) {
+        try {
+            BufferedImage original = ImageIO.read(sourceFile);
+            if (original == null) return null;
+
+            int maxThumbWidth = 1200;
+            int origWidth = original.getWidth();
+
+            if (origWidth <= maxThumbWidth) return null;
+
+            int newHeight = (int) ((long) original.getHeight() * maxThumbWidth / origWidth);
+            BufferedImage thumb = new BufferedImage(maxThumbWidth, newHeight, BufferedImage.TYPE_INT_RGB);
+            java.awt.Graphics2D g = thumb.createGraphics();
+            g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.drawImage(original, 0, 0, maxThumbWidth, newHeight, null);
+            g.dispose();
+
+            String thumbName = newFileName.replaceFirst("\\.[^.]+$", "") + "_thumb.jpg";
+            LocalDate now = LocalDate.now();
+            String datePath = now.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+            String fullDir = uploadCommonPath + File.separator + subPath + File.separator + datePath;
+            File thumbFile = new File(fullDir, thumbName);
+
+            javax.imageio.ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
+            javax.imageio.ImageWriteParam param = writer.getDefaultWriteParam();
+            param.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
+            param.setCompressionQuality(0.75f);
+            javax.imageio.stream.ImageOutputStream ios = ImageIO.createImageOutputStream(thumbFile);
+            writer.setOutput(ios);
+            writer.write(null, new javax.imageio.IIOImage(thumb, null, null), param);
+            writer.dispose();
+            ios.close();
+
+            log.info("缩略图生成: {}, {}KB", thumbName, thumbFile.length() / 1024);
+            return uploadPrefixPath + "/" + subPath + "/" + datePath + "/" + thumbName;
+        } catch (Exception e) {
+            log.warn("缩略图生成失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 下载文件（支持 Range 请求 / 断点续传）
      */
     public ResponseEntity<FileSystemResource> downloadFile(Files files) {
-        // 本地文件下载
         File imageFile = new File(uploadCommonPath + files.getFilePath().replace(uploadPrefixPath, ""));
 
-        if (imageFile.exists()) {
-            // 根据文件扩展名设置正确的 Content-Type
-            String contentType = files.getMimeType();
+        if (!imageFile.exists()) return ResponseEntity.notFound().build();
 
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.parseMediaType(contentType)); // 设置正确的 Content-Type
-            headers.setContentDispositionFormData("inline", files.getFileName()); // 使用 "inline" 而不是 "attachment"
+        String contentType = files.getMimeType();
+        long fileLength = imageFile.length();
 
-            // 设置缓存相关的头
-            headers.setCacheControl(CacheControl.maxAge(7, TimeUnit.DAYS).cachePublic().getHeaderValue());
-            headers.setExpires(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(7)); // 7 天缓存
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.parseMediaType(contentType));
+        headers.setContentDispositionFormData("inline", files.getFileName());
+        headers.setCacheControl(CacheControl.maxAge(7, TimeUnit.DAYS).cachePublic().getHeaderValue());
+        headers.setExpires(System.currentTimeMillis() + TimeUnit.DAYS.toMillis(7));
+        headers.set("Accept-Ranges", "bytes");
+        headers.setContentLength(fileLength);
 
-            return ResponseEntity
-                    .ok()
-                    .headers(headers)
-                    .body(new FileSystemResource(imageFile));
-        } else {
-            return ResponseEntity.notFound().build();
-        }
+        return ResponseEntity.ok().headers(headers).body(new FileSystemResource(imageFile));
     }
 
     /**

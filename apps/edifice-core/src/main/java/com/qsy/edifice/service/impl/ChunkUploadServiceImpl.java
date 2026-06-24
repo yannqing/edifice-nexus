@@ -39,6 +39,9 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
     @Resource
     private FilesMapper filesMapper;
 
+    @Resource
+    private com.qsy.edifice.utils.FileUtils fileUtils;
+
     @Value("${file.upload-common-url:.}")
     private String uploadCommonPath;
 
@@ -199,6 +202,11 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         file.setFileMd5(fileMd5);
         file.setFileHash(fileHash);
         file.setMimeType(resolveMimeType(extension));
+        // 图片类型生成缩略图
+        if ("image".equals(fileType)) {
+            String thumbUrl = fileUtils.generateThumbnail(targetPath.toFile(), subPath, newFileName);
+            file.setThumbnailUrl(thumbUrl);
+        }
         file.setDownloadCount(0);
         file.setPreviewCount(0);
         file.setAccessCount(0);
@@ -225,6 +233,7 @@ public class ChunkUploadServiceImpl implements ChunkUploadService {
         vo.setFileExtension(file.getFileExtension());
         vo.setFileUrl(file.getFileUrl());
         vo.setFilePath(file.getFilePath());
+        vo.setThumbnailUrl(file.getThumbnailUrl());
         vo.setFileSize(file.getFileSize());
         vo.setStatus(file.getStatus());
         return vo;
