@@ -1,6 +1,7 @@
 import type { FilesVo } from "@/types/project";
 import type { BaseResponse } from "@/types/api";
 import { getAccessToken } from "@/lib/token";
+import { getApiBaseUrl } from "@/lib/request";
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
 const MAX_CONCURRENT = 3;
@@ -11,11 +12,6 @@ function generateUploadId(): string {
     const r = (Math.random() * 16) | 0;
     return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
   });
-}
-
-function getApiBase(): string {
-  const raw = process.env.NEXT_PUBLIC_API_URL ?? "";
-  return raw.replace(/\/+$/, "");
 }
 
 export function isSmallFile(file: File): boolean {
@@ -40,7 +36,7 @@ export async function uploadFileInChunks(
   const uploadId = generateUploadId();
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
   const fileType = options?.fileType ?? "document";
-  const base = getApiBase();
+  const base = getApiBaseUrl();
   const token = getAccessToken();
 
   // 1. 初始化

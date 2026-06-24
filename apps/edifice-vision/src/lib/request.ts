@@ -12,6 +12,11 @@ import type { SysRole } from "@/types/auth";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
+/** 获取 API 基础 URL（供分片上传等直接 fetch 场景使用） */
+export function getApiBaseUrl(): string {
+  return BASE_URL;
+}
+
 /** 需要被视为"需重新登录"的 code 列表 */
 const AUTH_FAILED_CODES: readonly number[] = [
   ResponseCode.TOKEN_ERROR,
