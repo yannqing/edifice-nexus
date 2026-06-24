@@ -255,19 +255,32 @@ function getFileExtension(file: File): string {
 
 /**
  * 上传项目文件附件。根据文件类型选择后端对应上传接口。
+ * 大文件（>10MB）自动走分片上传。
  */
-export async function uploadProjectAttachment(file: File): Promise<BaseResponse<FilesVo>> {
+export async function uploadProjectAttachment(
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<BaseResponse<FilesVo>> {
   const extension = getFileExtension(file);
+  const { isSmallFile, uploadFileInChunks } = await import("@/lib/chunk-upload");
 
-  if (file.type.startsWith("image/") || imageExtensions.has(extension)) {
-    return uploadImage(file);
+  // 小文件走原有直传
+  if (isSmallFile(file)) {
+    if (file.type.startsWith("image/") || imageExtensions.has(extension)) {
+      return uploadImage(file);
+    }
+    if (file.type.startsWith("audio/") || audioExtensions.has(extension)) {
+      return uploadAudio(file);
+    }
+    return uploadDocument(file);
   }
 
-  if (file.type.startsWith("audio/") || audioExtensions.has(extension)) {
-    return uploadAudio(file);
-  }
+  // 大文件走分片上传
+  let fileType = "document";
+  if (file.type.startsWith("image/") || imageExtensions.has(extension)) fileType = "image";
+  if (file.type.startsWith("audio/") || audioExtensions.has(extension)) fileType = "audio";
 
-  return uploadDocument(file);
+  return uploadFileInChunks(file, { onProgress, fileType });
 }
 
 // ==================== 导入导出 ====================

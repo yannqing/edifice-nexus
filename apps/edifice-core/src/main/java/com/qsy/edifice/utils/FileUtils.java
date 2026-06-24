@@ -18,8 +18,10 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.TimeUnit;
@@ -94,10 +96,11 @@ public class FileUtils {
             }
         }
 
-        // 保存文件
+        // 保存文件（流式写入，不占堆内存）
         Path filePath = Paths.get(fullDirectoryPath + File.separator + newFileName);
-        byte[] bytes = file.getBytes();
-        java.nio.file.Files.write(filePath, bytes);
+        try (InputStream is = file.getInputStream()) {
+            java.nio.file.Files.copy(is, filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
 
         // 构建访问URL（URL 必须使用正斜杠 /，不能使用 File.separator）
         String accessUrl = uploadPrefixPath + "/" + subPath + "/" + datePath + "/" + newFileName;

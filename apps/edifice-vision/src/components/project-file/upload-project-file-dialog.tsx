@@ -95,8 +95,11 @@ export function UploadProjectFileDialog({
   const [uploadedFile, setUploadedFile] = useState<FilesVo | null>(null);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 
   // 仅重置表单录入项；项目详情和阶段刷新交给下面的 effect 按 open 触发。
   const reset = useCallback(() => {
@@ -108,6 +111,7 @@ export function UploadProjectFileDialog({
     setFirstApproverId("");
     setFile(null);
     setUploadedFile(null);
+    setUploadProgress(0);
     setError("");
   }, [lockedProjectId]);
 
@@ -155,8 +159,14 @@ export function UploadProjectFileDialog({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     if (selected) {
+      if (selected.size > MAX_FILE_SIZE) {
+        setError(`文件大小不能超过 500MB，当前文件 ${(selected.size / 1024 / 1024).toFixed(1)}MB`);
+        return;
+      }
+      setError("");
       setFile(selected);
       setUploadedFile(null);
+      setUploadProgress(0);
       // 默认用原文件名填到展示名，用户可自行改
       if (!displayName) {
         const name = selected.name.replace(/\.[^./\\]+$/, "");
@@ -200,7 +210,8 @@ export function UploadProjectFileDialog({
       let fid = uploadedFile?.fileId;
       if (!fid) {
         setUploading(true);
-        const upRes = await uploadProjectAttachment(file);
+        setUploadProgress(0);
+        const upRes = await uploadProjectAttachment(file, (p) => setUploadProgress(p));
         setUploading(false);
         if (upRes.code !== ResponseCode.SUCCESS || !upRes.data) {
           return setError(upRes.msg || "文件上传失败");
@@ -375,9 +386,25 @@ export function UploadProjectFileDialog({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-700 truncate">{file.name}</p>
                   <p className="text-xs text-slate-400">
-                    {(file.size / 1024).toFixed(1)} KB
+                    {file.size > 1024 * 1024
+                      ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
+                      : `${(file.size / 1024).toFixed(1)} KB`}
                     {uploadedFile ? " · 已上传" : ""}
                   </p>
+                  {uploading && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                        <span>上传中...</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="w-full bg-slate-200 rounded-full h-1.5">
+                        <div
+                          className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <button
                   type="button"
