@@ -916,7 +916,7 @@ function ProjectDetailContent({
                       s.stageStatus === 6 || s.stageStatus === 3
                         ? "bg-emerald-500"
                         : s.stageStatus === 1 && (s.completionRatio ?? 0) > 0
-                        ? "bg-teal-500"
+                        ? "bg-amber-400"
                         : s.stageStatus === 1
                         ? "bg-blue-500"
                         : s.stageStatus === 2
@@ -950,7 +950,7 @@ function ProjectDetailContent({
                       )}
                       {(stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0)) > 0
                         && (stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0)) < 100 && (
-                        <span className="text-xs text-teal-600">
+                        <span className="text-xs text-amber-600">
                           完成 {stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0)}%
                         </span>
                       )}
@@ -958,7 +958,7 @@ function ProjectDetailContent({
                         className={cn(
                           "text-xs px-1.5 py-0.5 rounded",
                           stage.stageStatus === 1 && (stage.completionRatio ?? 0) > 0
-                            ? "bg-teal-100 text-teal-600"
+                            ? "bg-amber-100 text-amber-600"
                             : stageStatusStyles[stage.stageStatus] ??
                             "bg-slate-100 text-slate-500"
                         )}

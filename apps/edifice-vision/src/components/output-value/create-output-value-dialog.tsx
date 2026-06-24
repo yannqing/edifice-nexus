@@ -54,7 +54,10 @@ const newRow = (userId = ""): DistRow => ({
 });
 
 function isCompletedStage(stage: ProjectStageVo): boolean {
-  return STAGE_COMPLETED_STATUSES.includes(stage.stageStatus);
+  if (STAGE_COMPLETED_STATUSES.includes(stage.stageStatus)) return true;
+  // 部分完成（进行中但已有审批通过的完成比例）
+  if (stage.stageStatus === 1 && (stage.completionRatio ?? 0) > 0) return true;
+  return false;
 }
 
 function getStageStatusLabel(status: number): string {
