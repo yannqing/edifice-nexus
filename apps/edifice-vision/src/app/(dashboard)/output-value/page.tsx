@@ -380,6 +380,9 @@ export default function OutputValuePage() {
                           {item.stageOutput > 0 && (
                             <><span>·</span><span>产值比例 {item.stageOutput}%</span></>
                           )}
+                          {item.stageCompletionRatio != null && item.stageCompletionRatio < 100 && (
+                            <><span>·</span><span className="text-amber-600">阶段完成 {item.stageCompletionRatio}%</span></>
+                          )}
                         </div>
                       </div>
                       <div className="text-right mr-4">
