@@ -83,6 +83,7 @@ const EMPTY_PREVIEW: OutputValuePreview = {
   currentStageAmount: 0,
   adjustmentAmount: 0,
   thisPeriodTotal: 0,
+  alreadyAllocated: 0,
   adjustmentDetails: [],
 };
 
@@ -514,6 +515,11 @@ export function CreateOutputValueDialog({
               <span className="text-base font-bold text-blue-700 ml-2">
                 ¥{preview.currentStageAmount.toLocaleString()}
               </span>
+              {(preview.alreadyAllocated ?? 0) > 0 && (
+                <span className="text-xs text-slate-400 ml-2">
+                  （累计应得 ¥{(preview.currentStageAmount + (preview.alreadyAllocated ?? 0)).toLocaleString()} − 已分配 ¥{(preview.alreadyAllocated ?? 0).toLocaleString()}）
+                </span>
+              )}
             </div>
             <div className="pt-2 border-t border-blue-100 text-slate-700">
               历史补差合计：

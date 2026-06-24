@@ -367,7 +367,19 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .divide(BD_10000, 2, RoundingMode.HALF_UP);
         BigDecimal benefitPart = benefitAmt.multiply(benefitRatio).multiply(completionRatio)
                 .divide(BD_10000, 2, RoundingMode.HALF_UP);
-        BigDecimal currentStageAmount = basePart.add(benefitPart).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal cumulativeStageAmount = basePart.add(benefitPart).setScale(2, RoundingMode.HALF_UP);
+
+        // 扣除当前阶段已确认的产值分配金额（本次应分配 = 累计总额 - 已分配总额）
+        LambdaQueryWrapper<OutputValue> allocatedW = new LambdaQueryWrapper<>();
+        allocatedW.eq(OutputValue::getProjectStageId, stageId)
+                .ge(OutputValue::getStatus, 2);
+        BigDecimal alreadyAllocated = outputValueMapper.selectList(allocatedW).stream()
+                .map(ov -> ov.getCurrentStageAmount() != null ? ov.getCurrentStageAmount() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal currentStageAmount = cumulativeStageAmount.subtract(alreadyAllocated)
+                .setScale(2, RoundingMode.HALF_UP);
+
         List<OutputValueAdjustmentDetail> adjustmentDetails = calcAdjustmentDetails(
                 projectId, stageId, baseAmt, benefitAmt);
         BigDecimal adjustmentAmount = adjustmentDetails.stream()
@@ -388,7 +400,8 @@ public class OutputValueServiceImpl implements OutputValueService {
                 adjustmentAmount,
                 totalAmount,
                 adjustmentDetails,
-                completionRatio
+                completionRatio,
+                alreadyAllocated
         );
     }
 
@@ -509,6 +522,7 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setCurrentStageAmount(calculation.currentStageAmount);
         vo.setAdjustmentAmount(calculation.adjustmentAmount);
         vo.setThisPeriodTotal(calculation.totalAmount);
+        vo.setAlreadyAllocated(calculation.alreadyAllocated);
         vo.setAdjustmentDetails(calculation.adjustmentDetails.stream()
                 .map(this::toAdjustmentDetailVo)
                 .collect(Collectors.toList()));
@@ -546,7 +560,8 @@ public class OutputValueServiceImpl implements OutputValueService {
             BigDecimal adjustmentAmount,
             BigDecimal totalAmount,
             List<OutputValueAdjustmentDetail> adjustmentDetails,
-            BigDecimal completionRatio
+            BigDecimal completionRatio,
+            BigDecimal alreadyAllocated
     ) {}
 
     /** 在职状态：优先 DTO 传入，其次查 sys_user.employment_status，默认 1（在职） */

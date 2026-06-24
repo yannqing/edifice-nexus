@@ -28,6 +28,8 @@ public class OutputValuePreviewVo implements Serializable {
     private BigDecimal currentStageAmount;
     private BigDecimal adjustmentAmount;
     private BigDecimal thisPeriodTotal;
+    /** 当前阶段已确认的产值分配总额 */
+    private BigDecimal alreadyAllocated;
     private List<AdjustmentDetailVo> adjustmentDetails;
 
     @Data

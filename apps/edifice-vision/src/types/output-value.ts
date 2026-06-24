@@ -138,6 +138,8 @@ export interface OutputValuePreview {
   currentStageAmount: number;
   adjustmentAmount: number;
   thisPeriodTotal: number;
+  /** 当前阶段已确认的产值分配总额 */
+  alreadyAllocated?: number;
   adjustmentDetails: OutputValueAdjustmentDetailVo[];
 }
 
