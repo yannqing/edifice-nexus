@@ -989,7 +989,7 @@ function ProjectDetailContent({
                           完成 {stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0)}%
                         </span>
                       )}
-                      {/* 系数：可编辑 */}
+                      {/* 系数：仅项目经理可编辑 */}
                       {editingCoeffStageId === stage.projectStageId ? (
                         <span className="inline-flex items-center gap-1">
                           <input
@@ -1006,7 +1006,7 @@ function ProjectDetailContent({
                           <button onClick={() => onSaveCoeff(stage.projectStageId)} className="text-xs text-blue-600 hover:underline">✓</button>
                           <button onClick={onCancelEditCoeff} className="text-xs text-slate-400 hover:underline">✕</button>
                         </span>
-                      ) : (
+                      ) : isManager ? (
                         <button
                           onClick={() => onStartEditCoeff(stage.projectStageId, stage.coefficient ?? 1)}
                           className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
@@ -1014,6 +1014,10 @@ function ProjectDetailContent({
                         >
                           系数 ×{stage.coefficient ?? 1}
                         </button>
+                      ) : (
+                        <span className="text-xs text-slate-500">
+                          系数 ×{stage.coefficient ?? 1}
+                        </span>
                       )}
                       <span
                         className={cn(
