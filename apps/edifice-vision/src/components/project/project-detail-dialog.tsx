@@ -34,7 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { isAbortError } from "@/lib/request";
-import { getProjectDetail, startStages, restartStage } from "@/services/project";
+import { getProjectDetail, startStages, restartStage, updateStageCoefficient } from "@/services/project";
 import {
   cancelProjectFile,
   fetchFileBlobWithMeta,
@@ -192,6 +192,8 @@ export function ProjectDetailDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [stageActionLoading, setStageActionLoading] = useState(false);
+  const [editingCoeffStageId, setEditingCoeffStageId] = useState<string | null>(null);
+  const [editingCoeffValue, setEditingCoeffValue] = useState<string>("1");
 
   const reloadDetail = async () => {
     if (!projectId) return;
@@ -238,6 +240,21 @@ export function ProjectDetailDialog({
     } finally {
       setStageActionLoading(false);
     }
+  };
+
+  // 保存阶段系数
+  const handleSaveCoefficient = async (stageId: string) => {
+    const coeff = Number(editingCoeffValue);
+    if (isNaN(coeff) || coeff <= 0) { toast.error("系数需大于0"); return; }
+    try {
+      const res = await updateStageCoefficient(stageId, coeff);
+      if (res.code === ResponseCode.SUCCESS) {
+        toast.success("系数已更新");
+        setEditingCoeffStageId(null);
+        await reloadDetail();
+        onStageChange?.();
+      } else { toast.error(res.msg || "更新失败"); }
+    } catch { toast.error("更新失败"); }
   };
 
   useEffect(() => {
@@ -305,6 +322,12 @@ export function ProjectDetailDialog({
             stageActionLoading={stageActionLoading}
             onStartStages={handleStartStages}
             onRestartStage={handleRestartStage}
+            editingCoeffStageId={editingCoeffStageId}
+            editingCoeffValue={editingCoeffValue}
+            onStartEditCoeff={(stageId, val) => { setEditingCoeffStageId(stageId); setEditingCoeffValue(String(val)); }}
+            onChangeCoeffValue={setEditingCoeffValue}
+            onSaveCoeff={handleSaveCoefficient}
+            onCancelEditCoeff={() => setEditingCoeffStageId(null)}
           />
         )}
       </DialogContent>
@@ -760,11 +783,23 @@ function ProjectDetailContent({
   stageActionLoading,
   onStartStages,
   onRestartStage,
+  editingCoeffStageId,
+  editingCoeffValue,
+  onStartEditCoeff,
+  onChangeCoeffValue,
+  onSaveCoeff,
+  onCancelEditCoeff,
 }: {
   detail: ProjectDetailVo;
   stageActionLoading: boolean;
   onStartStages: (stageIds: string[]) => void;
   onRestartStage: (stageId: string) => void;
+  editingCoeffStageId: string | null;
+  editingCoeffValue: string;
+  onStartEditCoeff: (stageId: string, currentValue: number) => void;
+  onChangeCoeffValue: (value: string) => void;
+  onSaveCoeff: (stageId: string) => void;
+  onCancelEditCoeff: () => void;
 }) {
   const { user } = useAuth();
 
@@ -954,10 +989,31 @@ function ProjectDetailContent({
                           完成 {stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0)}%
                         </span>
                       )}
-                      {(stage.coefficient ?? 1) !== 1 && (
-                        <span className="text-xs text-blue-600">
-                          系数 ×{stage.coefficient}
+                      {/* 系数：可编辑 */}
+                      {editingCoeffStageId === stage.projectStageId ? (
+                        <span className="inline-flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0.01}
+                            max={99.99}
+                            step={0.01}
+                            value={editingCoeffValue}
+                            onChange={(e) => onChangeCoeffValue(e.target.value)}
+                            className="w-14 px-1 py-0.5 text-xs border border-blue-300 rounded bg-white text-center"
+                            autoFocus
+                            onKeyDown={(e) => { if (e.key === 'Enter') onSaveCoeff(stage.projectStageId); if (e.key === 'Escape') onCancelEditCoeff(); }}
+                          />
+                          <button onClick={() => onSaveCoeff(stage.projectStageId)} className="text-xs text-blue-600 hover:underline">✓</button>
+                          <button onClick={onCancelEditCoeff} className="text-xs text-slate-400 hover:underline">✕</button>
                         </span>
+                      ) : (
+                        <button
+                          onClick={() => onStartEditCoeff(stage.projectStageId, stage.coefficient ?? 1)}
+                          className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                          title="点击编辑系数"
+                        >
+                          系数 ×{stage.coefficient ?? 1}
+                        </button>
                       )}
                       <span
                         className={cn(
