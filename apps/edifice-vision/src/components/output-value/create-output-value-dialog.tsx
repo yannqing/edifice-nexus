@@ -152,8 +152,13 @@ export function CreateOutputValueDialog({
   }, [outputValues]);
 
   const isStageAvailable = useCallback(
-    (stage: ProjectStageVo) =>
-      isCompletedStage(stage) && !confirmedStageIds.has(stage.projectStageId),
+    (stage: ProjectStageVo) => {
+      if (!isCompletedStage(stage)) return false;
+      if (!confirmedStageIds.has(stage.projectStageId)) return true;
+      // 已有产值分配但阶段部分完成（<100%），仍可继续分配剩余部分
+      const cr = stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0);
+      return cr > 0 && cr < 100;
+    },
     [confirmedStageIds],
   );
 
