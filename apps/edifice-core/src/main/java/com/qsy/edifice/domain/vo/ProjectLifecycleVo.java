@@ -55,6 +55,8 @@ public class ProjectLifecycleVo implements Serializable {
 
         private BigDecimal completionRatio;
 
+        private BigDecimal coefficient;
+
         private Integer inspectionCount;
 
         private Integer latestInspectionStatus;

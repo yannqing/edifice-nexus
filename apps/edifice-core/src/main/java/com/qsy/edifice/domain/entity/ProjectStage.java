@@ -67,6 +67,12 @@ public class ProjectStage implements Serializable {
     private BigDecimal completionRatio;
 
     /**
+     * 阶段系数（默认 1.00）。创建产值分配时自动带入，可手动调整。
+     */
+    @TableField("coefficient")
+    private BigDecimal coefficient;
+
+    /**
      * 创建时间
      */
     @TableField(value = "created_time", fill = FieldFill.INSERT)

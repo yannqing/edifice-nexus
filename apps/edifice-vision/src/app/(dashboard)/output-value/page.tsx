@@ -383,6 +383,9 @@ export default function OutputValuePage() {
                           {item.stageCompletionRatio != null && item.stageCompletionRatio < 100 && (
                             <><span>·</span><span className="text-amber-600">阶段完成 {item.stageIncrementalRatio ?? item.stageCompletionRatio}%</span></>
                           )}
+                          {(item.coefficient ?? 1) !== 1 && (
+                            <><span>·</span><span className="text-blue-600">系数 ×{item.coefficient}</span></>
+                          )}
                         </div>
                       </div>
                       <div className="text-right mr-4">

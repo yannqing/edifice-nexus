@@ -954,6 +954,11 @@ function ProjectDetailContent({
                           完成 {stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0)}%
                         </span>
                       )}
+                      {(stage.coefficient ?? 1) !== 1 && (
+                        <span className="text-xs text-blue-600">
+                          系数 ×{stage.coefficient}
+                        </span>
+                      )}
                       <span
                         className={cn(
                           "text-xs px-1.5 py-0.5 rounded",

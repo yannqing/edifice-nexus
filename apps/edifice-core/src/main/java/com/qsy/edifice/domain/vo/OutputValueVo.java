@@ -85,6 +85,9 @@ public class OutputValueVo implements Serializable {
     /** 本次增量完成比例（%，0-100） */
     private BigDecimal stageIncrementalRatio;
 
+    /** 分配时使用的系数（默认 1.00） */
+    private BigDecimal coefficient;
+
     /** 快照：本单创建时合同的基本金额 */
     private BigDecimal baseAmountSnapshot;
 

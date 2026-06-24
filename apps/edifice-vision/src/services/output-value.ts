@@ -25,10 +25,11 @@ export async function getOutputValueStats(): Promise<BaseResponse<OutputValueSta
 export async function getOutputValuePreview(
   projectId: string,
   projectStageId: string,
+  coefficient?: number,
 ): Promise<BaseResponse<OutputValuePreview>> {
-  return get<OutputValuePreview>("/output-value/preview", {
-    params: { projectId, projectStageId },
-  });
+  const params: Record<string, string> = { projectId, projectStageId };
+  if (coefficient != null && coefficient !== 1) params.coefficient = String(coefficient);
+  return get<OutputValuePreview>("/output-value/preview", { params });
 }
 
 export async function createOutputValue(

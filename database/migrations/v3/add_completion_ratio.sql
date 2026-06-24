@@ -22,3 +22,13 @@ ALTER TABLE output_value
 ALTER TABLE output_value
     ADD COLUMN stage_incremental_ratio DECIMAL(5,2) NOT NULL DEFAULT 100.00 COMMENT '本次增量完成比例（%，0-100），历史数据默认100'
     AFTER stage_completion_ratio;
+
+-- project_stage 加 coefficient：阶段系数
+ALTER TABLE project_stage
+    ADD COLUMN coefficient DECIMAL(5,2) NOT NULL DEFAULT 1.00 COMMENT '阶段系数（默认1.00）'
+    AFTER completion_ratio;
+
+-- output_value 加 coefficient：分配时使用的系数
+ALTER TABLE output_value
+    ADD COLUMN coefficient DECIMAL(5,2) NOT NULL DEFAULT 1.00 COMMENT '分配时使用的系数（默认1.00）'
+    AFTER stage_incremental_ratio;

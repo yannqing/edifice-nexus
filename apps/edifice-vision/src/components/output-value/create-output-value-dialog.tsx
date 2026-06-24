@@ -105,6 +105,7 @@ export function CreateOutputValueDialog({
   const [quarter, setQuarter] = useState<string>(currentQuarter());
   const [confirmUserId, setConfirmUserId] = useState<string>("");
   const [subsidyAmount, setSubsidyAmount] = useState<string>("");
+  const [coefficient, setCoefficient] = useState<string>("1");
   const [rows, setRows] = useState<DistRow[]>([newRow()]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -119,6 +120,7 @@ export function CreateOutputValueDialog({
     setQuarter(currentQuarter());
     setConfirmUserId("");
     setSubsidyAmount("");
+    setCoefficient("1");
     setRows([newRow()]);
     setError("");
   }, []);
@@ -206,6 +208,17 @@ export function CreateOutputValueDialog({
     };
   }, [projectId, isStageAvailable]);
 
+  // 选择阶段时，自动填入阶段的默认系数
+  useEffect(() => {
+    if (!stageId) return;
+    const stage = stages.find((s) => s.projectStageId === stageId);
+    if (stage?.coefficient != null && stage.coefficient > 0) {
+      setCoefficient(String(stage.coefficient));
+    } else {
+      setCoefficient("1");
+    }
+  }, [stageId, stages]);
+
   useEffect(() => {
     if (!projectId || !stageId) {
       setPreview(EMPTY_PREVIEW);
@@ -215,9 +228,10 @@ export function CreateOutputValueDialog({
     let cancelled = false;
     setPreviewLoading(true);
     setError("");
+    const coeff = Number(coefficient) || 1;
     (async () => {
       try {
-        const res = await getOutputValuePreview(projectId, stageId);
+        const res = await getOutputValuePreview(projectId, stageId, coeff);
         if (cancelled) return;
         if (res.code === ResponseCode.SUCCESS && res.data) {
           setPreview(res.data);
@@ -237,7 +251,7 @@ export function CreateOutputValueDialog({
     return () => {
       cancelled = true;
     };
-  }, [projectId, stageId]);
+  }, [projectId, stageId, coefficient]);
 
   // 候选分配人员：优先项目成员，否则全量
   const memberOptions = useMemo(() => {
@@ -348,6 +362,7 @@ export function CreateOutputValueDialog({
         confirmUserId,
         // totalAmount 由后端计算，不传
         subsidyAmount: subsidyNum || undefined,
+        coefficient: Number(coefficient) || 1,
         distributions: rows.map((r) => ({
           userId: r.userId,
           workType: r.workType,
@@ -472,6 +487,20 @@ export function CreateOutputValueDialog({
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
               />
             </div>
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">
+                阶段系数
+              </label>
+              <input
+                type="number"
+                min={0.01}
+                max={99.99}
+                step={0.01}
+                value={coefficient}
+                onChange={(e) => setCoefficient(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
+              />
+            </div>
           </div>
 
           {/* v0.4 阶段产值预览：系统按合同 + 阶段比例自动算 */}
@@ -491,7 +520,10 @@ export function CreateOutputValueDialog({
               <div>
                 基本部分：¥{preview.baseAmount.toLocaleString()} × {preview.baseRatio}%
                 {(preview.incrementalRatio ?? 0) > 0 && (preview.incrementalRatio ?? 0) < 100 && (
-                  <span> × {preview.incrementalRatio}%（本次增量）</span>
+                  <span> × {preview.incrementalRatio}%（增量）</span>
+                )}
+                {(preview.coefficient ?? 1) !== 1 && (
+                  <span> × {preview.coefficient}（系数）</span>
                 )}
                 <span className="font-semibold text-slate-800 ml-1">
                   = ¥{preview.basePart.toLocaleString()}
@@ -501,7 +533,10 @@ export function CreateOutputValueDialog({
                 <div>
                   效益部分：¥{preview.benefitAmount.toLocaleString()} × {preview.benefitRatio}%
                   {(preview.incrementalRatio ?? 0) > 0 && (preview.incrementalRatio ?? 0) < 100 && (
-                    <span> × {preview.incrementalRatio}%（本次增量）</span>
+                    <span> × {preview.incrementalRatio}%（增量）</span>
+                  )}
+                  {(preview.coefficient ?? 1) !== 1 && (
+                    <span> × {preview.coefficient}（系数）</span>
                   )}
                   <span className="font-semibold text-slate-800 ml-1">
                     = ¥{preview.benefitPart.toLocaleString()}

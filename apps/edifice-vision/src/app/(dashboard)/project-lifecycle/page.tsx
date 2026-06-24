@@ -426,6 +426,7 @@ function StageNode({ stage }: { stage: LifecycleStageVo }) {
         <MiniMetric label="基本比例" value={percentText(stage.stageOutput)} />
         <MiniMetric label="效益比例" value={percentText(stage.benefitInclusionRatio ?? stage.stageOutput)} />
         <MiniMetric label="完成进度" value={percentText(stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0))} />
+        <MiniMetric label="系数" value={(stage.coefficient ?? 1) !== 1 ? `×${stage.coefficient}` : "×1"} />
         <MiniMetric label="验工单" value={`${stage.inspectionCount} 个`} />
         <MiniMetric label="产值单" value={`${stage.outputValueCount} 个`} />
         <MiniMetric label="已发放" value={formatMoney(stage.paidOutputAmount)} />

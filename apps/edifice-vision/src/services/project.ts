@@ -61,6 +61,16 @@ export async function restartStage(
 }
 
 /**
+ * 更新阶段系数
+ */
+export async function updateStageCoefficient(
+  stageId: string,
+  coefficient: number
+): Promise<BaseResponse<boolean>> {
+  return put<boolean>(`/project/stage/coefficient?stageId=${stageId}&coefficient=${coefficient}`);
+}
+
+/**
  * 我的项目统计
  */
 export async function getMyProjectStatistics(): Promise<

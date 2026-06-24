@@ -58,4 +58,9 @@ public class ProjectStageVo implements Serializable {
      */
     private BigDecimal completionRatio;
 
+    /**
+     * 阶段系数（默认 1.00）
+     */
+    private BigDecimal coefficient;
+
 }

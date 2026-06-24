@@ -11,6 +11,7 @@
         <result column="stage_output" property="stageOutput" jdbcType="DECIMAL"/>
         <result column="benefit_inclusion_ratio" property="benefitInclusionRatio" jdbcType="DECIMAL"/>
         <result column="completion_ratio" property="completionRatio" jdbcType="DECIMAL"/>
+        <result column="coefficient" property="coefficient" jdbcType="DECIMAL"/>
         <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
         <result column="updated_time" property="updatedTime" jdbcType="TIMESTAMP"/>
         <result column="is_delete" property="isDelete" jdbcType="TINYINT"/>
@@ -19,7 +20,7 @@
     <!-- 基础字段列表 -->
     <sql id="Base_Column_List">
         project_stage_id, project_id, stage_name, stage_status, stage_output, benefit_inclusion_ratio,
-        completion_ratio, created_time, updated_time, is_delete
+        completion_ratio, coefficient, created_time, updated_time, is_delete
     </sql>
 
     <!-- 根据项目id查询项目阶段列表 -->

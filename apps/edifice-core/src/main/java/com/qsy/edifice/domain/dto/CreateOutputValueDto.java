@@ -53,6 +53,9 @@ public class CreateOutputValueDto {
     @Schema(description = "公司补贴（元，只记录不计入产值）")
     private BigDecimal subsidyAmount;
 
+    @Schema(description = "阶段系数（默认1.00）。不填取阶段的默认系数。")
+    private BigDecimal coefficient;
+
     @Deprecated
     @Schema(description = "[已废弃] 旧累计差额模型下允许负产值的开关，当前阶段独立比例模型不再使用")
     private Boolean allowNegative;

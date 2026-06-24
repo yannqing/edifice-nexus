@@ -6,6 +6,7 @@ import com.qsy.edifice.domain.vo.OutputValueVo;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -22,6 +23,11 @@ public interface OutputValueService {
      * 创建产值分配单前预览，包含当前阶段产值与历史补差明细。
      */
     OutputValuePreviewVo previewOutputValue(Long projectId, Long projectStageId);
+
+    /**
+     * 创建产值分配单前预览（指定系数）
+     */
+    OutputValuePreviewVo previewOutputValue(Long projectId, Long projectStageId, BigDecimal coefficient);
 
     /**
      * 创建产值分配单

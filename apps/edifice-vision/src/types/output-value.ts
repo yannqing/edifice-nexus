@@ -76,6 +76,8 @@ export interface OutputValueVo {
   stageCompletionRatio?: number | null;
   /** 本次增量完成比例（%，0-100） */
   stageIncrementalRatio?: number | null;
+  /** 分配时使用的系数（默认 1.00） */
+  coefficient?: number | null;
   /** 快照：本单创建时合同的基本金额 */
   baseAmountSnapshot: number | null;
   /** 快照：本单创建时合同的效益金额 */
@@ -124,6 +126,8 @@ export interface CreateOutputValueParams {
   totalAmount?: number;
   /** 公司补贴（元，只记录不计入产值） */
   subsidyAmount?: number;
+  /** 阶段系数（默认1.00） */
+  coefficient?: number;
   /** 已废弃：旧累计差额模型下允许负产值的开关 */
   allowNegative?: boolean;
   distributions: CreateDistributionItem[];
@@ -144,6 +148,8 @@ export interface OutputValuePreview {
   alreadyAllocated?: number;
   /** 本次增量完成比例（%） */
   incrementalRatio?: number;
+  /** 系数 */
+  coefficient?: number;
   adjustmentDetails: OutputValueAdjustmentDetailVo[];
 }
 

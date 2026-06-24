@@ -21,6 +21,8 @@ export interface ProjectStageVo {
   benefitInclusionRatio?: number;
   /** 已审批通过的累计完成比例（%，0-100） */
   completionRatio?: number;
+  /** 阶段系数（默认 1.00） */
+  coefficient?: number;
 }
 
 // ==================== 合同 VO ====================

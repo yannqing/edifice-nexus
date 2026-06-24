@@ -9,6 +9,7 @@ import com.qsy.edifice.domain.dto.GetAllProjectListDto;
 import com.qsy.edifice.domain.dto.GetMyProjectListDto;
 import com.qsy.edifice.domain.dto.UpdateProjectDto;
 import com.qsy.edifice.domain.entity.ProjectStageTemplate;
+import com.qsy.edifice.domain.entity.ProjectStage;
 import com.qsy.edifice.domain.entity.ProjectType;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.domain.vo.ProjectDetailVo;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -89,6 +91,20 @@ public class ProjectController {
     public BaseResponse<Boolean> restartStage(@PathVariable("id") Long stageId) {
         projectStageService.restartStage(stageId);
         return ResultUtils.success(Code.SUCCESS, true, "阶段已重新启动");
+    }
+
+    @PutMapping("/stage/coefficient")
+    @Operation(summary = "更新阶段系数")
+    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
+    public BaseResponse<Boolean> updateStageCoefficient(@RequestParam Long stageId,
+                                                        @RequestParam BigDecimal coefficient) {
+        ProjectStage stage = projectStageService.getProjectStageById(stageId);
+        if (stage == null) {
+            return ResultUtils.failure(Code.FAILURE, null, "阶段不存在");
+        }
+        stage.setCoefficient(coefficient);
+        projectStageService.updateProjectStage(stage);
+        return ResultUtils.success(Code.SUCCESS, true, "系数更新成功");
     }
 
     @DeleteMapping("/delete/{id}")

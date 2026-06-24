@@ -117,6 +117,10 @@ public class OutputValue implements Serializable {
     @TableField("stage_incremental_ratio")
     private BigDecimal stageIncrementalRatio;
 
+    /** 分配时使用的系数（默认 1.00） */
+    @TableField("coefficient")
+    private BigDecimal coefficient;
+
     /** 快照：本单创建时合同的基本金额 */
     @TableField("base_amount_snapshot")
     private BigDecimal baseAmountSnapshot;

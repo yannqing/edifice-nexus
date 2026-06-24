@@ -18,6 +18,7 @@ export interface LifecycleStageVo {
   stageOutput: number | null;
   benefitInclusionRatio: number | null;
   completionRatio?: number | null;
+  coefficient?: number | null;
   inspectionCount: number;
   latestInspectionStatus: number | null;
   outputValueCount: number;

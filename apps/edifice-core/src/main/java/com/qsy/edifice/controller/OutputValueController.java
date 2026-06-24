@@ -21,6 +21,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
@@ -53,8 +54,14 @@ public class OutputValueController {
     @GetMapping("/preview")
     @Operation(summary = "预览产值分配金额", description = "创建前预览当前阶段产值、历史补差与本次总额")
     public BaseResponse<OutputValuePreviewVo> preview(@RequestParam Long projectId,
-                                                       @RequestParam Long projectStageId) {
-        OutputValuePreviewVo result = outputValueService.previewOutputValue(projectId, projectStageId);
+                                                       @RequestParam Long projectStageId,
+                                                       @RequestParam(value = "coefficient", required = false) BigDecimal coefficient) {
+        OutputValuePreviewVo result;
+        if (coefficient != null && coefficient.signum() > 0) {
+            result = outputValueService.previewOutputValue(projectId, projectStageId, coefficient);
+        } else {
+            result = outputValueService.previewOutputValue(projectId, projectStageId);
+        }
         return ResultUtils.success(Code.SUCCESS, result);
     }
 

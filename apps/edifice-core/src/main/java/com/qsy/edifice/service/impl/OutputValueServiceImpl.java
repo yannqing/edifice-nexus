@@ -138,7 +138,22 @@ public class OutputValueServiceImpl implements OutputValueService {
         if (projectId == null || projectStageId == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择项目和阶段");
         }
-        return toPreviewVo(calcOutputValue(projectId, projectStageId));
+        // 使用阶段的默认系数进行预览
+        ProjectStage stage = projectStageService.getProjectStageById(projectStageId);
+        BigDecimal coeff = (stage != null && stage.getCoefficient() != null && stage.getCoefficient().signum() > 0)
+                ? stage.getCoefficient() : BigDecimal.ONE;
+        return toPreviewVo(calcOutputValue(projectId, projectStageId, coeff));
+    }
+
+    @Override
+    public OutputValuePreviewVo previewOutputValue(Long projectId, Long projectStageId, BigDecimal coefficient) {
+        if (projectId == null || projectStageId == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择项目和阶段");
+        }
+        if (coefficient == null || coefficient.signum() <= 0) {
+            coefficient = BigDecimal.ONE;
+        }
+        return toPreviewVo(calcOutputValue(projectId, projectStageId, coefficient));
     }
 
     // ==================== 创建（v0.4） ====================
@@ -188,7 +203,13 @@ public class OutputValueServiceImpl implements OutputValueService {
         }
 
         // 1. 系统自动算 totalAmount = 当前阶段产值 + 历史阶段补差
-        OutputValueCalculationResult calculation = calcOutputValue(dto.getProjectId(), dto.getProjectStageId());
+        BigDecimal coefficient = dto.getCoefficient();
+        if (coefficient == null || coefficient.signum() <= 0) {
+            ProjectStage stage = projectStageService.getProjectStageById(dto.getProjectStageId());
+            coefficient = (stage != null && stage.getCoefficient() != null && stage.getCoefficient().signum() > 0)
+                    ? stage.getCoefficient() : BigDecimal.ONE;
+        }
+        OutputValueCalculationResult calculation = calcOutputValue(dto.getProjectId(), dto.getProjectStageId(), coefficient);
         BigDecimal total = calculation.totalAmount.setScale(2, RoundingMode.HALF_UP);
 
         if (total.signum() == 0) {
@@ -308,6 +329,7 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .adjustmentAmount(calculation.adjustmentAmount)
                 .stageCompletionRatio(calculation.completionRatio)
                 .stageIncrementalRatio(calculation.incrementalRatio)
+                .coefficient(coefficient)
                 .baseAmountSnapshot(calculation.baseAmount)
                 .benefitAmountSnapshot(calculation.benefitAmount)
                 .calculationVersion("output_adjustment_v1")
@@ -350,7 +372,7 @@ public class OutputValueServiceImpl implements OutputValueService {
     /**
      * 计算指定阶段产值。阶段比例是单阶段比例；历史补差并入本次阶段总额，不拆到个人。
      */
-    private OutputValueCalculationResult calcOutputValue(Long projectId, Long stageId) {
+    private OutputValueCalculationResult calcOutputValue(Long projectId, Long stageId, BigDecimal coefficient) {
         ProjectStage stage = projectStageService.getProjectStageById(stageId);
         if (stage == null || !projectId.equals(stage.getProjectId())) {
             throw new BusinessException(ErrorType.STAGE_NOT_FOUND);
@@ -413,6 +435,11 @@ public class OutputValueServiceImpl implements OutputValueService {
         BigDecimal benefitPart = benefitAmt.multiply(benefitRatio).multiply(incrementalRatio)
                 .divide(BD_10000, 2, RoundingMode.HALF_UP);
         BigDecimal currentStageAmount = basePart.add(benefitPart).setScale(2, RoundingMode.HALF_UP);
+        // 应用系数
+        if (coefficient == null || coefficient.signum() <= 0) {
+            coefficient = BigDecimal.ONE;
+        }
+        currentStageAmount = currentStageAmount.multiply(coefficient).setScale(2, RoundingMode.HALF_UP);
 
         List<OutputValueAdjustmentDetail> adjustmentDetails = calcAdjustmentDetails(
                 projectId, stageId, baseAmt, benefitAmt);
@@ -436,7 +463,8 @@ public class OutputValueServiceImpl implements OutputValueService {
                 adjustmentDetails,
                 completionRatio,
                 alreadyAllocated,
-                incrementalRatio
+                incrementalRatio,
+                coefficient
         );
     }
 
@@ -559,6 +587,7 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setThisPeriodTotal(calculation.totalAmount);
         vo.setAlreadyAllocated(calculation.alreadyAllocated);
         vo.setIncrementalRatio(calculation.incrementalRatio);
+        vo.setCoefficient(calculation.coefficient);
         vo.setAdjustmentDetails(calculation.adjustmentDetails.stream()
                 .map(this::toAdjustmentDetailVo)
                 .collect(Collectors.toList()));
@@ -598,7 +627,8 @@ public class OutputValueServiceImpl implements OutputValueService {
             List<OutputValueAdjustmentDetail> adjustmentDetails,
             BigDecimal completionRatio,
             BigDecimal alreadyAllocated,
-            BigDecimal incrementalRatio
+            BigDecimal incrementalRatio,
+            BigDecimal coefficient
     ) {}
 
     /** 在职状态：优先 DTO 传入，其次查 sys_user.employment_status，默认 1（在职） */
@@ -886,6 +916,7 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setAdjustmentAmount(ov.getAdjustmentAmount());
         vo.setStageCompletionRatio(ov.getStageCompletionRatio());
         vo.setStageIncrementalRatio(ov.getStageIncrementalRatio());
+        vo.setCoefficient(ov.getCoefficient());
         vo.setBaseAmountSnapshot(ov.getBaseAmountSnapshot());
         vo.setBenefitAmountSnapshot(ov.getBenefitAmountSnapshot());
         vo.setCalculationVersion(ov.getCalculationVersion());
