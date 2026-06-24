@@ -163,6 +163,12 @@ public class OutputValueServiceImpl implements OutputValueService {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择确认人");
         }
         List<OutputValue> stageOutputValues = outputValueMapper.selectByProjectStageIdForUpdate(dto.getProjectStageId());
+        // 如果该阶段有待确认或待审核的分配单，不允许再创建
+        boolean hasPending = stageOutputValues.stream()
+                .anyMatch(ov -> ov.getStatus() != null && (ov.getStatus() == 0 || ov.getStatus() == 1));
+        if (hasPending) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "该阶段已有待处理的产值分配单，请先完成审批流程");
+        }
         if (hasConfirmedStageOutputValue(stageOutputValues, null)) {
             // 部分完成的阶段允许再次分配：检查当前完成比例是否超过已分配的最大比例
             ProjectStage checkStage = projectStageService.getProjectStageById(dto.getProjectStageId());
