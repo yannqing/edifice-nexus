@@ -140,6 +140,8 @@ export interface OutputValuePreview {
   thisPeriodTotal: number;
   /** 当前阶段已确认的产值分配总额 */
   alreadyAllocated?: number;
+  /** 本次增量完成比例（%） */
+  incrementalRatio?: number;
   adjustmentDetails: OutputValueAdjustmentDetailVo[];
 }
 

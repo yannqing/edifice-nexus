@@ -363,12 +363,6 @@ public class OutputValueServiceImpl implements OutputValueService {
                     ? new BigDecimal("100") : BigDecimal.ZERO;
         }
 
-        BigDecimal basePart = baseAmt.multiply(baseRatio).multiply(completionRatio)
-                .divide(BD_10000, 2, RoundingMode.HALF_UP);
-        BigDecimal benefitPart = benefitAmt.multiply(benefitRatio).multiply(completionRatio)
-                .divide(BD_10000, 2, RoundingMode.HALF_UP);
-        BigDecimal cumulativeStageAmount = basePart.add(benefitPart).setScale(2, RoundingMode.HALF_UP);
-
         // 扣除当前阶段已确认的产值分配金额（本次应分配 = 累计总额 - 已分配总额）
         LambdaQueryWrapper<OutputValue> allocatedW = new LambdaQueryWrapper<>();
         allocatedW.eq(OutputValue::getProjectStageId, stageId)
@@ -377,11 +371,23 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .map(ov -> ov.getCurrentStageAmount() != null ? ov.getCurrentStageAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
-        log.info("[DEBUG] stageId={}, cumulativeStageAmount={}, alreadyAllocated={}, queryResultSize={}",
-                stageId, cumulativeStageAmount, alreadyAllocated,
-                outputValueMapper.selectList(allocatedW).size());
-        BigDecimal currentStageAmount = cumulativeStageAmount.subtract(alreadyAllocated)
-                .setScale(2, RoundingMode.HALF_UP);
+
+        // 计算增量完成比例（本次新增的完成部分）
+        BigDecimal alreadyRatio = BigDecimal.ZERO;
+        if (alreadyAllocated.signum() > 0 && baseRatio.signum() > 0) {
+            BigDecimal cumulativeForRatio = baseAmt.multiply(baseRatio).divide(BD_100, 2, RoundingMode.HALF_UP);
+            if (cumulativeForRatio.signum() > 0) {
+                alreadyRatio = alreadyAllocated.multiply(BD_100)
+                        .divide(cumulativeForRatio, 2, RoundingMode.HALF_UP);
+            }
+        }
+        BigDecimal incrementalRatio = completionRatio.subtract(alreadyRatio).max(BigDecimal.ZERO);
+
+        BigDecimal basePart = baseAmt.multiply(baseRatio).multiply(incrementalRatio)
+                .divide(BD_10000, 2, RoundingMode.HALF_UP);
+        BigDecimal benefitPart = benefitAmt.multiply(benefitRatio).multiply(incrementalRatio)
+                .divide(BD_10000, 2, RoundingMode.HALF_UP);
+        BigDecimal currentStageAmount = basePart.add(benefitPart).setScale(2, RoundingMode.HALF_UP);
 
         List<OutputValueAdjustmentDetail> adjustmentDetails = calcAdjustmentDetails(
                 projectId, stageId, baseAmt, benefitAmt);
@@ -404,7 +410,8 @@ public class OutputValueServiceImpl implements OutputValueService {
                 totalAmount,
                 adjustmentDetails,
                 completionRatio,
-                alreadyAllocated
+                alreadyAllocated,
+                incrementalRatio
         );
     }
 
@@ -526,6 +533,7 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setAdjustmentAmount(calculation.adjustmentAmount);
         vo.setThisPeriodTotal(calculation.totalAmount);
         vo.setAlreadyAllocated(calculation.alreadyAllocated);
+        vo.setIncrementalRatio(calculation.incrementalRatio);
         vo.setAdjustmentDetails(calculation.adjustmentDetails.stream()
                 .map(this::toAdjustmentDetailVo)
                 .collect(Collectors.toList()));
@@ -564,7 +572,8 @@ public class OutputValueServiceImpl implements OutputValueService {
             BigDecimal totalAmount,
             List<OutputValueAdjustmentDetail> adjustmentDetails,
             BigDecimal completionRatio,
-            BigDecimal alreadyAllocated
+            BigDecimal alreadyAllocated,
+            BigDecimal incrementalRatio
     ) {}
 
     /** 在职状态：优先 DTO 传入，其次查 sys_user.employment_status，默认 1（在职） */
