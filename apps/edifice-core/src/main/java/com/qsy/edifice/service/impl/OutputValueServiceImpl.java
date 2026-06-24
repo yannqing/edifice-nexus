@@ -377,6 +377,9 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .map(ov -> ov.getCurrentStageAmount() != null ? ov.getCurrentStageAmount() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
+        log.info("[DEBUG] stageId={}, cumulativeStageAmount={}, alreadyAllocated={}, queryResultSize={}",
+                stageId, cumulativeStageAmount, alreadyAllocated,
+                outputValueMapper.selectList(allocatedW).size());
         BigDecimal currentStageAmount = cumulativeStageAmount.subtract(alreadyAllocated)
                 .setScale(2, RoundingMode.HALF_UP);
 
