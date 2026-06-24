@@ -169,7 +169,7 @@ export function CreateOutputValueDialog({
     }
   }, [open, fetchOptions, reset]);
 
-  // 选择项目后加载阶段和成员
+  // 选择项目后加载阶段和成员（依赖 isStageAvailable 确保 outputValues 加载后重新筛选）
   useEffect(() => {
     if (!projectId) {
       setProjectDetail(null);
@@ -195,6 +195,7 @@ export function CreateOutputValueDialog({
     return () => {
       cancelled = true;
     };
+  }, [projectId, isStageAvailable]);
   }, [projectId, isStageAvailable]);
 
   useEffect(() => {
