@@ -915,6 +915,8 @@ function ProjectDetailContent({
                       "h-2 flex-1 rounded-full",
                       s.stageStatus === 6 || s.stageStatus === 3
                         ? "bg-emerald-500"
+                        : s.stageStatus === 1 && (s.completionRatio ?? 0) > 0
+                        ? "bg-teal-500"
                         : s.stageStatus === 1
                         ? "bg-blue-500"
                         : s.stageStatus === 2
@@ -946,14 +948,24 @@ function ProjectDetailContent({
                           产值比 {stage.stageOutput}%
                         </span>
                       )}
+                      {(stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0)) > 0
+                        && (stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0)) < 100 && (
+                        <span className="text-xs text-teal-600">
+                          完成 {stage.completionRatio ?? (stage.stageStatus === 6 ? 100 : 0)}%
+                        </span>
+                      )}
                       <span
                         className={cn(
                           "text-xs px-1.5 py-0.5 rounded",
-                          stageStatusStyles[stage.stageStatus] ??
+                          stage.stageStatus === 1 && (stage.completionRatio ?? 0) > 0
+                            ? "bg-teal-100 text-teal-600"
+                            : stageStatusStyles[stage.stageStatus] ??
                             "bg-slate-100 text-slate-500"
                         )}
                       >
-                        {stageStatusLabels[stage.stageStatus] ?? "未知"}
+                        {stage.stageStatus === 1 && (stage.completionRatio ?? 0) > 0
+                          ? `部分完成 ${stage.completionRatio}%`
+                          : stageStatusLabels[stage.stageStatus] ?? "未知"}
                       </span>
                       {/* 未开始 → 可单独启动（仅项目经理） */}
                       {isManager && stage.stageStatus === 0 && (

@@ -392,6 +392,8 @@ export default function MyProjectsPage() {
                             "h-1.5 flex-1 rounded-full transition-all",
                             s.stageStatus === 6 || s.stageStatus === 3
                               ? "bg-emerald-500"
+                              : s.stageStatus === 1 && (s.completionRatio ?? 0) > 0
+                              ? "bg-teal-500"
                               : s.stageStatus === 1
                               ? "bg-blue-500"
                               : s.stageStatus === 2
