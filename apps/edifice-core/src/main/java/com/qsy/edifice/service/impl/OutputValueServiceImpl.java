@@ -164,7 +164,21 @@ public class OutputValueServiceImpl implements OutputValueService {
         }
         List<OutputValue> stageOutputValues = outputValueMapper.selectByProjectStageIdForUpdate(dto.getProjectStageId());
         if (hasConfirmedStageOutputValue(stageOutputValues, null)) {
-            throw new BusinessException(ErrorType.OPERATION_FAILED, "该阶段产值已通过分配单确认，无法重复提交");
+            // 部分完成的阶段允许再次分配：检查当前完成比例是否超过已分配的最大比例
+            ProjectStage checkStage = projectStageService.getProjectStageById(dto.getProjectStageId());
+            BigDecimal currentRatio = checkStage != null ? checkStage.getCompletionRatio() : null;
+            if (currentRatio == null || currentRatio.signum() <= 0) {
+                currentRatio = (checkStage != null && checkStage.getStageStatus() != null && checkStage.getStageStatus() == 6)
+                        ? new BigDecimal("100") : BigDecimal.ZERO;
+            }
+            BigDecimal maxAllocatedRatio = stageOutputValues.stream()
+                    .filter(ov -> ov.getStatus() != null && ov.getStatus() >= 1)
+                    .map(ov -> ov.getStageCompletionRatio() != null ? ov.getStageCompletionRatio() : new BigDecimal("100"))
+                    .max(BigDecimal::compareTo)
+                    .orElse(BigDecimal.ZERO);
+            if (currentRatio.compareTo(maxAllocatedRatio) <= 0) {
+                throw new BusinessException(ErrorType.OPERATION_FAILED, "该阶段产值已全部分配完毕，无法重复提交");
+            }
         }
 
         // 1. 系统自动算 totalAmount = 当前阶段产值 + 历史阶段补差
