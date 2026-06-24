@@ -832,6 +832,7 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setBenefitSnapshot(ov.getBenefitSnapshot());
         vo.setCurrentStageAmount(ov.getCurrentStageAmount());
         vo.setAdjustmentAmount(ov.getAdjustmentAmount());
+        vo.setStageCompletionRatio(ov.getStageCompletionRatio());
         vo.setBaseAmountSnapshot(ov.getBaseAmountSnapshot());
         vo.setBenefitAmountSnapshot(ov.getBenefitAmountSnapshot());
         vo.setCalculationVersion(ov.getCalculationVersion());
