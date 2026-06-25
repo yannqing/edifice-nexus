@@ -1,0 +1,53 @@
+{extend name="../../base/view/common/base" /}
+<!-- 主体 -->
+{block name="body"}
+<div class="p-page">
+	<h3 class="pb-2">补卡申请详情</h3>
+	<table class="layui-table layui-table-form">
+		<tr>
+			<td class="layui-td-gray-2">补卡日期</td>
+			<td>{$detail.fix_date_str}</td>
+			<td class="layui-td-gray">补卡类型</td>
+			<td>{$detail.fix_type_name}</td>
+		</tr>
+		<tr>
+			<td class="layui-td-gray">补卡时间</td>
+			<td>{$detail.fix_time}</td>
+			<td class="layui-td-gray">申请人</td>
+			<td>{$detail.admin_name|default='-'}</td>
+		</tr>
+		<tr>
+			<td class="layui-td-gray">补卡原因</td>
+			<td colspan="3">{$detail.reason|default=''}</td>
+		</tr>
+		{notempty name="$detail.file_ids"}
+		<tr>
+			<td class="layui-td-gray">相关附件</td>
+			<td colspan="3">
+				<div class="layui-row">
+					{volist name="$detail.file_array" id="vo"}
+					<div class="layui-col-md4">{:file_card($vo,'view')}</div>
+					{/volist}
+				</div>
+			</td>
+		</tr>
+		{/notempty}
+	</table>
+	<div id="checkBox" data-status="{$detail.check_status}" data-id="{$detail.id}" data-checkflowid="{$detail.check_flow_id}" class="pt-3"></div>
+</div>
+{/block}
+<!-- /主体 -->
+<!-- 脚本 -->
+{block name="script"}
+<script>
+	var moduleInit = ['tool','oaCheck'];
+
+	function gouguInit() {
+		var tool = layui.tool, oaCheck = layui.oaCheck;
+		oaCheck.init({
+			check_name:'attendance_fix',
+		});
+	}
+</script>
+{/block}
+<!-- /脚本 -->
