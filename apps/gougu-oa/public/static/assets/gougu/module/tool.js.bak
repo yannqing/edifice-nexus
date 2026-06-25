@@ -517,8 +517,7 @@ layui.define(function (exports) {
 				range: range,
 				min: min,
 				max: max,
-				fullPanel: true,
-				done: function(value){ that.val(value); that.trigger('change'); }
+				fullPanel: true
 			});
 		}else{
 			layui.laydate.render({ 
@@ -529,8 +528,7 @@ layui.define(function (exports) {
 				min: min,
 				max: max,
 				format:format,
-				fullPanel: true,
-				done: function(value){ that.val(value); that.trigger('change'); }
+				fullPanel: true
 			});
 		}
 
