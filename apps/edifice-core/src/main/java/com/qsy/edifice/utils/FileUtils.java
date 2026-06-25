@@ -135,7 +135,7 @@ public class FileUtils {
             String thumbName = newFileName.replaceFirst("\\.[^.]+$", "") + "_thumb.jpg";
             LocalDate now = LocalDate.now();
             String datePath = now.format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-            String fullDir = uploadCommonPath + File.separator + subPath + File.separator + datePath;
+            String fullDir = uploadCommonPath + File.separator + uploadPrefixPath + File.separator + subPath + File.separator + datePath;
             File thumbFile = new File(fullDir, thumbName);
 
             javax.imageio.ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
