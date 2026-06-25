@@ -40,7 +40,9 @@ import {
   fetchFileBlobWithMeta,
   fetchProjectFileBlob,
   getProjectFileList,
+  getProjectFileDownloadUrl,
 } from "@/services/project-file";
+import { getAccessToken } from "@/lib/token";
 import { getBenefitHistory } from "@/services/contract-benefit";
 import type { ContractBenefitRevisionVo } from "@/types/contract-benefit";
 import { ReviseBenefitDialog } from "@/components/contract-benefit/revise-benefit-dialog";
@@ -58,6 +60,17 @@ import {
 import type { ProjectStatus, ProjectCategory } from "@/types";
 import { UploadProjectFileDialog } from "@/components/project-file/upload-project-file-dialog";
 import { useAuth } from "@/store/auth-context";
+
+function triggerDownload(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 const statusStyles: Record<ProjectStatus, string> = {
   进行中: "bg-blue-100 text-blue-600",
@@ -510,6 +523,8 @@ function ProjectFileRow({
   onCancelled: () => void;
 }) {
   const [action, setAction] = useState<"preview" | "download" | "cancel" | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
   const statusStyle =
     file.approvalStatus === 2
       ? "bg-emerald-100 text-emerald-600"
@@ -530,6 +545,14 @@ function ProjectFileRow({
       toast.error("文件不存在");
       return;
     }
+
+    // 有缩略图的图片直接用缩略图 URL 打开（秒开）
+    if (file.thumbnailUrl) {
+      const url = file.thumbnailUrl.startsWith("http") ? file.thumbnailUrl : `${BASE_URL}${file.thumbnailUrl}`;
+      window.open(url, "_blank");
+      return;
+    }
+
     if (!isBrowserPreviewable(file)) {
       toast.info(unsupportedPreviewMessage);
       return;
@@ -565,20 +588,39 @@ function ProjectFileRow({
     }
 
     setAction("download");
+    setDownloadProgress(0);
     try {
-      const blob = await fetchProjectFileBlob(file.fileId);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      const token = getAccessToken();
+      const url = getProjectFileDownloadUrl(file.fileId, token);
+      const response = await fetch(url, { headers: token ? { token } : {} });
+      if (!response.ok) throw new Error("文件下载失败");
+
+      const contentLength = response.headers.get("content-length");
+      const total = contentLength ? parseInt(contentLength, 10) : 0;
+
+      if (!response.body) {
+        const blob = await response.blob();
+        triggerDownload(blob, fileName);
+      } else {
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let received = 0;
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          if (total > 0) setDownloadProgress(Math.round((received / total) * 100));
+        }
+        const blob = new Blob(chunks as BlobPart[]);
+        triggerDownload(blob, fileName);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "文件下载失败");
     } finally {
       setAction(null);
+      setDownloadProgress(null);
     }
   };
 
@@ -628,6 +670,17 @@ function ProjectFileRow({
           {file.stageName && <> · {file.stageName}</>}
           {file.createdTime && <> · {file.createdTime.replace("T", " ").slice(0, 16)}</>}
         </p>
+        {downloadProgress !== null && (
+          <div className="mt-1">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-0.5">
+              <span>下载中...</span>
+              <span>{downloadProgress}%</span>
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-1">
+              <div className="bg-blue-500 h-1 rounded-full transition-all duration-300" style={{ width: `${downloadProgress}%` }} />
+            </div>
+          </div>
+        )}
       </button>
       <span className={cn("text-xs px-2 py-0.5 rounded-full", statusStyle)}>
         {PROJECT_FILE_STATUS_MAP[file.approvalStatus] ?? "-"}

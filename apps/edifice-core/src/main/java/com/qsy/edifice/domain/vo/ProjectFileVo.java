@@ -48,6 +48,7 @@ public class ProjectFileVo implements Serializable {
     private String fileUrl;
     private String fileExtension;
     private String fileSize;
+    private String thumbnailUrl;
 
     private String fileCategory;
     private String description;

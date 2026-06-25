@@ -12,6 +12,7 @@ export interface ProjectFileVo {
   fileUrl: string | null;
   fileExtension: string | null;
   fileSize: string | null;
+  thumbnailUrl?: string | null;
   fileCategory: string | null;
   description: string | null;
   uploadUserId: string | null;

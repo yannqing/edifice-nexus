@@ -438,6 +438,7 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
                     .fileUrl(f == null ? null : f.getFileUrl())
                     .fileExtension(f == null ? null : f.getFileExtension())
                     .fileSize(f == null || f.getFileSize() == null ? null : String.valueOf(f.getFileSize()))
+                    .thumbnailUrl(f == null ? null : f.getThumbnailUrl())
                     .fileCategory(e.getFileCategory())
                     .description(e.getDescription())
                     .uploadUserId(e.getUploadUserId())
