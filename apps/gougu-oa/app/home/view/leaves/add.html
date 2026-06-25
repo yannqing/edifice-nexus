@@ -66,7 +66,70 @@
 			check_btn:0
 		});	
 		var fileUp = new uploadPlus();
-	
+
+		// 自动计算请假天数（1个工作日=8小时，排除周末）
+		function calcWorkDays() {
+			var startVal = $('input[name="start_date"]').val();
+			var endVal = $('input[name="end_date"]').val();
+			if (!startVal || !endVal) return;
+
+			var start = new Date(startVal.replace(/-/g, '/'));
+			var end = new Date(endVal.replace(/-/g, '/'));
+			if (isNaN(start.getTime()) || isNaN(end.getTime())) return;
+			if (end <= start) return;
+
+			var totalHours = 0;
+			var current = new Date(start);
+
+			while (current < end) {
+				var day = current.getDay();
+				if (day !== 0 && day !== 6) { // 排除周末
+					var dayStart = new Date(current);
+					dayStart.setHours(8, 0, 0, 0);
+					var dayEnd = new Date(current);
+					dayEnd.setHours(17, 0, 0, 0); // 8h工作制: 8:00-12:00 + 13:00-17:00
+
+					var segStart = current > dayStart ? current : dayStart;
+					var segEnd = end < dayEnd ? end : dayEnd;
+
+					if (segStart < segEnd) {
+						var hours = (segEnd - segStart) / (1000 * 60 * 60);
+						// 扣除午休 12:00-13:00
+						var noonStart = new Date(current); noonStart.setHours(12, 0, 0, 0);
+						var noonEnd = new Date(current); noonEnd.setHours(13, 0, 0, 0);
+						if (segStart < noonEnd && segEnd > noonStart) {
+							var overlapStart = segStart > noonStart ? segStart : noonStart;
+							var overlapEnd = segEnd < noonEnd ? segEnd : noonEnd;
+							hours -= (overlapEnd - overlapStart) / (1000 * 60 * 60);
+						}
+						totalHours += hours;
+					}
+				}
+				// 移到下一天 8:00
+				current.setDate(current.getDate() + 1);
+				current.setHours(8, 0, 0, 0);
+			}
+
+			var days = Math.round(totalHours / 8 * 10) / 10; // 保留1位小数
+			if (days > 0) {
+				$('input[name="duration"]').val(days);
+				form.render('input');
+			}
+		}
+
+		// 监听日期选择变化（layui laydate 的 done 回调）
+		$(document).on('change', 'input[name="start_date"], input[name="end_date"]', function() {
+			setTimeout(calcWorkDays, 100);
+		});
+		// 兼容 laydate 的点击选择
+		$('input[name="start_date"], input[name="end_date"]').each(function() {
+			var el = this;
+			var orig = el.onclick;
+			el.addEventListener('click', function() {
+				setTimeout(calcWorkDays, 500);
+			});
+		});
+
 		//监听提交
 		form.on('submit(webform)', function (data) {
 			let callback = function (e) {
