@@ -8,7 +8,7 @@
         {if $item.mobile_supported}
         <a class="mobile-app" href="{$item.add_url}">
         {else/}
-        <a class="mobile-app js-mobile-unavailable" href="javascript:;" data-title="{$item.title}">
+        <a class="mobile-app js-mobile-unavailable" href="javascript:;">
         {/if}
             <span class="mobile-app__icon mobile-color-approve-{$module.id}">
                 <i class="iconfont {$item.icon}"></i>
@@ -25,7 +25,7 @@
 var moduleInit = ['layer'];
 function mbuiInit() {
     $('.js-mobile-unavailable').on('click', function () {
-        mbui.layer.msg($(this).data('title') + '暂未开放移动端表单');
+        mbui.layer.msg('暂未开放移动端表单');
     });
 }
 </script>

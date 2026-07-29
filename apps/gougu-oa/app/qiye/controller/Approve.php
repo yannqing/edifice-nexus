@@ -19,14 +19,26 @@ class Approve extends BaseController
 
     public function apply()
     {
+        $department = $this->did;
         $whereOr = [];
         if ($this->uid > 1) {
-            $department = $this->did;
             $whereOr = [
                 [['department_ids', '=', '']],
                 [['', 'exp', Db::raw("FIND_IN_SET('{$department}',department_ids)")]],
             ];
         }
+
+        $availableFlowCateIds = Db::name('Flow')
+            ->where([
+                ['status', '=', 1],
+                ['delete_time', '=', 0],
+            ])
+            ->where(function ($query) use ($department) {
+                $query->where('department_ids', '')
+                    ->whereOrRaw("FIND_IN_SET('{$department}',department_ids)");
+            })
+            ->column('cate_id');
+        $availableFlowCateIds = array_map('intval', $availableFlowCateIds);
 
         $modules = Db::name('FlowModule')
             ->where('status', 1)
@@ -49,7 +61,8 @@ class Approve extends BaseController
                 ->select()
                 ->toArray();
             foreach ($list as &$item) {
-                $item['mobile_supported'] = isset(self::MOBILE_APPLY_ROUTES[$item['name']]);
+                $item['mobile_supported'] = isset(self::MOBILE_APPLY_ROUTES[$item['name']])
+                    && in_array((int) $item['id'], $availableFlowCateIds, true);
                 if ($item['mobile_supported']) {
                     $item['add_url'] = self::MOBILE_APPLY_ROUTES[$item['name']];
                 }
