@@ -463,6 +463,38 @@ textarea {
   outline: 0;
 }
 
+.mobile-login__captcha {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 136px;
+  margin-bottom: 14px;
+  gap: 10px;
+}
+
+.mobile-login__captcha .mobile-login__field {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.mobile-login__captcha-image {
+  overflow: hidden;
+  height: 52px;
+  background: #fff;
+  border: 1px solid #dbe1e8;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.mobile-login__captcha-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.mobile-login__captcha-image input {
+  display: none;
+}
+
 .mobile-primary-button {
   width: 100%;
   height: 50px;

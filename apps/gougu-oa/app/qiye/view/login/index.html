@@ -23,6 +23,17 @@
             <i class="iconfont icon-suozhu"></i>
             <input name="password" type="password" autocomplete="current-password" placeholder="密码" required>
         </label>
+        <div class="mobile-login__captcha">
+            <label class="mobile-login__field">
+                <i class="iconfont icon-anquan"></i>
+                <input name="captcha" type="text" autocomplete="off" autocapitalize="off"
+                       placeholder="验证码" required>
+            </label>
+            <div class="mobile-login__captcha-image" title="点击刷新验证码">
+                {:captcha_img()}
+                <input type="hidden" value="{:make_token()}">
+            </div>
+        </div>
         <button type="submit" class="mobile-primary-button">登录</button>
         <p id="mobileLoginError" class="mobile-login__error" role="alert"></p>
     </form>
@@ -43,6 +54,7 @@ $('#mobileLoginForm').on('submit', function (event) {
                 return;
             }
             $error.text(response.msg || '登录失败');
+            $('.mobile-login__captcha-image img').trigger('click');
         })
         .fail(function () {
             $error.text('网络异常，请稍后重试');
