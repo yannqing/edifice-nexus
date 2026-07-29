@@ -12,12 +12,15 @@ class Index extends BaseController
 {
     public function index()
     {
-        $notice = Db::name('Note')
-            ->where(['status' => 1, 'delete_time' => 0])
-            ->where('start_time', '<=', time())
-            ->where('end_time', '>=', time())
-            ->order('sort desc,id desc')
-            ->find();
+        $notice = null;
+        if ($this->hasMobilePermission('/qiye/index/note')) {
+            $notice = Db::name('Note')
+                ->where(['status' => 1, 'delete_time' => 0])
+                ->where('start_time', '<=', time())
+                ->where('end_time', '>=', time())
+                ->order('sort desc,id desc')
+                ->find();
+        }
         View::assign([
             'page_title' => '工作台',
             'notice' => $notice,

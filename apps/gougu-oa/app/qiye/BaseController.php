@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace app\qiye;
 
+use think\exception\HttpException;
 use think\facade\Config;
 use think\facade\Db;
 use think\facade\Request;
@@ -20,6 +21,7 @@ abstract class BaseController
     protected string $action = '';
     protected array $mobileMenuTypes = [];
     protected array $mobileBars = [];
+    protected array $mobileAllowedUrls = [];
 
     public function __construct()
     {
@@ -28,6 +30,7 @@ abstract class BaseController
         $this->checkLogin();
         $this->pageSize = (int) Request::param('limit', Config::get('app.page_size'));
         $this->assignMobileNavigation();
+        $this->checkMobilePermission();
     }
 
     private function checkLogin(): void
@@ -110,6 +113,9 @@ abstract class BaseController
         $this->mobileBars = array_values(array_filter($bars, static function (array $bar): bool {
             return !str_starts_with((string) $bar['url'], '/qiye/project');
         }));
+        foreach ($this->mobileBars as $bar) {
+            $this->addMobileAllowedUrl((string) $bar['url']);
+        }
         $currentPath = '/qiye/' . $this->controller;
         foreach ($this->mobileBars as &$bar) {
             $bar['active'] = str_starts_with($currentPath, dirname((string) $bar['url']));
@@ -136,6 +142,9 @@ abstract class BaseController
                 return !str_starts_with((string) $menu['url'], '/qiye/project');
             }));
             if (!empty($menus)) {
+                foreach ($menus as $menu) {
+                    $this->addMobileAllowedUrl((string) $menu['url']);
+                }
                 $type['list'] = $menus;
                 $this->mobileMenuTypes[] = $type;
             }
@@ -150,6 +159,127 @@ abstract class BaseController
             'mobile_current_path' => $currentPath,
             'mobile_unread_count' => $unreadCount,
         ]);
+    }
+
+    private function checkMobilePermission(): void
+    {
+        $requiredUrls = $this->requiredMobilePermissionUrls();
+        if ($requiredUrls === []) {
+            return;
+        }
+
+        if ($requiredUrls !== null) {
+            foreach ($requiredUrls as $url) {
+                if ($this->hasMobilePermission($url)) {
+                    return;
+                }
+            }
+        }
+
+        if (request()->isAjax()) {
+            to_assign(403, '无权访问该移动端功能', [], '', '', 403);
+        }
+        throw new HttpException(403, '无权访问该移动端功能');
+    }
+
+    private function requiredMobilePermissionUrls(): ?array
+    {
+        $route = $this->controller . '/' . $this->action;
+        if ($route === 'index/index') {
+            return [];
+        }
+
+        $controllerPermissions = [
+            'customer' => '/qiye/customer/index',
+            'contract' => '/qiye/contract/index',
+            'msg' => '/qiye/msg/index',
+            'project' => '/qiye/project/index',
+        ];
+        if (isset($controllerPermissions[$this->controller])) {
+            return [$controllerPermissions[$this->controller]];
+        }
+
+        if ($route === 'finance/view') {
+            $type = (string) Request::param('type', '');
+            $financeUrls = [
+                'expense' => '/qiye/finance/expense',
+                'invoice' => '/qiye/finance/invoice',
+                'ticket' => '/qiye/finance/ticket',
+                'income' => '/qiye/finance/income',
+                'payment' => '/qiye/finance/payment',
+                'loan' => '/qiye/finance/loan',
+            ];
+            return isset($financeUrls[$type]) ? [$financeUrls[$type]] : null;
+        }
+
+        if ($route === 'approve/detail') {
+            $checkName = (string) Request::param('check_name', '');
+            $personnelUrls = [
+                'talent' => '/qiye/approve/talentlist',
+                'personal_quit' => '/qiye/approve/leavelist',
+                'department_change' => '/qiye/approve/changelist',
+            ];
+            if (isset($personnelUrls[$checkName])) {
+                return [$personnelUrls[$checkName]];
+            }
+            return [
+                '/qiye/approve/apply',
+                '/qiye/approve/mylist',
+                '/qiye/approve/checklist',
+                '/qiye/approve/copylist',
+            ];
+        }
+
+        $actionPermissions = [
+            'index/calendar' => '/qiye/index/calendar',
+            'index/schedule' => '/qiye/index/schedule',
+            'index/work' => '/qiye/index/work',
+            'index/note' => '/qiye/index/note',
+            'index/news' => '/qiye/index/news',
+            'index/meeting' => '/qiye/index/meeting',
+            'index/admin' => '/qiye/index/admin',
+            'approve/apply' => '/qiye/approve/apply',
+            'approve/add_qingjia' => '/qiye/approve/apply',
+            'approve/add_chuchai' => '/qiye/approve/apply',
+            'approve/add_waichu' => '/qiye/approve/apply',
+            'approve/add_jiaban' => '/qiye/approve/apply',
+            'approve/mylist' => '/qiye/approve/mylist',
+            'approve/checklist' => '/qiye/approve/checklist',
+            'approve/copylist' => '/qiye/approve/copylist',
+            'approve/talentlist' => '/qiye/approve/talentlist',
+            'approve/leavelist' => '/qiye/approve/leavelist',
+            'approve/changelist' => '/qiye/approve/changelist',
+            'finance/expense' => '/qiye/finance/expense',
+            'finance/invoice' => '/qiye/finance/invoice',
+            'finance/ticket' => '/qiye/finance/ticket',
+            'finance/income' => '/qiye/finance/income',
+            'finance/payment' => '/qiye/finance/payment',
+            'finance/loan' => '/qiye/finance/loan',
+        ];
+
+        return isset($actionPermissions[$route]) ? [$actionPermissions[$route]] : null;
+    }
+
+    protected function hasMobilePermission(string $url): bool
+    {
+        return in_array($this->normalizeMobileUrl($url), $this->mobileAllowedUrls, true);
+    }
+
+    private function addMobileAllowedUrl(string $url): void
+    {
+        $normalized = $this->normalizeMobileUrl($url);
+        if ($normalized !== '' && !in_array($normalized, $this->mobileAllowedUrls, true)) {
+            $this->mobileAllowedUrls[] = $normalized;
+        }
+    }
+
+    private function normalizeMobileUrl(string $url): string
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+        if (!is_string($path) || $path === '') {
+            return '';
+        }
+        return '/' . trim($path, '/');
     }
 
     private function csvIds(string $value): array
