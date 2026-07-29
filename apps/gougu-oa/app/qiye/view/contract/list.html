@@ -1,0 +1,69 @@
+{extend name="common/base" /}
+{block name="body"}
+<div class="mobile-search"><i class="iconfont icon-search"></i><input id="contractKeywords" type="search" placeholder="搜索合同名称或编号"></div>
+<section id="contractList" class="mobile-business-list"></section>
+<button id="contractLoadMore" type="button" class="mobile-load-more">加载更多</button>
+{/block}
+{block name="script"}
+<script>
+var moduleInit = ['layer'];
+function mbuiInit() {
+    var page = 1;
+    var loading = false;
+    var finished = false;
+    var timer;
+    var $list = $('#contractList');
+    var $more = $('#contractLoadMore');
+
+    function escapeHtml(value) {
+        return $('<div>').text(value == null ? '' : String(value)).html();
+    }
+
+    function load(reset) {
+        if (loading || (!reset && finished)) return;
+        loading = true;
+        if (reset) {
+            page = 1;
+            finished = false;
+            $list.empty();
+        }
+        $.ajax({
+            url: '/qiye/contract/datalist',
+            data: {
+                page: page,
+                limit: 15,
+                kind: '{$contract_kind}',
+                tab: {$contract_tab},
+                keywords: $('#contractKeywords').val()
+            },
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        }).done(function (response) {
+            var rows = response.data || [];
+            rows.forEach(function (item) {
+                $list.append('<a class="mobile-business-item" href="/qiye/contract/view?kind={$contract_kind}&id=' + Number(item.id) + '">'
+                    + '<div><h2>' + escapeHtml(item.name) + '</h2><p>' + escapeHtml(item.code) + ' · ' + escapeHtml(item.sign_name) + '</p></div>'
+                    + '<span>' + escapeHtml(item.status_name) + '</span><i class="mobile-chevron"></i></a>');
+            });
+            page += 1;
+            finished = rows.length < 15 || $list.children().length >= Number(response.count || 0);
+            $more.toggle(!finished);
+            if ($list.children().length === 0) {
+                $list.html('<div class="mobile-empty"><i class="iconfont icon-none"></i><p>暂无合同</p></div>');
+                $more.hide();
+            }
+        }).fail(function () {
+            mbui.layer.msg('合同加载失败');
+        }).always(function () {
+            loading = false;
+        });
+    }
+
+    $('#contractKeywords').on('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () { load(true); }, 350);
+    });
+    $more.on('click', function () { load(false); });
+    load(true);
+}
+</script>
+{/block}

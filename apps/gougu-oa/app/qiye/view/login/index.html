@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="format-detection" content="telephone=no">
+    <title>登录 - {:get_system_config('web','admin_title')}</title>
+    <link rel="stylesheet" href="{__GOUGU__}/mbui/css/mbui.css?v={:get_system_config('system','version')}">
+    <link rel="stylesheet" href="{__GOUGU__}/mbui/css/qiye.css?v={:get_system_config('system','version')}">
+</head>
+<body class="mobile-login">
+<main class="mobile-login__main">
+    <div class="mobile-login__brand">
+        <img src="{__IMG__}/syslogo.png" alt="{:get_system_config('web','admin_title')}">
+        <h1>{:get_system_config('web','admin_title')}</h1>
+    </div>
+    <form id="mobileLoginForm" class="mobile-login__form">
+        <label class="mobile-login__field">
+            <i class="iconfont icon-kehu"></i>
+            <input name="username" type="text" autocomplete="username" placeholder="用户名或手机号" required>
+        </label>
+        <label class="mobile-login__field">
+            <i class="iconfont icon-suozhu"></i>
+            <input name="password" type="password" autocomplete="current-password" placeholder="密码" required>
+        </label>
+        <button type="submit" class="mobile-primary-button">登录</button>
+        <p id="mobileLoginError" class="mobile-login__error" role="alert"></p>
+    </form>
+</main>
+<script src="{__STATIC__}/jquery.min.js"></script>
+<script>
+$('#mobileLoginForm').on('submit', function (event) {
+    event.preventDefault();
+    var $form = $(this);
+    var $button = $form.find('button');
+    var $error = $('#mobileLoginError');
+    $button.prop('disabled', true).text('登录中...');
+    $error.text('');
+    $.post('/qiye/login/login_submit', $form.serialize())
+        .done(function (response) {
+            if (response.code === 0) {
+                window.location.replace(response.data.redirect || '/qiye/index/index');
+                return;
+            }
+            $error.text(response.msg || '登录失败');
+        })
+        .fail(function () {
+            $error.text('网络异常，请稍后重试');
+        })
+        .always(function () {
+            $button.prop('disabled', false).text('登录');
+        });
+});
+</script>
+</body>
+</html>

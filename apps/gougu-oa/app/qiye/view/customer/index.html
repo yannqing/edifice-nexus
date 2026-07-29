@@ -1,0 +1,15 @@
+{extend name="common/base" /}
+{block name="body"}
+<section class="mobile-summary">
+    <a href="/qiye/customer/datalist?tab=1"><strong>{$customer_counts.mine}</strong><span>我的客户</span></a>
+    <a href="/qiye/customer/datalist?tab=3"><strong>{$customer_counts.shared}</strong><span>共享客户</span></a>
+    <a href="/qiye/customer/datalist?tab=2"><strong>{$customer_counts.subordinate}</strong><span>下属客户</span></a>
+</section>
+<section class="mobile-link-list">
+    <a href="/qiye/customer/datalist?tab=0"><i class="iconfont icon-kehu"></i><span>全部客户</span><i class="mobile-chevron"></i></a>
+    <a href="/qiye/customer/datalist?tab=4"><i class="iconfont icon-gonghaikehu"></i><span>公海客户</span><em>{$customer_counts.sea}</em><i class="mobile-chevron"></i></a>
+    <a href="/qiye/customer/contacts"><i class="iconfont icon-kehulianxiren"></i><span>客户联系人</span><i class="mobile-chevron"></i></a>
+    <a href="/qiye/customer/chances"><i class="iconfont icon-jihuixiansuo"></i><span>销售机会</span><i class="mobile-chevron"></i></a>
+    <a href="/qiye/customer/traces"><i class="iconfont icon-genjinjilu1"></i><span>跟进记录</span><i class="mobile-chevron"></i></a>
+</section>
+{/block}

@@ -71,12 +71,12 @@ class Leaves extends BaseController
 				}
 			}
             if (!empty($param['id']) && $param['id'] > 0) {
-				$this->model->edit($param);
+				return $this->model->edit($param);
             }
 			else {
 				$param['admin_id'] = $this->uid;
 				$param['did'] = $this->did;
-                $this->model->add($param);
+                return $this->model->add($param);
             }	 
         }else{
 			$id = isset($param['id']) ? $param['id'] : 0;

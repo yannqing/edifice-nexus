@@ -1,0 +1,23 @@
+{extend name="common/base" /}
+{block name="body"}
+<section class="mobile-detail">
+    {volist name="detail_fields" id="field"}
+    <div class="mobile-detail__row {if $field.label == '内容' || $field.label == '备注'}mobile-detail__row--stack{/if}">
+        <span>{$field.label}</span>
+        <b>{$field.value}</b>
+    </div>
+    {/volist}
+</section>
+<div id="checkBox"
+     data-status="{$detail.check_status}"
+     data-id="{$detail.id}"
+     data-checkflowid="{$detail.check_flow_id}"></div>
+{/block}
+{block name="script"}
+<script>
+var moduleInit = ['tool', 'oaCheck'];
+function mbuiInit() {
+    mbui.oaCheck.init({check_name: '{$finance_config.check_name}'});
+}
+</script>
+{/block}

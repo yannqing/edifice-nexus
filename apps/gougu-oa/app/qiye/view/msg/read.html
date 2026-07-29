@@ -1,0 +1,19 @@
+{extend name="common/base" /}
+{block name="body"}
+<article class="mobile-message-detail">
+    <h2>{$detail.title}</h2>
+    <div class="mobile-message-detail__meta">
+        <span>{$detail.from_name}</span>
+        <time>{$detail.create_time}</time>
+    </div>
+    <div class="mobile-message-detail__content">{$detail.content|raw}</div>
+    {notempty name="detail.file_array"}
+    <div class="mobile-message-detail__files">
+        <h3>附件</h3>
+        {volist name="detail.file_array" id="file"}
+        <a href="{$file.filepath}" download="{$file.name}"><i class="iconfont icon-fujian"></i>{$file.name}</a>
+        {/volist}
+    </div>
+    {/notempty}
+</article>
+{/block}

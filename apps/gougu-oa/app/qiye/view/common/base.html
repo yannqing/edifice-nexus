@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="renderer" content="webkit">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <meta name="format-detection" content="telephone=no">
+    <title>{$page_title|default='移动办公'} - {:get_system_config('web','admin_title')}</title>
+    <link rel="stylesheet" href="{__GOUGU__}/mbui/css/mbui.css?v={:get_system_config('system','version')}">
+    <link rel="stylesheet" href="{__GOUGU__}/mbui/css/qiye.css?v={:get_system_config('system','version')}">
+    {block name="style"}{/block}
+</head>
+<body>
+<div id="root" class="mobile-shell">
+    {block name="header"}
+    <header class="mobile-header">
+        <a class="mobile-header__back" href="javascript:history.back()" aria-label="返回">
+            <i class="iconfont icon-arrow-left"></i>
+        </a>
+        <h1>{$page_title|default='移动办公'}</h1>
+        <span class="mobile-header__side"></span>
+    </header>
+    {/block}
+    <main class="mobile-main {block name='main_class'}{/block}">
+        {block name="body"}{/block}
+    </main>
+    {block name="nav"}
+    {notempty name="mobile_bars"}
+    <nav class="mobile-tabbar" aria-label="主导航">
+        {volist name="mobile_bars" id="bar"}
+        <a href="{$bar.url}" class="mobile-tabbar__item {if $bar.active}is-active{/if}">
+            <span class="mobile-tabbar__icon">
+                <i class="iconfont {$bar.icon}"></i>
+                {if $bar.id == 5 && $mobile_unread_count > 0}
+                <em>{$mobile_unread_count > 99 ? '99+' : $mobile_unread_count}</em>
+                {/if}
+            </span>
+            <span>{$bar.title}</span>
+        </a>
+        {/volist}
+    </nav>
+    {/notempty}
+    {/block}
+</div>
+<script src="{__STATIC__}/jquery.min.js"></script>
+{block name="script"}{/block}
+<script src="{__GOUGU__}/mbui/mbui.js?v={:get_system_config('system','version')}"></script>
+</body>
+</html>

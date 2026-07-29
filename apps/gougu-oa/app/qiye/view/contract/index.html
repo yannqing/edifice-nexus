@@ -1,0 +1,14 @@
+{extend name="common/base" /}
+{block name="body"}
+<section class="mobile-summary">
+    <a href="/qiye/contract/datalist?kind=sales"><strong>{$contract_summary.sales}</strong><span>销售合同</span></a>
+    <a href="/qiye/contract/datalist?kind=purchase"><strong>{$contract_summary.purchase}</strong><span>采购合同</span></a>
+    <a href="/qiye/contract/datalist?kind=sales&tab=2"><strong>{$contract_summary.pending}</strong><span>待我审批</span></a>
+</section>
+<section class="mobile-link-list">
+    <a href="/qiye/contract/datalist?kind=sales"><i class="iconfont icon-hetong2"></i><span>销售合同</span><i class="mobile-chevron"></i></a>
+    <a href="/qiye/contract/datalist?kind=purchase"><i class="iconfont icon-gongyingshang"></i><span>采购合同</span><i class="mobile-chevron"></i></a>
+    <a href="/qiye/contract/datalist?kind=sales&tab=1"><i class="iconfont icon-guidanghetong"></i><span>我签订的合同</span><i class="mobile-chevron"></i></a>
+    <a href="/qiye/contract/datalist?kind=sales&tab=2"><i class="iconfont icon-daishenpi"></i><span>待我审批</span><i class="mobile-chevron"></i></a>
+</section>
+{/block}

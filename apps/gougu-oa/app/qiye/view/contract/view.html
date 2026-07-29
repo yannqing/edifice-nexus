@@ -1,0 +1,24 @@
+{extend name="common/base" /}
+{block name="body"}
+<section class="mobile-detail">
+    <div class="mobile-detail__row"><span>合同名称</span><b>{$detail.name}</b></div>
+    <div class="mobile-detail__row"><span>合同编号</span><b>{$detail.code}</b></div>
+    <div class="mobile-detail__row"><span>合同金额</span><b>¥{$detail.cost}</b></div>
+    <div class="mobile-detail__row"><span>签订人</span><b>{$detail.sign_name}</b></div>
+    <div class="mobile-detail__row"><span>签订日期</span><b>{$detail.sign_time|date='Y-m-d'}</b></div>
+    <div class="mobile-detail__row"><span>审批状态</span><b>{$detail.status_name}</b></div>
+    <div class="mobile-detail__row mobile-detail__row--stack"><span>合同内容</span><b>{$detail.content|default='-'|strip_tags}</b></div>
+</section>
+<div id="checkBox"
+     data-status="{$detail.check_status}"
+     data-id="{$detail.id}"
+     data-checkflowid="{$detail.check_flow_id}"></div>
+{/block}
+{block name="script"}
+<script>
+var moduleInit = ['tool', 'oaCheck'];
+function mbuiInit() {
+    mbui.oaCheck.init({check_name: '{$contract_check_name}'});
+}
+</script>
+{/block}

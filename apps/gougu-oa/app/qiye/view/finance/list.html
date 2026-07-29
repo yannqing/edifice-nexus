@@ -1,0 +1,73 @@
+{extend name="common/base" /}
+{block name="body"}
+<div class="mobile-approval-tabs mobile-finance-tabs">
+    <button type="button" class="is-active" data-status="0">全部</button>
+    {if !$finance_is_settlement}
+    <button type="button" data-status="1">审批中</button>
+    <button type="button" data-status="2">已通过</button>
+    <button type="button" data-status="3">未通过</button>
+    {/if}
+</div>
+<section id="financeList" class="mobile-business-list"></section>
+<button id="financeLoadMore" type="button" class="mobile-load-more">加载更多</button>
+{/block}
+{block name="script"}
+<script>
+var moduleInit = ['layer'];
+function mbuiInit() {
+    var page = 1;
+    var status = 0;
+    var loading = false;
+    var finished = false;
+    var $list = $('#financeList');
+    var $more = $('#financeLoadMore');
+
+    function escapeHtml(value) {
+        return $('<div>').text(value == null ? '' : String(value)).html();
+    }
+
+    function load(reset) {
+        if (loading || (!reset && finished)) return;
+        loading = true;
+        if (reset) {
+            page = 1;
+            finished = false;
+            $list.empty();
+        }
+        $.ajax({
+            url: window.location.pathname,
+            data: {page: page, limit: 15, status: status},
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        }).done(function (response) {
+            var rows = response.data || [];
+            rows.forEach(function (item) {
+                $list.append('<a class="mobile-business-item" href="' + escapeHtml(item.mobile_url) + '">'
+                    + '<div><h2>' + escapeHtml(item.mobile_title) + '</h2><p>'
+                    + escapeHtml(item.mobile_admin) + ' · ' + escapeHtml(item.mobile_time) + '</p></div>'
+                    + '<span>¥' + escapeHtml(item.mobile_amount) + '<br>' + escapeHtml(item.mobile_status) + '</span>'
+                    + '<i class="mobile-chevron"></i></a>');
+            });
+            page += 1;
+            finished = rows.length < 15 || $list.children().length >= Number(response.count || 0);
+            $more.toggle(!finished);
+            if ($list.children().length === 0) {
+                $list.html('<div class="mobile-empty"><i class="iconfont icon-none"></i><p>暂无财务记录</p></div>');
+                $more.hide();
+            }
+        }).fail(function () {
+            mbui.layer.msg('财务记录加载失败');
+        }).always(function () {
+            loading = false;
+        });
+    }
+
+    $('.mobile-finance-tabs button').on('click', function () {
+        $(this).addClass('is-active').siblings().removeClass('is-active');
+        status = Number($(this).data('status'));
+        load(true);
+    });
+    $more.on('click', function () { load(false); });
+    load(true);
+}
+</script>
+{/block}

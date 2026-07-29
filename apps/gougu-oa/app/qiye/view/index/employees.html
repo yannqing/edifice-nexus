@@ -1,0 +1,21 @@
+{extend name="common/base" /}
+{block name="body"}
+<section class="mobile-people">
+    {empty name="employees"}
+    <div class="mobile-empty"><i class="iconfont icon-none"></i><p>暂无员工</p></div>
+    {else/}
+    {volist name="employees" id="employee"}
+    <article class="mobile-person">
+        <img src="{notempty name='employee.thumb'}{$employee.thumb}{else/}{__IMG__}/nonepic360x360.jpg{/notempty}" onerror="this.src='{__IMG__}/nonepic360x360.jpg';this.onerror=null" alt="">
+        <div>
+            <h2>{$employee.name}</h2>
+            <p>{$employee.department|default='未设置部门'} · {$employee.position|default='未设置岗位'}</p>
+        </div>
+        {if $employee.mobile}
+        <a href="tel:{$employee.mobile}" aria-label="拨打电话"><i class="iconfont icon-contact"></i></a>
+        {/if}
+    </article>
+    {/volist}
+    {/empty}
+</section>
+{/block}

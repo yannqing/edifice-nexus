@@ -1,0 +1,111 @@
+{extend name="common/base" /}
+{block name="body"}
+<form id="overtimeForm" class="mobile-form">
+    <div class="mbui-group-title">加班信息</div>
+    <div class="mobile-form__group">
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>开始时间</span>
+            <input class="mbui-form-input" type="datetime-local" name="start_date"
+                   value="{:isset($detail['start_date']) ? str_replace(' ', 'T', $detail['start_date']) : ''}"
+                   data-verify="required" data-errortips="请选择开始时间">
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>结束时间</span>
+            <input class="mbui-form-input" type="datetime-local" name="end_date"
+                   value="{:isset($detail['end_date']) ? str_replace(' ', 'T', $detail['end_date']) : ''}"
+                   data-verify="required" data-errortips="请选择结束时间">
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>加班时长</span>
+            <input class="mbui-form-input" type="number" min="0.1" step="0.1" name="duration"
+                   value="{$detail.duration|default=''}"
+                   data-verify="required|number" data-errortips="请输入加班时长" placeholder="小时">
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>加班事由</span>
+            <textarea class="mbui-form-input mobile-form__textarea" name="reason" rows="4"
+                      data-verify="required" data-errortips="请输入加班事由"
+                      placeholder="请输入">{$detail.reason|default=''}</textarea>
+        </label>
+        <div class="mbui-form-line">
+            <span class="mbui-form-label">附件</span>
+            <div class="mbui-form-uploader">
+                <button type="button" class="mobile-upload-button" id="uploadBtn" aria-label="上传附件">
+                    <i class="iconfont icon-shangchuan"></i>
+                </button>
+            </div>
+            <div id="uploadBox" class="mbui-file-list mobile-upload-list">
+                <input data-type="file" name="file_ids" type="hidden" value="{$detail.file_ids|default=''}">
+                {notempty name="$detail.file_array"}
+                {volist name="detail.file_array" id="file"}
+                <div class="mbui-file-div" data-id="{$file.id}">
+                    <div class="mbui-file-icon"><i class="iconfont icon-weizhigeshi"></i></div>
+                    <div class="mbui-file-info"><div class="mbui-file-name line-limit-1">{$file.name}</div></div>
+                    <div class="mbui-file-del"><i class="iconfont icon-cuowukongxin"></i></div>
+                </div>
+                {/volist}
+                {/notempty}
+            </div>
+        </div>
+    </div>
+    <input type="hidden" name="id" value="{$detail.id|default=0}">
+    <div class="mobile-form__actions">
+        <button type="submit" class="mobile-primary-button">保存并提交审批</button>
+    </div>
+</form>
+<div id="checkBox"
+     data-status="{$detail.check_status|default=0}"
+     data-id="{$detail.id|default=0}"
+     data-checkflowid="{$detail.check_flow_id|default=0}"></div>
+{/block}
+{block name="script"}
+<script>
+var moduleInit = ['form', 'layer', 'tool', 'fileupload', 'oaCheck'];
+function mbuiInit() {
+    var form = mbui.form;
+    var layer = mbui.layer;
+    var tool = mbui.tool;
+    mbui.fileupload({uploadBtn: 'uploadBtn', uploadBox: 'uploadBox'});
+    mbui.oaCheck.init({check_name: 'overtimes', check_btn: 0});
+
+    function calculateDuration() {
+        var start = new Date($('[name="start_date"]').val());
+        var end = new Date($('[name="end_date"]').val());
+        if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return;
+        var hours = (end - start) / 3600000;
+        $('[name="duration"]').val(Math.max(0.1, Math.round(hours * 10) / 10));
+    }
+
+    $('[name="start_date"],[name="end_date"]').on('change', calculateDuration);
+    form({
+        target: '#overtimeForm',
+        submit: function (data) {
+            var checkData = form.getValue('#formCheckBox');
+            if (!checkData.flow_id) {
+                layer.msg('请选择审批流程');
+                return;
+            }
+            var $button = $('#overtimeForm button[type="submit"]');
+            $button.prop('disabled', true).text('提交中...');
+            tool.post('/home/overtimes/add', data, function (response) {
+                if (response.code !== 0) {
+                    layer.msg(response.msg);
+                    $button.prop('disabled', false).text('保存并提交审批');
+                    return;
+                }
+                checkData.action_id = response.data.return_id;
+                checkData.check_name = 'overtimes';
+                mbui.oaCheck.submit(checkData, function (checkResponse) {
+                    layer.msg(checkResponse.msg);
+                    if (checkResponse.code === 0) {
+                        tool.replace('/qiye/approve/mylist', 800);
+                        return;
+                    }
+                    $button.prop('disabled', false).text('保存并提交审批');
+                });
+            });
+        }
+    });
+}
+</script>
+{/block}

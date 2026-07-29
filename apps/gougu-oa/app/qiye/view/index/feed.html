@@ -1,0 +1,19 @@
+{extend name="common/base" /}
+{block name="body"}
+<section class="mobile-feed">
+    {empty name="feed_items"}
+    <div class="mobile-empty">
+        <i class="iconfont icon-none"></i>
+        <p>暂无数据</p>
+    </div>
+    {else/}
+    {volist name="feed_items" id="item"}
+    <article class="mobile-feed__item">
+        <h2>{$item.title}</h2>
+        <time>{$item.meta}</time>
+        {notempty name="item.summary"}<p>{$item.summary}</p>{/notempty}
+    </article>
+    {/volist}
+    {/empty}
+</section>
+{/block}

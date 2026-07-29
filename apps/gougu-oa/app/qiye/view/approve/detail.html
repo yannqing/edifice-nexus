@@ -1,0 +1,34 @@
+{extend name="common/base" /}
+{block name="body"}
+<section class="mobile-approval-profile">
+    <img src="{$create_user.thumb}" onerror="this.src='{__IMG__}/nonepic360x360.jpg';this.onerror=null" alt="">
+    <div>
+        <h2>{$create_user.name}</h2>
+        <p>{$create_user.department|default='未设置部门'} · {$create_user.position|default='未设置岗位'}</p>
+    </div>
+</section>
+<section class="mobile-detail">
+    {empty name="detail_fields"}
+    <div class="mobile-detail__row"><span>申请编号</span><b>#{$detail.id}</b></div>
+    {else/}
+    {volist name="detail_fields" id="field"}
+    <div class="mobile-detail__row">
+        <span>{$field.label}</span>
+        <b>{$field.value}</b>
+    </div>
+    {/volist}
+    {/empty}
+</section>
+<div id="checkBox"
+     data-status="{$detail.check_status}"
+     data-id="{$detail.id}"
+     data-checkflowid="{$detail.check_flow_id}"></div>
+{/block}
+{block name="script"}
+<script>
+var moduleInit = ['tool', 'oaCheck'];
+function mbuiInit() {
+    mbui.oaCheck.init({check_name: '{$approve_cate.name}'});
+}
+</script>
+{/block}

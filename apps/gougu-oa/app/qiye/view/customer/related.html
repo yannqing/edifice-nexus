@@ -1,0 +1,21 @@
+{extend name="common/base" /}
+{block name="body"}
+<section class="mobile-feed">
+    {empty name="related_items"}
+    <div class="mobile-empty"><i class="iconfont icon-none"></i><p>暂无数据</p></div>
+    {else/}
+    {volist name="related_items" id="item"}
+    <article class="mobile-feed__item mobile-related-item">
+        <div>
+            <h2>{$item.title}</h2>
+            <time>{$item.meta}</time>
+            {notempty name="item.summary"}<p>{$item.summary}</p>{/notempty}
+        </div>
+        {notempty name="item.phone"}
+        <a href="tel:{$item.phone}" aria-label="拨打电话"><i class="iconfont icon-contact"></i></a>
+        {/notempty}
+    </article>
+    {/volist}
+    {/empty}
+</section>
+{/block}

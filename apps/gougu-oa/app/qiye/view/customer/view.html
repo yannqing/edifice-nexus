@@ -1,0 +1,17 @@
+{extend name="common/base" /}
+{block name="body"}
+<section class="mobile-detail">
+    <div class="mobile-detail__row"><span>客户名称</span><b>{$detail.name}</b></div>
+    <div class="mobile-detail__row"><span>所属员工</span><b>{$detail.belong_name|default='-'}</b></div>
+    <div class="mobile-detail__row"><span>所属部门</span><b>{$detail.belong_department|default='-'}</b></div>
+    <div class="mobile-detail__row"><span>客户地址</span><b>{$detail.address|default='-'}</b></div>
+    <div class="mobile-detail__row mobile-detail__row--stack"><span>客户描述</span><b>{$detail.content|default='-'}</b></div>
+</section>
+{notempty name="detail.contact"}
+<section class="mobile-detail">
+    <div class="mobile-detail__row"><span>联系人</span><b>{$detail.contact.name}</b></div>
+    <div class="mobile-detail__row"><span>联系电话</span><b><a class="mobile-phone-link" href="tel:{$detail.contact.mobile}">{$detail.contact.mobile}</a></b></div>
+    <div class="mobile-detail__row"><span>电子邮箱</span><b>{$detail.contact.email|default='-'}</b></div>
+</section>
+{/notempty}
+{/block}

@@ -1,0 +1,29 @@
+{extend name="common/base" /}
+{block name="body"}
+<section class="mobile-approval-profile">
+    <img src="{$create_user.thumb}" onerror="this.src='{__IMG__}/nonepic360x360.jpg';this.onerror=null" alt="">
+    <div>
+        <h2>{$create_user.name}</h2>
+        <p>{$create_user.department|default='未设置部门'} · {$create_user.position|default='未设置岗位'}</p>
+    </div>
+</section>
+<section class="mobile-detail">
+    <div class="mobile-detail__row"><span>请假类型</span><b>{$detail.types_name}</b></div>
+    <div class="mobile-detail__row"><span>开始时间</span><b>{$detail.start_date}</b></div>
+    <div class="mobile-detail__row"><span>结束时间</span><b>{$detail.end_date}</b></div>
+    <div class="mobile-detail__row"><span>请假天数</span><b>{$detail.duration} 天</b></div>
+    <div class="mobile-detail__row mobile-detail__row--stack"><span>请假事由</span><b>{$detail.reason}</b></div>
+</section>
+<div id="checkBox"
+     data-status="{$detail.check_status}"
+     data-id="{$detail.id}"
+     data-checkflowid="{$detail.check_flow_id}"></div>
+{/block}
+{block name="script"}
+<script>
+var moduleInit = ['tool', 'oaCheck'];
+function mbuiInit() {
+    mbui.oaCheck.init({check_name: 'leaves'});
+}
+</script>
+{/block}

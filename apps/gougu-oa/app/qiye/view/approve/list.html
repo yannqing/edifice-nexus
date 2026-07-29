@@ -1,0 +1,96 @@
+{extend name="common/base" /}
+{block name="body"}
+<div class="mobile-approval-tabs" data-mode="{$approve_list_mode}">
+    <button type="button" class="is-active" data-status="0">全部</button>
+    {if $approve_list_mode == 'check'}
+    <button type="button" data-status="1">待我处理</button>
+    <button type="button" data-status="2">我已处理</button>
+    {else/}
+    <button type="button" data-status="1">审批中</button>
+    <button type="button" data-status="2">已通过</button>
+    <button type="button" data-status="3">未通过</button>
+    {/if}
+</div>
+<section id="approvalList" class="mobile-approval-list"></section>
+<button id="approvalLoadMore" type="button" class="mobile-load-more">加载更多</button>
+{/block}
+{block name="script"}
+<script>
+var moduleInit = ['layer'];
+function mbuiInit() {
+    var page = 1;
+    var status = 0;
+    var loading = false;
+    var finished = false;
+    var $list = $('#approvalList');
+    var $more = $('#approvalLoadMore');
+
+    function escapeHtml(value) {
+        return $('<div>').text(value == null ? '' : String(value)).html();
+    }
+
+    function statusClass(value) {
+        return ['pending', 'processing', 'approved', 'rejected', 'recalled'][Number(value)] || 'pending';
+    }
+
+    function renderItem(item) {
+        return '<a class="mobile-approval-item" href="' + escapeHtml(item.view_url) + '">'
+            + '<div class="mobile-approval-item__head"><strong>' + escapeHtml(item.types_name) + '</strong>'
+            + '<span class="mobile-status mobile-status--' + statusClass(item.check_status) + '">'
+            + escapeHtml(item.check_status_str) + '</span></div>'
+            + '<div class="mobile-approval-item__row"><span>申请人</span><b>' + escapeHtml(item.admin_name) + '</b></div>'
+            + '<div class="mobile-approval-item__row"><span>所属部门</span><b>' + escapeHtml(item.department) + '</b></div>'
+            + '<div class="mobile-approval-item__row"><span>申请时间</span><b>' + escapeHtml(item.create_time) + '</b></div>'
+            + (Number(item.check_status) === 1
+                ? '<div class="mobile-approval-item__row"><span>当前审批人</span><b>' + escapeHtml(item.check_users) + '</b></div>'
+                : '')
+            + '</a>';
+    }
+
+    function load(reset) {
+        if (loading || (!reset && finished)) return;
+        loading = true;
+        if (reset) {
+            page = 1;
+            finished = false;
+            $list.empty();
+        }
+        $more.prop('disabled', true).text('加载中...');
+        $.ajax({
+            url: window.location.pathname,
+            data: {page: page, limit: 12, status: status},
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        }).done(function (response) {
+            if (response.code !== 0) {
+                mbui.layer.msg(response.msg || '加载失败');
+                return;
+            }
+            var rows = response.data || [];
+            rows.forEach(function (item) {
+                $list.append(renderItem(item));
+            });
+            page += 1;
+            finished = rows.length < 12 || $list.children().length >= Number(response.count || 0);
+            $more.toggle(!finished);
+            if ($list.children().length === 0) {
+                $list.html('<div class="mobile-empty"><i class="iconfont icon-none"></i><p>暂无审批记录</p></div>');
+                $more.hide();
+            }
+        }).fail(function () {
+            mbui.layer.msg('网络异常，请稍后重试');
+        }).always(function () {
+            loading = false;
+            $more.prop('disabled', false).text('加载更多');
+        });
+    }
+
+    $('.mobile-approval-tabs button').on('click', function () {
+        $(this).addClass('is-active').siblings().removeClass('is-active');
+        status = Number($(this).data('status'));
+        load(true);
+    });
+    $more.on('click', function () { load(false); });
+    load(true);
+}
+</script>
+{/block}

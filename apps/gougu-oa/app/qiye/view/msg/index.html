@@ -1,0 +1,72 @@
+{extend name="common/base" /}
+{block name="body"}
+<div class="mobile-approval-tabs mobile-message-tabs">
+    <button type="button" class="is-active" data-status="0">全部</button>
+    <button type="button" data-status="1">未读 {if $unread_count > 0}<small>{$unread_count}</small>{/if}</button>
+    <button type="button" data-status="2">已读</button>
+</div>
+<section id="messageList" class="mobile-message-list"></section>
+<button id="messageLoadMore" type="button" class="mobile-load-more">加载更多</button>
+{/block}
+{block name="script"}
+<script>
+var moduleInit = ['layer'];
+function mbuiInit() {
+    var page = 1;
+    var status = 0;
+    var loading = false;
+    var finished = false;
+    var $list = $('#messageList');
+    var $more = $('#messageLoadMore');
+
+    function escapeHtml(value) {
+        return $('<div>').text(value == null ? '' : String(value)).html();
+    }
+
+    function load(reset) {
+        if (loading || (!reset && finished)) return;
+        loading = true;
+        if (reset) {
+            page = 1;
+            finished = false;
+            $list.empty();
+        }
+        $more.prop('disabled', true).text('加载中...');
+        $.ajax({
+            url: '/qiye/msg/index',
+            data: {page: page, limit: 15, status: status},
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        }).done(function (response) {
+            var rows = response.data || [];
+            rows.forEach(function (item) {
+                $list.append(
+                    '<a class="mobile-message ' + (Number(item.read_time) === 0 ? 'is-unread' : '') + '" href="/qiye/msg/read/id/' + Number(item.id) + '">'
+                    + '<span class="mobile-message__dot"></span><div><h2>' + escapeHtml(item.title) + '</h2>'
+                    + '<p>' + escapeHtml(item.from_name) + '</p></div><time>' + escapeHtml(item.create_time) + '</time></a>'
+                );
+            });
+            page += 1;
+            finished = rows.length < 15 || $list.children().length >= Number(response.count || 0);
+            $more.toggle(!finished);
+            if ($list.children().length === 0) {
+                $list.html('<div class="mobile-empty"><i class="iconfont icon-none"></i><p>暂无消息</p></div>');
+                $more.hide();
+            }
+        }).fail(function () {
+            mbui.layer.msg('消息加载失败');
+        }).always(function () {
+            loading = false;
+            $more.prop('disabled', false).text('加载更多');
+        });
+    }
+
+    $('.mobile-message-tabs button').on('click', function () {
+        $(this).addClass('is-active').siblings().removeClass('is-active');
+        status = Number($(this).data('status'));
+        load(true);
+    });
+    $more.on('click', function () { load(false); });
+    load(true);
+}
+</script>
+{/block}

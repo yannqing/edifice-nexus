@@ -1,0 +1,39 @@
+{extend name="common/base" /}
+{block name="header"}{/block}
+{block name="main_class"}mobile-main--home{/block}
+{block name="body"}
+<section class="mobile-profile">
+    <img src="{notempty name='login_admin.thumb'}{$login_admin.thumb}{else/}{__IMG__}/nonepic360x360.jpg{/notempty}" onerror="this.src='{__IMG__}/nonepic360x360.jpg';this.onerror=null" alt="">
+    <div class="mobile-profile__content">
+        <div class="mobile-profile__name">{$login_admin.name}</div>
+        <div class="mobile-profile__meta">{$login_admin.department|default='未设置部门'} · {$login_admin.position|default='未设置岗位'}</div>
+    </div>
+    <a class="mobile-profile__logout" href="/qiye/login/login_out" aria-label="退出登录">
+        <i class="iconfont icon-guanbi1"></i>
+    </a>
+</section>
+
+{notempty name="notice"}
+<a class="mobile-notice" href="/qiye/index/note">
+    <i class="iconfont icon-gonggaotongzhi"></i>
+    <span>{$notice.title}</span>
+    <i class="mobile-chevron"></i>
+</a>
+{/notempty}
+
+{volist name="mobile_menu_types" id="type"}
+<section class="mobile-workgroup">
+    <h2>{$type.title}</h2>
+    <div class="mobile-app-grid">
+        {volist name="type.list" id="menu"}
+        <a class="mobile-app" href="{$menu.url}">
+            <span class="mobile-app__icon mobile-color-{$menu.bgcolor|default=$type.bgcolor}">
+                <i class="iconfont {$menu.icon}"></i>
+            </span>
+            <span class="mobile-app__title">{$menu.title}</span>
+        </a>
+        {/volist}
+    </div>
+</section>
+{/volist}
+{/block}
