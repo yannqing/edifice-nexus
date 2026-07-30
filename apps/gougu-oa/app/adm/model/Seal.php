@@ -38,7 +38,7 @@ class Seal extends Model
 				$item->use_time = date('Y-m-d', $item->use_time);
 				$item->admin_name = Db::name('Admin')->where('id','=',$item->admin_id)->value('name');
 				$item->use_dname = Db::name('Department')->where('id','=',$item->did)->value('title');
-				$item->seal_cate = Db::name('SealCate')->where('id','=',$item->seal_cate_id)->value('title');
+				$this->appendSealCategories($item);
 				$item->create_time = to_date($item->create_time);
 			});
 			return $list;
@@ -53,11 +53,17 @@ class Seal extends Model
     public function add($param)
     {
 		$insertId = 0;
+		$sealCateIds = $param['seal_cate_ids'];
+		$data = $this->writableData($param, true);
+		Db::startTrans();
         try {
-			$param['create_time'] = time();
-			$insertId = self::strict(false)->field(true)->insertGetId($param);
-			add_log('add', $insertId, $param);
-        } catch(\Exception $e) {
+			$data['create_time'] = time();
+			$insertId = self::strict(false)->field(true)->insertGetId($data);
+			$this->replaceSealItems($insertId, $sealCateIds);
+			add_log('add', $insertId, array_merge($data, ['seal_cate_ids' => $sealCateIds]));
+			Db::commit();
+        } catch(\Throwable $e) {
+			Db::rollback();
 			return to_assign(1, '操作失败，原因：'.$e->getMessage());
         }
 		return to_assign(0,'操作成功',['return_id'=>$insertId]);
@@ -69,11 +75,17 @@ class Seal extends Model
     */
     public function edit($param)
     {
+		$sealCateIds = $param['seal_cate_ids'];
+		$data = $this->writableData($param, false);
+		Db::startTrans();
         try {
-            $param['update_time'] = time();
-            self::where('id', $param['id'])->strict(false)->field(true)->update($param);
-			add_log('edit', $param['id'], $param);
-        } catch(\Exception $e) {
+            $data['update_time'] = time();
+            self::where('id', $param['id'])->strict(false)->field(true)->update($data);
+			$this->replaceSealItems((int) $param['id'], $sealCateIds);
+			add_log('edit', $param['id'], array_merge($data, ['seal_cate_ids' => $sealCateIds]));
+			Db::commit();
+        } catch(\Throwable $e) {
+			Db::rollback();
 			return to_assign(1, '操作失败，原因：'.$e->getMessage());
         }
 		return to_assign(0,'操作成功',['return_id'=> $param['id']]);
@@ -86,9 +98,12 @@ class Seal extends Model
     public function getById($id)
     {
         $info = self::find($id);
+		if (empty($info)) {
+			return [];
+		}
 		$info['admin_name'] = Db::name('Admin')->where('id','=',$info['admin_id'])->value('name');
 		$info['use_dname'] = Db::name('Department')->where('id','=',$info['did'])->value('title');
-		$info['seal_cate'] = Db::name('SealCate')->where('id','=',$info['seal_cate_id'])->value('title');
+		$this->appendSealCategories($info);
 		if($info['start_time']>0){
 			$info['start_time'] = date('Y-m-d',$info['start_time']);
 			$info['end_time'] = date('Y-m-d',$info['end_time']);
@@ -121,6 +136,14 @@ class Seal extends Model
 		return $info;
     }
 
+	public function getIdsBySealCate(int $sealCateId): array
+	{
+		$itemIds = Db::name('SealItem')->where('seal_cate_id', $sealCateId)->column('seal_id');
+		$legacyIds = self::where('seal_cate_id', $sealCateId)->column('id');
+		$ids = array_values(array_unique(array_map('intval', array_merge($itemIds, $legacyIds))));
+		return empty($ids) ? [0] : $ids;
+	}
+
     /**
     * 删除信息
     * @param $id
@@ -150,5 +173,64 @@ class Seal extends Model
 		}
 		return to_assign();
     }
-}
 
+	private function writableData(array $param, bool $includeAdmin): array
+	{
+		$fields = [
+			'title',
+			'seal_cate_id',
+			'content',
+			'file_ids',
+			'did',
+			'num',
+			'use_time',
+			'is_borrow',
+			'start_time',
+			'end_time',
+		];
+		if ($includeAdmin) {
+			$fields[] = 'admin_id';
+		}
+		return array_intersect_key($param, array_flip($fields));
+	}
+
+	private function replaceSealItems(int $sealId, array $sealCateIds): void
+	{
+		Db::name('SealItem')->where('seal_id', $sealId)->delete();
+		$rows = [];
+		$createTime = time();
+		foreach ($sealCateIds as $sort => $sealCateId) {
+			$rows[] = [
+				'seal_id' => $sealId,
+				'seal_cate_id' => (int) $sealCateId,
+				'sort' => $sort + 1,
+				'create_time' => $createTime,
+			];
+		}
+		Db::name('SealItem')->insertAll($rows);
+	}
+
+	private function appendSealCategories($info): void
+	{
+		$categories = Db::name('SealItem')
+			->alias('si')
+			->join('SealCate sc', 'sc.id = si.seal_cate_id', 'left')
+			->where('si.seal_id', (int) $info['id'])
+			->field('si.seal_cate_id,sc.title')
+			->order('si.sort asc,si.id asc')
+			->select()
+			->toArray();
+		if (empty($categories) && (int) $info['seal_cate_id'] > 0) {
+			$title = Db::name('SealCate')->where('id', (int) $info['seal_cate_id'])->value('title');
+			$categories[] = [
+				'seal_cate_id' => (int) $info['seal_cate_id'],
+				'title' => $title ?: '',
+			];
+		}
+		$ids = array_map('intval', array_column($categories, 'seal_cate_id'));
+		$titles = array_values(array_filter(array_column($categories, 'title')));
+		$info['seal_cate_ids_array'] = $ids;
+		$info['seal_cate_ids'] = implode(',', $ids);
+		$info['seal_cate'] = implode('、', $titles);
+	}
+}

@@ -190,6 +190,9 @@ class Approve extends BaseController
         if (empty($detail)) {
             throw new \think\exception\HttpException(403, '无权查看该审批记录');
         }
+        if ($tableName === 'seal') {
+            $detail = $this->appendSealCategories($detail);
+        }
 
         $fields = $this->detailFields($detail);
         View::assign([
@@ -372,6 +375,8 @@ class Approve extends BaseController
         $definitions = [
             'name' => '名称',
             'title' => '主题',
+            'seal_cate' => '印章类型',
+            'seal_num' => '盖章次数',
             'reason' => '事由',
             'content' => '内容',
             'remark' => '备注',
@@ -380,6 +385,8 @@ class Approve extends BaseController
             'code' => '编号',
             'cost' => '金额',
             'duration' => '时长',
+            'seal_use_time' => '预期用印日期',
+            'seal_is_borrow' => '印章是否外借',
             'start_date' => '开始时间',
             'end_date' => '结束时间',
             'start_time' => '开始时间',
@@ -390,7 +397,11 @@ class Approve extends BaseController
         ];
         $fields = [];
         foreach ($definitions as $key => $label) {
-            if (!array_key_exists($key, $detail) || $detail[$key] === '' || $detail[$key] === 0) {
+            if (
+                !array_key_exists($key, $detail)
+                || $detail[$key] === ''
+                || ($detail[$key] === 0 && $key !== 'seal_is_borrow')
+            ) {
                 continue;
             }
             $value = $detail[$key];
@@ -402,9 +413,37 @@ class Approve extends BaseController
                 $value = to_date((int) $value, 'Y-m-d H:i');
             } elseif ($key === 'cost') {
                 $value = '¥' . number_format((float) $value, 2);
+            } elseif ($key === 'seal_is_borrow') {
+                $value = (int) $value === 1 ? '是' : '否';
             }
             $fields[] = ['label' => $label, 'value' => strip_tags((string) $value)];
         }
         return $fields;
+    }
+
+    private function appendSealCategories(array $detail): array
+    {
+        $categories = Db::name('SealItem')
+            ->alias('si')
+            ->join('SealCate sc', 'sc.id = si.seal_cate_id', 'left')
+            ->where('si.seal_id', (int) $detail['id'])
+            ->field('si.seal_cate_id,sc.title')
+            ->order('si.sort asc,si.id asc')
+            ->select()
+            ->toArray();
+        if (empty($categories) && (int) ($detail['seal_cate_id'] ?? 0) > 0) {
+            $title = Db::name('SealCate')
+                ->where('id', (int) $detail['seal_cate_id'])
+                ->value('title');
+            $categories[] = ['title' => $title ?: ''];
+        }
+        $detail['seal_cate'] = implode(
+            '、',
+            array_values(array_filter(array_column($categories, 'title')))
+        );
+        $detail['seal_num'] = $detail['num'] ?? 0;
+        $detail['seal_use_time'] = $detail['use_time'] ?? 0;
+        $detail['seal_is_borrow'] = $detail['is_borrow'] ?? 0;
+        return $detail;
     }
 }

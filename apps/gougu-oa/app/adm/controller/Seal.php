@@ -68,9 +68,9 @@ class Seal extends BaseController
 			if($tab == 4){
 				//抄送给我的
 				$where[] = ['', 'exp', Db::raw("FIND_IN_SET('{$uid}',check_copy_uids)")];
-			}
+            }
             if (!empty($param['seal_cate_id'])) {
-                $where[] = ['seal_cate_id', '=', $param['seal_cate_id']];
+                $where[] = ['id', 'in', $this->model->getIdsBySealCate((int) $param['seal_cate_id'])];
             }
 			if (isset($param['check_status']) && $param['check_status'] != "") {
                 $where[] = ['check_status', '=', $param['check_status']];
@@ -93,6 +93,17 @@ class Seal extends BaseController
     {
 		$param = get_params();	
         if (request()->isAjax()) {
+			$sealCateIds = $this->normalizeSealCateIds($param['seal_cate_ids'] ?? '');
+			if (empty($sealCateIds)) {
+				return to_assign(1, '请选择印章类型');
+			}
+			$availableIds = array_map('intval', array_column($this->getAvailableSealCategories(), 'id'));
+			if (!empty(array_diff($sealCateIds, $availableIds))) {
+				return to_assign(1, '包含无权使用或已停用的印章类型');
+			}
+			$param['seal_cate_ids'] = $sealCateIds;
+			$param['seal_cate_id'] = $sealCateIds[0];
+			$param['did'] = $this->did;
 			if (!empty($param['use_time'])) {
                 $param['use_time'] = strtotime($param['use_time']);
             }
@@ -112,6 +123,19 @@ class Seal extends BaseController
 				$param['end_time'] = 0;
 			}
             if (!empty($param['id']) && $param['id'] > 0) {
+				$detail = Db::name('Seal')->where([
+					['id', '=', (int) $param['id']],
+					['delete_time', '=', 0],
+				])->find();
+				if (empty($detail)) {
+					return to_assign(1, '用章申请不存在');
+				}
+				if ((int) $this->uid !== 1 && (int) $detail['admin_id'] !== (int) $this->uid) {
+					return to_assign(1, '无权编辑该用章申请');
+				}
+				if (!in_array((int) $detail['check_status'], [0, 4], true)) {
+					return to_assign(1, '当前审批状态不允许编辑');
+				}
 				$this->model->edit($param);
             } else {
 				$param['admin_id'] = $this->uid;
@@ -119,21 +143,15 @@ class Seal extends BaseController
             }	 
         }else{
 			$id = isset($param['id']) ? $param['id'] : 0;
-			$did = $this->did;
-			$map1 = [];
-			$map2 = [];
-			$map1[] = ['status', '=', 1];
-			$map1[] = ['dids', '=', ''];
-
-			$map2[] = ['status', '=', 1];
-			$map2[] = ['', 'exp', Db::raw("FIND_IN_SET('{$did}',dids)")];
-
-			$sealcate = Db::name('SealCate')->whereOr([$map1,$map2])->order('id desc')->select()->toArray();
-			View::assign('sealcate', $sealcate);
+			View::assign('sealcate', $this->getAvailableSealCategories());
 			View::assign('user', get_admin($this->uid));
 			if ($id>0) {
 				$detail = $this->model->getById($id);
-				if($detail['check_status']==0 || $detail['check_status']==4){
+				if (
+					!empty($detail)
+					&& ((int) $this->uid === 1 || (int) $detail['admin_id'] === (int) $this->uid)
+					&& ((int) $detail['check_status'] === 0 || (int) $detail['check_status'] === 4)
+				) {
 					View::assign('detail', $detail);
 					if(is_mobile()){
 						return view('qiye@/approve/add_seal');
@@ -191,7 +209,7 @@ class Seal extends BaseController
 			$where[]=['delete_time','=',0];
 			$where[]=['check_status','=',2];
             if (!empty($param['seal_cate_id'])) {
-                $where[] = ['seal_cate_id', '=', $param['seal_cate_id']];
+                $where[] = ['id', 'in', $this->model->getIdsBySealCate((int) $param['seal_cate_id'])];
             }
 			if (!empty($param['keywords'])) {
                 $where[] = ['id|title', 'like', '%' . $param['keywords'] . '%'];
@@ -203,4 +221,35 @@ class Seal extends BaseController
             return view();
         }
     }
+
+	private function normalizeSealCateIds($value): array
+	{
+		$values = is_array($value) ? $value : explode(',', (string) $value);
+		$ids = [];
+		foreach ($values as $item) {
+			$id = (int) $item;
+			if ($id > 0) {
+				$ids[$id] = $id;
+			}
+		}
+		return array_values($ids);
+	}
+
+	private function getAvailableSealCategories(): array
+	{
+		$did = $this->did;
+		$map1 = [
+			['status', '=', 1],
+			['dids', '=', ''],
+		];
+		$map2 = [
+			['status', '=', 1],
+			['', 'exp', Db::raw("FIND_IN_SET('{$did}',dids)")],
+		];
+		return Db::name('SealCate')
+			->whereOr([$map1, $map2])
+			->order('id desc')
+			->select()
+			->toArray();
+	}
 }

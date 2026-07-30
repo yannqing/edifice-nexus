@@ -19,8 +19,7 @@
 			<td><input type="text" name="use_time" value='' readonly placeholder="请选择" lay-verify="required" lay-reqText="请选择预期用印日期" class="layui-input tool-time"></td>
 			<td class="layui-td-gray-2">印章类型<font>*</font></td>
 			<td>
-				<select name="seal_cate_id" lay-verify="required" lay-reqText="请输入印章类型">
-					<option value="">选择印章类型</option>
+				<select id="seal_cate_ids" name="seal_cate_ids" xm-select="sealCateSelect" xm-select-skin="default" lay-verify="required" lay-reqText="请选择印章类型">
 					{volist name="$sealcate" id="vo"}
 					<option value="{$vo.id}">{$vo.title}</option>
 					{/volist}
@@ -79,17 +78,15 @@
 			check_name:'seal',
 			check_btn:0
 		});	
-		//选择用印部门
-		var selected_a = $('#did').attr('xm-selected');
-		formSelects.data('select1', 'server', {
-			url: '/api/index/get_department_select',
-			keyword: selected_a
-		});
 
 		//相关附件上传
 		var attachment = new uploadPlus();
 		//监听提交
 		form.on('submit(webform)', function(data){
+			if (!data.field.seal_cate_ids) {
+				layer.msg('请选择印章类型');
+				return false;
+			}
 			if (data.field.is_borrow==1 && data.field.start_time == '') {
 				layer.msg('请完善印章借用日期');
 				return false;
