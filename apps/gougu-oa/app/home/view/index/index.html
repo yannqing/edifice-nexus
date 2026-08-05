@@ -217,11 +217,40 @@
 			});
 		});	
 		
-		var getStatus = setInterval(function () {
-			$.ajax({
+		const getMsgInterval = 30000;
+		const getMsgMaxInterval = 300000;
+		let getMsgTimer = null;
+		let getMsgRequest = null;
+		let getMsgFailures = 0;
+
+		function stopGetMsgTimer() {
+			if(getMsgTimer !== null){
+				clearTimeout(getMsgTimer);
+				getMsgTimer = null;
+			}
+		}
+
+		function scheduleGetMsg(delay) {
+			stopGetMsgTimer();
+			if(document.hidden || navigator.onLine === false || getMsgRequest !== null){
+				return;
+			}
+			getMsgTimer = setTimeout(function () {
+				getMsgTimer = null;
+				requestMsgCount();
+			}, delay);
+		}
+
+		function requestMsgCount() {
+			if(document.hidden || navigator.onLine === false || getMsgRequest !== null){
+				return;
+			}
+			getMsgRequest = $.ajax({
 				url: "/api/index/get_msg",
 				type:'post',
+				timeout: 8000,
 				success:function(e){
+					getMsgFailures = 0;
 					if(e.code==0 && e.data!==''){
 						if(e.data>0){
 							$('#msgNum').show().find('span').html(e.data);
@@ -236,9 +265,36 @@
 					}else{
 						layer.closeAll();
 					}
+				},
+				error:function(_xhr, status){
+					if(status !== 'abort'){
+						getMsgFailures = Math.min(getMsgFailures + 1, 4);
+					}
+				},
+				complete:function(){
+					getMsgRequest = null;
+					let delay = getMsgFailures > 0
+						? Math.min(getMsgInterval * Math.pow(2, getMsgFailures), getMsgMaxInterval)
+						: getMsgInterval;
+					scheduleGetMsg(delay);
 				}
-			})
-		}, 10000);
+			});
+		}
+
+		document.addEventListener('visibilitychange', function () {
+			if(document.hidden){
+				stopGetMsgTimer();
+			}else{
+				getMsgFailures = 0;
+				scheduleGetMsg(0);
+			}
+		});
+		window.addEventListener('offline', stopGetMsgTimer);
+		window.addEventListener('online', function () {
+			getMsgFailures = 0;
+			scheduleGetMsg(0);
+		});
+		scheduleGetMsg(0);
 	}
 
 	function createWatermark(){
