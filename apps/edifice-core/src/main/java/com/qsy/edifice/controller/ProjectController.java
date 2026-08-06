@@ -61,7 +61,7 @@ public class ProjectController {
 
     @PostMapping("/create")
     @Operation(summary = "新建项目", description = "新建项目，以及初始化合同、阶段、成员等数据")
-    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('menu:my-projects', 'menu:all-projects') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Long> createProject(@RequestBody CreateProjectDto dto, HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);
