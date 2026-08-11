@@ -141,17 +141,21 @@ SET @car_apply_view_rule_id = (SELECT `id` FROM `oa_admin_rule` WHERE `src` = 'a
 SET @car_apply_del_rule_id = (SELECT `id` FROM `oa_admin_rule` WHERE `src` = 'adm/carapply/del' LIMIT 1);
 
 UPDATE `oa_admin_group`
-SET `rules` = CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM `rules`), ''), @car_apply_rule_id)
-WHERE `id` = 1 AND @car_apply_rule_id IS NOT NULL AND COALESCE(FIND_IN_SET(@car_apply_rule_id, `rules`), 0) = 0;
+SET `rules` = CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM `rules`), ''), CAST(@car_apply_rule_id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_general_ci)
+WHERE `id` = 1 AND @car_apply_rule_id IS NOT NULL
+  AND COALESCE(FIND_IN_SET(CAST(@car_apply_rule_id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_general_ci, `rules` COLLATE utf8mb4_general_ci), 0) = 0;
 
 UPDATE `oa_admin_group`
-SET `rules` = CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM `rules`), ''), @car_apply_add_rule_id)
-WHERE `id` = 1 AND @car_apply_add_rule_id IS NOT NULL AND COALESCE(FIND_IN_SET(@car_apply_add_rule_id, `rules`), 0) = 0;
+SET `rules` = CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM `rules`), ''), CAST(@car_apply_add_rule_id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_general_ci)
+WHERE `id` = 1 AND @car_apply_add_rule_id IS NOT NULL
+  AND COALESCE(FIND_IN_SET(CAST(@car_apply_add_rule_id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_general_ci, `rules` COLLATE utf8mb4_general_ci), 0) = 0;
 
 UPDATE `oa_admin_group`
-SET `rules` = CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM `rules`), ''), @car_apply_view_rule_id)
-WHERE `id` = 1 AND @car_apply_view_rule_id IS NOT NULL AND COALESCE(FIND_IN_SET(@car_apply_view_rule_id, `rules`), 0) = 0;
+SET `rules` = CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM `rules`), ''), CAST(@car_apply_view_rule_id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_general_ci)
+WHERE `id` = 1 AND @car_apply_view_rule_id IS NOT NULL
+  AND COALESCE(FIND_IN_SET(CAST(@car_apply_view_rule_id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_general_ci, `rules` COLLATE utf8mb4_general_ci), 0) = 0;
 
 UPDATE `oa_admin_group`
-SET `rules` = CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM `rules`), ''), @car_apply_del_rule_id)
-WHERE `id` = 1 AND @car_apply_del_rule_id IS NOT NULL AND COALESCE(FIND_IN_SET(@car_apply_del_rule_id, `rules`), 0) = 0;
+SET `rules` = CONCAT_WS(',', NULLIF(TRIM(BOTH ',' FROM `rules`), ''), CAST(@car_apply_del_rule_id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_general_ci)
+WHERE `id` = 1 AND @car_apply_del_rule_id IS NOT NULL
+  AND COALESCE(FIND_IN_SET(CAST(@car_apply_del_rule_id AS CHAR CHARACTER SET utf8mb4) COLLATE utf8mb4_general_ci, `rules` COLLATE utf8mb4_general_ci), 0) = 0;
