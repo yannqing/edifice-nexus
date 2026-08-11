@@ -1,0 +1,33 @@
+{extend name="common/base" /}
+{block name="body"}
+<section class="mobile-approval-profile">
+    <img src="{$create_user.thumb}" onerror="this.src='{__IMG__}/nonepic360x360.jpg';this.onerror=null" alt="">
+    <div>
+        <h2>{$create_user.name}</h2>
+        <p>{$create_user.department|default='未设置部门'} · {$create_user.position|default='未设置岗位'}</p>
+    </div>
+</section>
+<section class="mobile-detail">
+    <div class="mobile-detail__row"><span>所属部门</span><b>{$detail.department|default='-'}</b></div>
+    <div class="mobile-detail__row"><span>始发地</span><b>{$detail.start_address}</b></div>
+    <div class="mobile-detail__row"><span>目的地</span><b>{$detail.destination}</b></div>
+    <div class="mobile-detail__row"><span>开始时间</span><b>{$detail.use_start_time_text}</b></div>
+    <div class="mobile-detail__row"><span>结束时间</span><b>{$detail.use_end_time_text}</b></div>
+    <div class="mobile-detail__row"><span>联系人</span><b>{$detail.contact_name}</b></div>
+    <div class="mobile-detail__row"><span>联系电话</span><b>{$detail.contact_phone}</b></div>
+    <div class="mobile-detail__row"><span>乘车人数</span><b>{$detail.passenger_count} 人</b></div>
+    <div class="mobile-detail__row"><span>业务类别</span><b>{$detail.business_type}</b></div>
+    <div class="mobile-detail__row mobile-detail__row--stack"><span>预算事项</span><b>{$detail.budget_item}</b></div>
+    <div class="mobile-detail__row mobile-detail__row--stack"><span>用车说明</span><b>{$detail.description}</b></div>
+</section>
+<div id="checkBox" data-status="{$detail.check_status}" data-id="{$detail.id}" data-checkflowid="{$detail.check_flow_id}"></div>
+{/block}
+
+{block name="script"}
+<script>
+var moduleInit = ['tool', 'oaCheck'];
+function mbuiInit() {
+    mbui.oaCheck.init({check_name: 'car_apply'});
+}
+</script>
+{/block}

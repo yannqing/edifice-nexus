@@ -110,8 +110,15 @@ abstract class BaseController
 				}
 	            View::assign('login_admin', $login_admin);
 				$not_check=['index','leaves','outs','overtimes','trips','attendancefix','attendance_fix','message'];
+				$self_service_actions = [
+					'adm' => [
+						'carapply' => ['add', 'view'],
+					],
+				];
+				$is_self_service_action = isset($self_service_actions[$this->module][$this->controller])
+					&& in_array($this->action, $self_service_actions[$this->module][$this->controller], true);
                 // 验证用户访问权限
-                if ($this->module == 'home' && in_array($this->controller, $not_check)) {
+				if (($this->module == 'home' && in_array($this->controller, $not_check)) || $is_self_service_action) {
 					return true;
 				}
 				else{

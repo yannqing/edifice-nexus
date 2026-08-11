@@ -15,6 +15,7 @@ class Approve extends BaseController
         'trips' => '/qiye/approve/add_chuchai',
         'outs' => '/qiye/approve/add_waichu',
         'overtimes' => '/qiye/approve/add_jiaban',
+        'car_apply' => '/adm/carapply/add',
     ];
 
     public function apply()
@@ -387,6 +388,16 @@ class Approve extends BaseController
             'duration' => '时长',
             'seal_use_time' => '预期用印日期',
             'seal_is_borrow' => '印章是否外借',
+            'start_address' => '始发地',
+            'destination' => '目的地',
+            'use_start_time' => '用车开始时间',
+            'use_end_time' => '用车结束时间',
+            'contact_name' => '联系人',
+            'contact_phone' => '联系电话',
+            'budget_item' => '预算事项',
+            'passenger_count' => '乘车人数',
+            'business_type' => '业务类别',
+            'description' => '用车说明',
             'start_date' => '开始时间',
             'end_date' => '结束时间',
             'start_time' => '开始时间',

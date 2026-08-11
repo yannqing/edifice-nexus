@@ -1,0 +1,121 @@
+{extend name="common/base" /}
+{block name="body"}
+<form id="carApplyForm" class="mobile-form">
+    <div class="mbui-group-title">申请信息</div>
+    <div class="mobile-form__group">
+        <div class="mbui-form-line"><span class="mbui-form-label">申请人</span><span class="mbui-form-value">{$user.name|default='-'}</span></div>
+        <div class="mbui-form-line"><span class="mbui-form-label">所属部门</span><span class="mbui-form-value">{$user.department|default='-'}</span></div>
+    </div>
+    <div class="mbui-group-title">用车信息</div>
+    <div class="mobile-form__group">
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>始发地</span>
+            <input class="mbui-form-input" type="text" name="start_address" value="{$detail.start_address|default=''}" data-verify="required" data-errortips="请输入始发地" placeholder="请输入">
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>目的地</span>
+            <input class="mbui-form-input" type="text" name="destination" value="{$detail.destination|default=''}" data-verify="required" data-errortips="请输入目的地" placeholder="请输入">
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>开始时间</span>
+            <input class="mbui-form-input" type="datetime-local" name="use_start_time" value="{:isset($detail['use_start_time_text']) ? str_replace(' ', 'T', $detail['use_start_time_text']) : ''}" data-verify="required" data-errortips="请选择开始时间">
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>结束时间</span>
+            <input class="mbui-form-input" type="datetime-local" name="use_end_time" value="{:isset($detail['use_end_time_text']) ? str_replace(' ', 'T', $detail['use_end_time_text']) : ''}" data-verify="required" data-errortips="请选择结束时间">
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>联系人</span>
+            <input class="mbui-form-input" type="text" name="contact_name" value="{$detail.contact_name|default=''}" data-verify="required" data-errortips="请输入联系人" placeholder="请输入">
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>联系电话</span>
+            <input class="mbui-form-input" type="tel" name="contact_phone" value="{$detail.contact_phone|default=''}" data-verify="required" data-errortips="请输入联系电话" placeholder="请输入">
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>乘车人数</span>
+            <input class="mbui-form-input" type="number" min="1" max="200" name="passenger_count" value="{$detail.passenger_count|default=''}" data-verify="required|number" data-errortips="请输入乘车人数" placeholder="请输入">
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>业务类别</span>
+            <span class="mbui-form-select">
+                <select name="business_type" data-verify="required" data-errortips="请选择业务类别">
+                    <option value="">请选择</option>
+                    {volist name="$business_types" id="type"}
+                    <option value="{$type.title}" {notempty name="detail"}{eq name="$detail.business_type" value="$type.title"}selected{/eq}{/notempty}>{$type.title}</option>
+                    {/volist}
+                </select>
+            </span>
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>预算事项</span>
+            <input class="mbui-form-input" type="text" name="budget_item" value="{$detail.budget_item|default=''}" data-verify="required" data-errortips="请填写预算事项" placeholder="如无预算请填写无">
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>用车说明</span>
+            <textarea class="mbui-form-input mobile-form__textarea" name="description" rows="4" data-verify="required" data-errortips="请填写用车说明" placeholder="请输入">{$detail.description|default=''}</textarea>
+        </label>
+        <div class="mbui-form-line">
+            <span class="mbui-form-label">附件</span>
+            <div class="mbui-form-uploader">
+                <button type="button" class="mobile-upload-button" id="uploadBtn" aria-label="上传附件"><i class="iconfont icon-shangchuan"></i></button>
+            </div>
+            <div id="uploadBox" class="mbui-file-list mobile-upload-list">
+                <input data-type="file" name="file_ids" type="hidden" value="{$detail.file_ids|default=''}">
+                {notempty name="$detail.file_array"}
+                {volist name="$detail.file_array" id="file"}
+                <div class="mbui-file-div" data-id="{$file.id}">
+                    <div class="mbui-file-icon"><i class="iconfont icon-weizhigeshi"></i></div>
+                    <div class="mbui-file-info"><div class="mbui-file-name line-limit-1">{$file.name}</div></div>
+                    <div class="mbui-file-del"><i class="iconfont icon-cuowukongxin"></i></div>
+                </div>
+                {/volist}
+                {/notempty}
+            </div>
+        </div>
+    </div>
+    <input type="hidden" name="id" value="{$detail.id|default=0}">
+    <div class="mobile-form__actions"><button type="submit" class="mobile-primary-button">保存并提交审批</button></div>
+</form>
+<div id="checkBox" data-status="{$detail.check_status|default=0}" data-id="{$detail.id|default=0}" data-checkflowid="{$detail.check_flow_id|default=0}"></div>
+{/block}
+
+{block name="script"}
+<script>
+var moduleInit = ['form', 'layer', 'tool', 'fileupload', 'oaCheck'];
+function mbuiInit() {
+    var form = mbui.form, layer = mbui.layer, tool = mbui.tool;
+    mbui.fileupload({uploadBtn: 'uploadBtn', uploadBox: 'uploadBox'});
+    mbui.oaCheck.init({check_name: 'car_apply', check_btn: 0});
+    form({
+        target: '#carApplyForm',
+        submit: function (data) {
+            var checkData = form.getValue('#formCheckBox');
+            if (!checkData.flow_id) {
+                layer.msg('请选择审批流程');
+                return;
+            }
+            var $button = $('#carApplyForm button[type="submit"]');
+            $button.prop('disabled', true).text('提交中...');
+            tool.post('/adm/carapply/add', data, function (response) {
+                if (response.code !== 0) {
+                    layer.msg(response.msg);
+                    $button.prop('disabled', false).text('保存并提交审批');
+                    return;
+                }
+                checkData.action_id = response.data.return_id;
+                checkData.check_name = 'car_apply';
+                mbui.oaCheck.submit(checkData, function (checkResponse) {
+                    layer.msg(checkResponse.msg);
+                    if (checkResponse.code === 0) {
+                        tool.replace('/qiye/approve/mylist', 800);
+                        return;
+                    }
+                    $button.prop('disabled', false).text('保存并提交审批');
+                });
+            });
+        }
+    });
+}
+</script>
+{/block}

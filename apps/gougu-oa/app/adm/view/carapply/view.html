@@ -1,0 +1,66 @@
+{extend name="../../base/view/common/base" /}
+{block name="body"}
+<div class="p-page">
+    <h3 class="pb-2">用车申请详情</h3>
+    <table class="layui-table layui-table-form">
+        <tr>
+            <td class="layui-td-gray">申请人</td>
+            <td>{$detail.admin_name|default='-'}</td>
+            <td class="layui-td-gray">所属部门</td>
+            <td>{$detail.department|default='-'}</td>
+            <td class="layui-td-gray">乘车人数</td>
+            <td>{$detail.passenger_count} 人</td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray">始发地</td>
+            <td colspan="2">{$detail.start_address}</td>
+            <td class="layui-td-gray">目的地</td>
+            <td colspan="2">{$detail.destination}</td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray">开始时间</td>
+            <td colspan="2">{$detail.use_start_time_text}</td>
+            <td class="layui-td-gray">结束时间</td>
+            <td colspan="2">{$detail.use_end_time_text}</td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray">联系人</td>
+            <td>{$detail.contact_name}</td>
+            <td class="layui-td-gray">联系电话</td>
+            <td>{$detail.contact_phone}</td>
+            <td class="layui-td-gray">业务类别</td>
+            <td>{$detail.business_type}</td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray">预算事项</td>
+            <td colspan="5">{$detail.budget_item}</td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray" style="vertical-align:top">用车说明</td>
+            <td colspan="5">{:nl2br($detail.description)}</td>
+        </tr>
+        {notempty name="$detail.file_array"}
+        <tr>
+            <td class="layui-td-gray">相关附件</td>
+            <td colspan="5">
+                <div class="layui-row">
+                    {volist name="$detail.file_array" id="file"}
+                    <div class="layui-col-md4">{:file_card($file, 'view')}</div>
+                    {/volist}
+                </div>
+            </td>
+        </tr>
+        {/notempty}
+    </table>
+    <div id="checkBox" data-status="{$detail.check_status}" data-id="{$detail.id}" data-checkflowid="{$detail.check_flow_id}" class="pt-3"></div>
+</div>
+{/block}
+
+{block name="script"}
+<script>
+const moduleInit = ['tool', 'oaCheck'];
+function gouguInit() {
+    layui.oaCheck.init({check_name: 'car_apply'});
+}
+</script>
+{/block}

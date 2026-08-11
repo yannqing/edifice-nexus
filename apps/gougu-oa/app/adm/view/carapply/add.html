@@ -1,0 +1,101 @@
+{extend name="../../base/view/common/base" /}
+{block name="body"}
+<form class="layui-form p-page">
+    <h3 class="pb-2">{empty name="detail"}添加用车申请{else/}编辑用车申请{/empty}</h3>
+    <table class="layui-table layui-table-form">
+        <tr>
+            <td class="layui-td-gray">申请人</td>
+            <td>{$user.name|default='-'}</td>
+            <td class="layui-td-gray">所属部门</td>
+            <td>{$user.department|default='-'}</td>
+            <td class="layui-td-gray">乘车人数<font>*</font></td>
+            <td><input type="number" min="1" max="200" name="passenger_count" value="{$detail.passenger_count|default=''}" placeholder="请输入人数" lay-verify="required|number" lay-reqText="请输入乘车人数" class="layui-input"></td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray">始发地<font>*</font></td>
+            <td colspan="2"><input type="text" name="start_address" value="{$detail.start_address|default=''}" placeholder="请输入始发地" lay-verify="required" lay-reqText="请输入始发地" class="layui-input"></td>
+            <td class="layui-td-gray">目的地<font>*</font></td>
+            <td colspan="2"><input type="text" name="destination" value="{$detail.destination|default=''}" placeholder="请输入目的地" lay-verify="required" lay-reqText="请输入目的地" class="layui-input"></td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray">开始时间<font>*</font></td>
+            <td colspan="2"><input id="use_start_time" name="use_start_time" value="{$detail.use_start_time_text|default=''}" readonly placeholder="请选择用车开始时间" lay-verify="required" lay-reqText="请选择用车开始时间" class="layui-input"></td>
+            <td class="layui-td-gray">结束时间<font>*</font></td>
+            <td colspan="2"><input id="use_end_time" name="use_end_time" value="{$detail.use_end_time_text|default=''}" readonly placeholder="请选择用车结束时间" lay-verify="required" lay-reqText="请选择用车结束时间" class="layui-input"></td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray">联系人<font>*</font></td>
+            <td><input type="text" name="contact_name" value="{$detail.contact_name|default=''}" placeholder="请输入联系人" lay-verify="required" lay-reqText="请输入联系人" class="layui-input"></td>
+            <td class="layui-td-gray">联系电话<font>*</font></td>
+            <td><input type="text" name="contact_phone" value="{$detail.contact_phone|default=''}" placeholder="请输入联系电话" lay-verify="required" lay-reqText="请输入联系电话" class="layui-input"></td>
+            <td class="layui-td-gray">业务类别<font>*</font></td>
+            <td>
+                <select name="business_type" lay-verify="required" lay-reqText="请选择业务类别">
+                    <option value="">请选择</option>
+                    {volist name="$business_types" id="type"}
+                    <option value="{$type.title}" {notempty name="detail"}{eq name="$detail.business_type" value="$type.title"}selected{/eq}{/notempty}>{$type.title}</option>
+                    {/volist}
+                </select>
+            </td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray">预算事项<font>*</font></td>
+            <td colspan="5"><input type="text" name="budget_item" value="{$detail.budget_item|default=''}" placeholder="请填写预算事项，如无预算请填写“无”" lay-verify="required" lay-reqText="请填写预算事项" class="layui-input"></td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray" style="vertical-align:top">用车说明<font>*</font></td>
+            <td colspan="5"><textarea name="description" placeholder="请填写用车事由、行程安排等说明" lay-verify="required" lay-reqText="请填写用车说明" class="layui-textarea">{$detail.description|default=''}</textarea></td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray">
+                <div class="layui-input-inline">相关附件</div>
+                <div class="layui-input-inline"><button type="button" class="layui-btn layui-btn-xs" id="uploadBtn"><i class="layui-icon"></i></button></div>
+            </td>
+            <td colspan="5">
+                <div class="layui-row" id="uploadBox">
+                    <input data-type="file" type="hidden" name="file_ids" value="{$detail.file_ids|default=''}">
+                    {notempty name="$detail.file_array"}
+                    {volist name="$detail.file_array" id="file"}
+                    <div class="layui-col-md4">{:file_card($file)}</div>
+                    {/volist}
+                    {/notempty}
+                </div>
+            </td>
+        </tr>
+    </table>
+    <div id="checkBox" data-status="{$detail.check_status|default=0}" data-id="{$detail.id|default=0}" data-checkflowid="{$detail.check_flow_id|default=0}" class="pt-3"></div>
+    <div class="pt-4">
+        <input type="hidden" name="id" value="{$detail.id|default=0}">
+        <button class="layui-btn layui-btn-normal" lay-submit="" lay-filter="webform">立即提交</button>
+        <button type="reset" class="layui-btn layui-btn-primary">重置</button>
+    </div>
+</form>
+{/block}
+
+{block name="script"}
+<script>
+const moduleInit = ['tool', 'uploadPlus', 'oaCheck'];
+function gouguInit() {
+    var form = layui.form, tool = layui.tool, uploadPlus = layui.uploadPlus, oaCheck = layui.oaCheck, laydate = layui.laydate;
+    oaCheck.init({check_name: 'car_apply', check_btn: 0});
+    new uploadPlus();
+    laydate.render({elem: '#use_start_time', fullPanel: true, type: 'datetime', format: 'yyyy-MM-dd HH:mm'});
+    laydate.render({elem: '#use_end_time', fullPanel: true, type: 'datetime', format: 'yyyy-MM-dd HH:mm'});
+
+    form.on('submit(webform)', function (data) {
+        var clickButton = $(this);
+        tool.post('/adm/carapply/add', data.field, function (response) {
+            layer.msg(response.msg);
+            if (response.code !== 0) return;
+            data.field.check_name = 'car_apply';
+            data.field.action_id = response.data.return_id;
+            oaCheck.submit(data.field, function (checkResponse) {
+                layer.msg(checkResponse.msg);
+                if (checkResponse.code === 0) tool.sideClose(1000);
+            });
+        }, clickButton);
+        return false;
+    });
+}
+</script>
+{/block}
