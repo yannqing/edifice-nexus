@@ -109,7 +109,7 @@ abstract class BaseController
 					exit;
 				}
 	            View::assign('login_admin', $login_admin);
-				$not_check=['index','leaves','outs','overtimes','trips','message'];
+				$not_check=['index','leaves','outs','overtimes','trips','attendancefix','attendance_fix','message'];
                 // 验证用户访问权限
                 if ($this->module == 'home' && in_array($this->controller, $not_check)) {
 					return true;

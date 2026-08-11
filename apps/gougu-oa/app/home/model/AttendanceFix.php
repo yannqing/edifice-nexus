@@ -38,9 +38,12 @@ class AttendanceFix extends Model
     {
         $insertId = 0;
         try {
-            $param['create_time'] = time();
-            $insertId = self::strict(false)->field(true)->insertGetId($param);
-            add_log('add', $insertId, $param, '补卡申请');
+            $data = array_intersect_key($param, array_flip([
+                'admin_id', 'did', 'fix_date', 'fix_type', 'fix_time', 'reason', 'file_ids'
+            ]));
+            $data['create_time'] = time();
+            $insertId = self::strict(false)->field(true)->insertGetId($data);
+            add_log('add', $insertId, $data, '补卡申请');
         } catch (\Exception $e) {
             return to_assign(1, '操作失败，原因：' . $e->getMessage());
         }
@@ -50,12 +53,20 @@ class AttendanceFix extends Model
     /**
      * 编辑信息
      */
-    public function edit($param)
+    public function edit($param, $adminId)
     {
         try {
-            $param['update_time'] = time();
-            self::where('id', $param['id'])->strict(false)->field(true)->update($param);
-            add_log('edit', $param['id'], $param, '补卡申请');
+            $data = array_intersect_key($param, array_flip([
+                'fix_date', 'fix_type', 'fix_time', 'reason', 'file_ids'
+            ]));
+            $data['update_time'] = time();
+            self::where('id', $param['id'])
+                ->where('admin_id', $adminId)
+                ->whereIn('check_status', [0, 4])
+                ->strict(false)
+                ->field(true)
+                ->update($data);
+            add_log('edit', $param['id'], $data, '补卡申请');
         } catch (\Exception $e) {
             return to_assign(1, '操作失败，原因：' . $e->getMessage());
         }
@@ -67,7 +78,7 @@ class AttendanceFix extends Model
      */
     public function getById($id)
     {
-        $info = self::find($id);
+        $info = self::where('id', $id)->where('delete_time', 0)->find();
         if (empty($info)) return null;
         $info['fix_date_str'] = date('Y-m-d', $info['fix_date']);
         $info['admin_name'] = Db::name('Admin')->where('id', '=', $info['admin_id'])->value('name');
@@ -82,18 +93,24 @@ class AttendanceFix extends Model
     /**
      * 删除信息
      */
-    public function delById($id, $type = 0)
+    public function delById($id, $adminId, $type = 0)
     {
         if ($type == 0) {
             try {
-                self::where('id', $id)->update(['delete_time' => time()]);
+                self::where('id', $id)
+                    ->where('admin_id', $adminId)
+                    ->whereIn('check_status', [0, 4])
+                    ->update(['delete_time' => time()]);
                 add_log('delete', $id);
             } catch (\Exception $e) {
                 return to_assign(1, '操作失败，原因：' . $e->getMessage());
             }
         } else {
             try {
-                self::destroy($id);
+                self::where('id', $id)
+                    ->where('admin_id', $adminId)
+                    ->whereIn('check_status', [0, 4])
+                    ->delete();
                 add_log('delete', $id);
             } catch (\Exception $e) {
                 return to_assign(1, '操作失败，原因：' . $e->getMessage());
