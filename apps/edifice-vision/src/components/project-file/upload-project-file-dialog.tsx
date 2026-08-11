@@ -12,7 +12,13 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ResponseCode } from "@/types/api";
-import { getAllProjects, getProjectDetail, getUserList, uploadProjectAttachment } from "@/services/project";
+import {
+  getAllProjects,
+  getProjectDetail,
+  getUserList,
+  MAX_ATTACHMENT_FILE_SIZE,
+  uploadProjectAttachment,
+} from "@/services/project";
 import { createProjectFile } from "@/services/project-file";
 import type {
   ProjectListVo,
@@ -99,8 +105,6 @@ export function UploadProjectFileDialog({
   const [error, setError] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
-
   // 仅重置表单录入项；项目详情和阶段刷新交给下面的 effect 按 open 触发。
   const reset = useCallback(() => {
     setProjectId(lockedProjectId ?? "");
@@ -159,7 +163,7 @@ export function UploadProjectFileDialog({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     if (selected) {
-      if (selected.size > MAX_FILE_SIZE) {
+      if (selected.size > MAX_ATTACHMENT_FILE_SIZE) {
         setError(`文件大小不能超过 500MB，当前文件 ${(selected.size / 1024 / 1024).toFixed(1)}MB`);
         return;
       }

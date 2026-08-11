@@ -12,7 +12,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { applyInspection } from "@/services/inspection";
-import { getMyProjects, getProjectDetail, getUserList, uploadDocument } from "@/services/project";
+import {
+  getMyProjects,
+  getProjectDetail,
+  getUserList,
+  MAX_ATTACHMENT_FILE_SIZE,
+  uploadProjectAttachment,
+} from "@/services/project";
 import { ResponseCode } from "@/types/api";
 import type { FilesVo, ProjectListVo, ProjectStageVo, UserListItem } from "@/types/project";
 import { EditableAttachmentFileList } from "@/components/file/attachment-file-list";
@@ -42,6 +48,7 @@ export function CreateInspectionDialog({
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<FilesVo[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [completionRatio, setCompletionRatio] = useState("100");
 
@@ -51,6 +58,7 @@ export function CreateInspectionDialog({
       setSelectedStageId("");
       setDescription("");
       setFiles([]);
+      setUploadProgress(0);
       setStages([]);
       setFirstApproverId("");
       setProjects([]);
@@ -110,14 +118,23 @@ export function CreateInspectionDialog({
   }, [selectedProjectId]);
 
   const handleFileUpload = async (file: File) => {
+    if (file.size > MAX_ATTACHMENT_FILE_SIZE) {
+      toast.error(`文件大小不能超过 500MB，当前文件 ${(file.size / 1024 / 1024).toFixed(1)}MB`);
+      return;
+    }
+
     setUploading(true);
+    setUploadProgress(0);
     try {
-      const res = await uploadDocument(file);
+      const res = await uploadProjectAttachment(file, setUploadProgress);
       if (res.code === ResponseCode.SUCCESS && res.data) {
+        setUploadProgress(100);
         setFiles((prev) => [...prev, res.data]);
+      } else {
+        toast.error(res.msg || "文件上传失败");
       }
-    } catch {
-      /* request.ts handles user-facing errors */
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "文件上传失败，请稍后重试");
     } finally {
       setUploading(false);
     }
@@ -325,6 +342,18 @@ export function CreateInspectionDialog({
                 }}
               />
             </label>
+            <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+              <span>单个文件最大 500MB</span>
+              {uploading && <span>{uploadProgress}%</span>}
+            </div>
+            {uploading && (
+              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full rounded-full bg-blue-500 transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -332,7 +361,11 @@ export function CreateInspectionDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             取消
           </Button>
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={submitting} onClick={handleSubmit}>
+          <Button
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+            disabled={submitting || uploading}
+            onClick={handleSubmit}
+          >
             {submitting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin mr-1" />

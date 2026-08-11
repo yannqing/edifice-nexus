@@ -253,9 +253,12 @@ function getFileExtension(file: File): string {
   return dotIndex >= 0 ? name.slice(dotIndex + 1) : "";
 }
 
+export const MAX_ATTACHMENT_FILE_SIZE = 500 * 1024 * 1024; // 500MB
+const MAX_DIRECT_IMAGE_SIZE = 5 * 1024 * 1024; // Matches the image upload endpoint.
+
 /**
  * 上传项目文件附件。根据文件类型选择后端对应上传接口。
- * 大文件（>10MB）自动走分片上传。
+ * 文档/音频超过10MB、图片超过5MB时自动走分片上传。
  */
 export async function uploadProjectAttachment(
   file: File,
@@ -263,13 +266,15 @@ export async function uploadProjectAttachment(
 ): Promise<BaseResponse<FilesVo>> {
   const extension = getFileExtension(file);
   const { isSmallFile, uploadFileInChunks } = await import("@/lib/chunk-upload");
+  const isImage = file.type.startsWith("image/") || imageExtensions.has(extension);
+  const isAudio = file.type.startsWith("audio/") || audioExtensions.has(extension);
 
   // 小文件走原有直传
-  if (isSmallFile(file)) {
-    if (file.type.startsWith("image/") || imageExtensions.has(extension)) {
+  if (isSmallFile(file, isImage ? MAX_DIRECT_IMAGE_SIZE : undefined)) {
+    if (isImage) {
       return uploadImage(file);
     }
-    if (file.type.startsWith("audio/") || audioExtensions.has(extension)) {
+    if (isAudio) {
       return uploadAudio(file);
     }
     return uploadDocument(file);
@@ -277,8 +282,8 @@ export async function uploadProjectAttachment(
 
   // 大文件走分片上传
   let fileType = "document";
-  if (file.type.startsWith("image/") || imageExtensions.has(extension)) fileType = "image";
-  if (file.type.startsWith("audio/") || audioExtensions.has(extension)) fileType = "audio";
+  if (isImage) fileType = "image";
+  if (isAudio) fileType = "audio";
 
   return uploadFileInChunks(file, { onProgress, fileType });
 }

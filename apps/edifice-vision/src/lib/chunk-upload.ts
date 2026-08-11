@@ -14,8 +14,8 @@ function generateUploadId(): string {
   });
 }
 
-export function isSmallFile(file: File): boolean {
-  return file.size <= SMALL_FILE_LIMIT;
+export function isSmallFile(file: File, limit = SMALL_FILE_LIMIT): boolean {
+  return file.size <= limit;
 }
 
 export interface ChunkUploadOptions {
