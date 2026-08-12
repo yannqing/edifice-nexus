@@ -1,0 +1,100 @@
+{extend name="../../base/view/common/base" /}
+{block name="body"}
+<form class="layui-form p-page">
+    <h3 class="pb-2">{if condition="$is_edit"}编辑转正申请{else/}添加转正申请{/if}</h3>
+    {notempty name="$profile_error"}<div class="layui-bg-red p-2 mb-2">{$profile_error}</div>{/notempty}
+    <div class="layui-form-title">申请人信息</div>
+    <table class="layui-table layui-table-form">
+        <tr>
+            <td class="layui-td-gray">申请人<font>*</font></td>
+            <td>{$detail.applicant_name|default='-'}</td>
+            <td class="layui-td-gray">申请时间</td>
+            <td>{$detail.application_time_text|default='-'}</td>
+            <td class="layui-td-gray">性别</td>
+            <td>{$detail.gender|default='-'}</td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray">出生年月</td>
+            <td>{$detail.birth_date|default='-'}</td>
+            <td class="layui-td-gray">毕业院校</td>
+            <td>{$detail.graduate_school|default='-'}</td>
+            <td class="layui-td-gray">专业</td>
+            <td>{$detail.speciality|default='-'}</td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray">最高学历</td>
+            <td>{$detail.highest_education|default='-'}</td>
+            <td class="layui-td-gray">职称</td>
+            <td>{$detail.professional_title|default='-'}</td>
+            <td class="layui-td-gray">岗位<font>*</font></td>
+            <td>{$detail.position_name|default='未设置'}</td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray">员工职级</td>
+            <td colspan="5">{$detail.employee_grade|default='-'}</td>
+        </tr>
+    </table>
+
+    <div class="layui-form-title mt-3">转正信息</div>
+    <table class="layui-table layui-table-form">
+        <tr>
+            <td class="layui-td-gray">入职日期</td>
+            <td>{$detail.entry_date_text|default='-'}</td>
+            <td class="layui-td-gray">所属部门</td>
+            <td>{$detail.department_name|default='-'}</td>
+            <td class="layui-td-gray">试用起止日期<font>*</font></td>
+            <td>
+                <div class="layui-input-inline" style="width:46%">
+                    <input id="probation_start_date" name="probation_start_date" value="{$detail.probation_start_date_text|default=''}" readonly placeholder="开始日期" lay-verify="required" lay-reqText="请选择试用开始日期" class="layui-input">
+                </div>
+                <span style="display:inline-block; width:6%; text-align:center">至</span>
+                <div class="layui-input-inline" style="width:46%">
+                    <input id="probation_end_date" name="probation_end_date" value="{$detail.probation_end_date_text|default=''}" readonly placeholder="结束日期" lay-verify="required" lay-reqText="请选择试用结束日期" class="layui-input">
+                </div>
+            </td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray" style="vertical-align:top">工作总结<font>*</font></td>
+            <td colspan="5"><textarea name="work_summary" rows="8" maxlength="10000" placeholder="请输入工作总结" lay-verify="required" lay-reqText="请填写工作总结" class="layui-textarea">{$detail.work_summary|default=''}</textarea></td>
+        </tr>
+        <tr>
+            <td class="layui-td-gray" style="vertical-align:top">主要业绩</td>
+            <td colspan="5"><textarea name="main_achievements" rows="6" maxlength="10000" placeholder="请输入主要业绩（选填）" class="layui-textarea">{$detail.main_achievements|default=''}</textarea></td>
+        </tr>
+    </table>
+
+    <div id="checkBox" data-status="{$detail.check_status|default=0}" data-id="{$detail.id|default=0}" data-checkflowid="{$detail.check_flow_id|default=0}" class="pt-3"></div>
+    <div class="pt-4">
+        <input type="hidden" name="id" value="{$detail.id|default=0}">
+        <button class="layui-btn layui-btn-normal" lay-submit="" lay-filter="webform">保存并提交审批</button>
+        <button type="reset" class="layui-btn layui-btn-primary">重置</button>
+    </div>
+</form>
+{/block}
+
+{block name="script"}
+<script>
+const moduleInit = ['tool', 'oaCheck'];
+function gouguInit() {
+    var form = layui.form, tool = layui.tool, oaCheck = layui.oaCheck, laydate = layui.laydate;
+    oaCheck.init({check_name: 'employee_regularization', check_btn: 0});
+    laydate.render({elem: '#probation_start_date', format: 'yyyy-MM-dd'});
+    laydate.render({elem: '#probation_end_date', format: 'yyyy-MM-dd'});
+
+    form.on('submit(webform)', function (data) {
+        var clickButton = $(this);
+        tool.post('/user/regularization/add', data.field, function (response) {
+            layer.msg(response.msg);
+            if (response.code !== 0) return;
+            data.field.check_name = 'employee_regularization';
+            data.field.action_id = response.data.return_id;
+            oaCheck.submit(data.field, function (checkResponse) {
+                layer.msg(checkResponse.msg);
+                if (checkResponse.code === 0) tool.sideClose(1000);
+            });
+        }, clickButton);
+        return false;
+    });
+}
+</script>
+{/block}

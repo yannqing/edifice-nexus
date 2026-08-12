@@ -1,0 +1,110 @@
+{extend name="../../base/view/common/base" /}
+{block name="body"}
+<div class="p-page">
+    <div class="layui-card border-x border-t" style="margin-bottom:0; box-shadow:none">
+        <div class="body-table layui-tab layui-tab-brief" lay-filter="tab">
+            <ul class="layui-tab-title">
+                <li class="layui-this">全部</li>
+                <li>我申请的</li>
+                <li>待我审批</li>
+                <li>我已审批</li>
+                <li>抄送我的</li>
+            </ul>
+        </div>
+    </div>
+    <form class="layui-form gg-form-bar border-x" id="barsearchform">
+        <div class="layui-input-inline" style="width:128px">
+            <select name="check_status">
+                <option value="">审批状态</option>
+                {volist name=":get_check_status()" id="status"}
+                <option value="{$key}">{$status}</option>
+                {/volist}
+            </select>
+        </div>
+        <div class="layui-input-inline" style="width:300px">
+            <input type="text" name="keywords" placeholder="申请人、部门、岗位或总结" class="layui-input" autocomplete="off">
+        </div>
+        <div class="layui-input-inline" style="width:180px">
+            <input type="hidden" name="tab" value="0">
+            <button class="layui-btn layui-btn-normal" lay-submit="" lay-filter="table-search"><i class="layui-icon layui-icon-search mr-1"></i>搜索</button>
+            <button type="reset" class="layui-btn layui-btn-reset" lay-filter="table-reset">清空</button>
+        </div>
+    </form>
+    <table class="layui-hide" id="table_regularization" lay-filter="table_regularization"></table>
+</div>
+
+<script type="text/html" id="toolbarDemo">
+    <div class="layui-btn-container">
+        <button class="layui-btn layui-btn-sm tool-add" type="button" data-href="/user/regularization/add">+ 转正申请</button>
+    </div>
+</script>
+{/block}
+
+{block name="script"}
+<script>
+const moduleInit = ['tool', 'tablePlus'];
+function gouguInit() {
+    var table = layui.tablePlus, tool = layui.tool, element = layui.element;
+    element.on('tab(tab)', function (data) {
+        $('[name="tab"]').val(data.index);
+        $('#barsearchform')[0].reset();
+        $('[name="tab"]').val(data.index);
+        layui.pageTable.reload({where: {tab: data.index}, page: {curr: 1}});
+        return false;
+    });
+
+    layui.pageTable = table.render({
+        elem: '#table_regularization',
+        toolbar: '#toolbarDemo',
+        url: '/user/regularization/datalist',
+        page: true,
+        limit: 20,
+        cellMinWidth: 70,
+        height: 'full-154',
+        cols: [[
+            {field: 'id', width: 80, title: 'ID号', align: 'center'},
+            {field: 'check_status', title: '审批状态', width: 112, align: 'center', templet: function (d) {
+                return '<span class="check-status-color-' + d.check_status + '">『' + d.check_status_str + '』</span>';
+            }},
+            {field: 'applicant_name', title: '申请人', width: 100, align: 'center'},
+            {field: 'department_name', title: '所属部门', minWidth: 130},
+            {field: 'position_name', title: '岗位', minWidth: 130},
+            {field: 'probation_period', title: '试用起止日期', width: 220, align: 'center'},
+            {field: 'employee_grade', title: '员工职级', width: 110, align: 'center'},
+            {field: 'check_user', title: '当前审批人', width: 110, align: 'center'},
+            {field: 'application_time', title: '申请时间', width: 150, align: 'center'},
+            {width: 120, fixed: 'right', title: '操作', align: 'center', templet: function (d) {
+                var viewButton = '<a class="layui-btn layui-btn-normal layui-btn-xs" lay-event="view">详情</a>';
+                if ((d.check_status == 0 || d.check_status == 4) && d.admin_id == login_admin) {
+                    return '<div class="layui-btn-group">' + viewButton
+                        + '<a class="layui-btn layui-btn-xs" lay-event="edit">编辑</a>'
+                        + '<a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del">删除</a></div>';
+                }
+                return viewButton;
+            }}
+        ]]
+    });
+
+    table.on('tool(table_regularization)', function (obj) {
+        var data = obj.data;
+        if (obj.event === 'view') {
+            tool.side('/user/regularization/view?id=' + data.id);
+            return;
+        }
+        if (obj.event === 'edit') {
+            tool.side('/user/regularization/add?id=' + data.id);
+            return;
+        }
+        if (obj.event === 'del') {
+            layer.confirm('确定要删除该转正申请吗？', {icon: 3, title: '提示'}, function (index) {
+                tool.delete('/user/regularization/del', {id: data.id}, function (response) {
+                    layer.msg(response.msg);
+                    if (response.code === 0) obj.del();
+                });
+                layer.close(index);
+            });
+        }
+    });
+}
+</script>
+{/block}

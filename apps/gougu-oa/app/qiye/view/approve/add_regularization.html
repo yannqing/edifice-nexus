@@ -1,0 +1,82 @@
+{extend name="common/base" /}
+{block name="body"}
+<form id="regularizationForm" class="mobile-form">
+    <div class="mbui-group-title">申请人信息</div>
+    <div class="mobile-form__group">
+        <div class="mbui-form-line"><span class="mbui-form-label"><i>*</i>申请人</span><span class="mbui-form-value">{$detail.applicant_name|default='-'}</span></div>
+        <div class="mbui-form-line"><span class="mbui-form-label">申请时间</span><span class="mbui-form-value">{$detail.application_time_text|default='-'}</span></div>
+        <div class="mbui-form-line"><span class="mbui-form-label">性别</span><span class="mbui-form-value">{$detail.gender|default='-'}</span></div>
+        <div class="mbui-form-line"><span class="mbui-form-label">出生年月</span><span class="mbui-form-value">{$detail.birth_date|default='-'}</span></div>
+        <div class="mbui-form-line"><span class="mbui-form-label">毕业院校</span><span class="mbui-form-value">{$detail.graduate_school|default='-'}</span></div>
+        <div class="mbui-form-line"><span class="mbui-form-label">专业</span><span class="mbui-form-value">{$detail.speciality|default='-'}</span></div>
+        <div class="mbui-form-line"><span class="mbui-form-label">最高学历</span><span class="mbui-form-value">{$detail.highest_education|default='-'}</span></div>
+        <div class="mbui-form-line"><span class="mbui-form-label">职称</span><span class="mbui-form-value">{$detail.professional_title|default='-'}</span></div>
+        <div class="mbui-form-line"><span class="mbui-form-label"><i>*</i>岗位</span><span class="mbui-form-value">{$detail.position_name|default='未设置'}</span></div>
+        <div class="mbui-form-line"><span class="mbui-form-label">员工职级</span><span class="mbui-form-value">{$detail.employee_grade|default='-'}</span></div>
+    </div>
+    {notempty name="$profile_error"}<div class="mbui-tips">{$profile_error}</div>{/notempty}
+    <div class="mbui-group-title">转正信息</div>
+    <div class="mobile-form__group">
+        <div class="mbui-form-line"><span class="mbui-form-label">入职日期</span><span class="mbui-form-value">{$detail.entry_date_text|default='-'}</span></div>
+        <div class="mbui-form-line"><span class="mbui-form-label">所属部门</span><span class="mbui-form-value">{$detail.department_name|default='-'}</span></div>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>试用开始</span>
+            <input class="mbui-form-input" type="date" name="probation_start_date" value="{$detail.probation_start_date_text|default=''}" data-verify="required" data-errortips="请选择试用开始日期">
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>试用结束</span>
+            <input class="mbui-form-input" type="date" name="probation_end_date" value="{$detail.probation_end_date_text|default=''}" data-verify="required" data-errortips="请选择试用结束日期">
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label"><i>*</i>工作总结</span>
+            <textarea class="mbui-form-input mobile-form__textarea" name="work_summary" rows="7" maxlength="10000" data-verify="required" data-errortips="请填写工作总结" placeholder="请输入">{$detail.work_summary|default=''}</textarea>
+        </label>
+        <label class="mbui-form-line">
+            <span class="mbui-form-label">主要业绩</span>
+            <textarea class="mbui-form-input mobile-form__textarea" name="main_achievements" rows="6" maxlength="10000" placeholder="请输入（选填）">{$detail.main_achievements|default=''}</textarea>
+        </label>
+    </div>
+    <input type="hidden" name="id" value="{$detail.id|default=0}">
+    <div class="mobile-form__actions"><button type="submit" class="mobile-primary-button">保存并提交审批</button></div>
+</form>
+<div id="checkBox" data-status="{$detail.check_status|default=0}" data-id="{$detail.id|default=0}" data-checkflowid="{$detail.check_flow_id|default=0}"></div>
+{/block}
+
+{block name="script"}
+<script>
+var moduleInit = ['form', 'layer', 'tool', 'oaCheck'];
+function mbuiInit() {
+    var form = mbui.form, layer = mbui.layer, tool = mbui.tool;
+    mbui.oaCheck.init({check_name: 'employee_regularization', check_btn: 0});
+    form({
+        target: '#regularizationForm',
+        submit: function (data) {
+            var checkData = form.getValue('#formCheckBox');
+            if (!checkData.flow_id) {
+                layer.msg('请选择审批流程');
+                return;
+            }
+            var $button = $('#regularizationForm button[type="submit"]');
+            $button.prop('disabled', true).text('提交中...');
+            tool.post('/user/regularization/add', data, function (response) {
+                if (response.code !== 0) {
+                    layer.msg(response.msg);
+                    $button.prop('disabled', false).text('保存并提交审批');
+                    return;
+                }
+                checkData.action_id = response.data.return_id;
+                checkData.check_name = 'employee_regularization';
+                mbui.oaCheck.submit(checkData, function (checkResponse) {
+                    layer.msg(checkResponse.msg);
+                    if (checkResponse.code === 0) {
+                        tool.replace('/qiye/approve/mylist', 800);
+                        return;
+                    }
+                    $button.prop('disabled', false).text('保存并提交审批');
+                });
+            });
+        }
+    });
+}
+</script>
+{/block}

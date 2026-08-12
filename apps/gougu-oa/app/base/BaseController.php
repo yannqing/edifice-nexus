@@ -114,6 +114,9 @@ abstract class BaseController
 					'adm' => [
 						'carapply' => ['add', 'view'],
 					],
+					'user' => [
+						'regularization' => ['add', 'view'],
+					],
 				];
 				$is_self_service_action = isset($self_service_actions[$this->module][$this->controller])
 					&& in_array($this->action, $self_service_actions[$this->module][$this->controller], true);

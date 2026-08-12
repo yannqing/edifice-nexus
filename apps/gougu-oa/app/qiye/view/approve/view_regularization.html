@@ -1,0 +1,40 @@
+{extend name="common/base" /}
+{block name="body"}
+<section class="mobile-approval-profile">
+    <img src="{$create_user.thumb}" onerror="this.src='{__IMG__}/nonepic360x360.jpg';this.onerror=null" alt="">
+    <div>
+        <h2>{$detail.applicant_name}</h2>
+        <p>{$detail.department_name|default='未设置部门'} · {$detail.position_name|default='未设置岗位'}</p>
+    </div>
+</section>
+<div class="mbui-group-title">申请人信息</div>
+<section class="mobile-detail">
+    <div class="mobile-detail__row"><span>申请时间</span><b>{$detail.application_time_text}</b></div>
+    <div class="mobile-detail__row"><span>性别</span><b>{$detail.gender|default='-'}</b></div>
+    <div class="mobile-detail__row"><span>出生年月</span><b>{$detail.birth_date|default='-'}</b></div>
+    <div class="mobile-detail__row"><span>毕业院校</span><b>{$detail.graduate_school|default='-'}</b></div>
+    <div class="mobile-detail__row"><span>专业</span><b>{$detail.speciality|default='-'}</b></div>
+    <div class="mobile-detail__row"><span>最高学历</span><b>{$detail.highest_education|default='-'}</b></div>
+    <div class="mobile-detail__row"><span>职称</span><b>{$detail.professional_title|default='-'}</b></div>
+    <div class="mobile-detail__row"><span>岗位</span><b>{$detail.position_name|default='-'}</b></div>
+    <div class="mobile-detail__row"><span>员工职级</span><b>{$detail.employee_grade|default='-'}</b></div>
+</section>
+<div class="mbui-group-title">转正信息</div>
+<section class="mobile-detail">
+    <div class="mobile-detail__row"><span>入职日期</span><b>{$detail.entry_date_text|default='-'}</b></div>
+    <div class="mobile-detail__row"><span>所属部门</span><b>{$detail.department_name|default='-'}</b></div>
+    <div class="mobile-detail__row"><span>试用起止日期</span><b>{$detail.probation_start_date_text} 至 {$detail.probation_end_date_text}</b></div>
+    <div class="mobile-detail__row mobile-detail__row--stack"><span>工作总结</span><b>{$detail.work_summary}</b></div>
+    <div class="mobile-detail__row mobile-detail__row--stack"><span>主要业绩</span><b>{$detail.main_achievements|default='-'}</b></div>
+</section>
+<div id="checkBox" data-status="{$detail.check_status}" data-id="{$detail.id}" data-checkflowid="{$detail.check_flow_id}"></div>
+{/block}
+
+{block name="script"}
+<script>
+var moduleInit = ['tool', 'oaCheck'];
+function mbuiInit() {
+    mbui.oaCheck.init({check_name: 'employee_regularization'});
+}
+</script>
+{/block}

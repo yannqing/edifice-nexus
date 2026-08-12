@@ -16,6 +16,7 @@ class Approve extends BaseController
         'outs' => '/qiye/approve/add_waichu',
         'overtimes' => '/qiye/approve/add_jiaban',
         'car_apply' => '/adm/carapply/add',
+        'employee_regularization' => '/user/regularization/add',
     ];
 
     public function apply()
@@ -398,6 +399,22 @@ class Approve extends BaseController
             'passenger_count' => '乘车人数',
             'business_type' => '业务类别',
             'description' => '用车说明',
+            'applicant_name' => '申请人',
+            'application_time' => '申请时间',
+            'gender' => '性别',
+            'birth_date' => '出生年月',
+            'graduate_school' => '毕业院校',
+            'speciality' => '专业',
+            'highest_education' => '最高学历',
+            'professional_title' => '职称',
+            'position_name' => '岗位',
+            'employee_grade' => '员工职级',
+            'entry_date' => '入职日期',
+            'department_name' => '所属部门',
+            'probation_start_date' => '试用开始日期',
+            'probation_end_date' => '试用结束日期',
+            'work_summary' => '工作总结',
+            'main_achievements' => '主要业绩',
             'start_date' => '开始时间',
             'end_date' => '结束时间',
             'start_time' => '开始时间',
@@ -420,8 +437,10 @@ class Approve extends BaseController
                 str_ends_with($key, '_time')
                 || $key === 'start_date'
                 || $key === 'end_date'
+                || in_array($key, ['entry_date', 'probation_start_date', 'probation_end_date'], true)
             ) {
-                $value = to_date((int) $value, 'Y-m-d H:i');
+                $dateOnlyFields = ['entry_date', 'probation_start_date', 'probation_end_date'];
+                $value = to_date((int) $value, in_array($key, $dateOnlyFields, true) ? 'Y-m-d' : 'Y-m-d H:i');
             } elseif ($key === 'cost') {
                 $value = '¥' . number_format((float) $value, 2);
             } elseif ($key === 'seal_is_borrow') {

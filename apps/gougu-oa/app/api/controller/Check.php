@@ -15,6 +15,7 @@ declare (strict_types = 1);
 namespace app\api\controller;
 
 use app\api\BaseController;
+use app\common\service\EdificeSync;
 use think\facade\Db;
 
 class Check extends BaseController
@@ -468,6 +469,9 @@ class Check extends BaseController
 					'create_time' => time()
 				);	
 				$aid = Db::name('FlowRecord')->strict(false)->field(true)->insertGetId($checkData);
+				if($param['check_status'] == 2){
+					$this->handleApprovalCompleted($check_table, $detail);
+				}
 				add_log('check', $action_id, $param,$subject);
 				//发送消息通知
 				if($param['check_status'] == 1){
@@ -651,4 +655,29 @@ class Check extends BaseController
 			}
 		}
     }
+
+	private function handleApprovalCompleted(string $checkTable, array $detail): void
+	{
+		if($checkTable !== 'employee_regularization'){
+			return;
+		}
+		$adminId = (int)($detail['admin_id'] ?? 0);
+		if($adminId < 1){
+			error_log('[employee-regularization] missing applicant id');
+			return;
+		}
+		try{
+			Db::name('Admin')->where(['id'=>$adminId,'delete_time'=>0])->update([
+				'type'=>1,
+				'update_time'=>time()
+			]);
+			$syncResult = EdificeSync::syncAdmin($adminId);
+			if(!$syncResult['ok']){
+				error_log('[employee-regularization] edifice sync failed: '.$syncResult['message']);
+			}
+		}
+		catch(\Throwable $e){
+			error_log('[employee-regularization] completion hook failed: '.$e->getMessage());
+		}
+	}
 }
