@@ -15,12 +15,14 @@ import {
   ChevronRight,
   FolderOpen,
   Paperclip,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { isAbortError } from "@/lib/request";
-import { CardPageSkeleton } from "@/components/ui/skeleton";
+import { CardPageSkeleton, TablePageSkeleton } from "@/components/ui/skeleton";
 import { getMyProjects, getMyProjectStatistics, getExportUrl } from "@/services/project";
 import { ProjectDetailDialog } from "@/components/project/project-detail-dialog";
 import { CreateProjectDialog } from "@/components/project/create-project-dialog";
@@ -41,6 +43,7 @@ import type { ProjectStatus, ProjectCategory } from "@/types";
 const ROLE_PROJECT_MANAGER = 101;
 
 type FilterKey = "all" | "inProgress" | "pending" | "completed" | "notStarted" | "archived";
+type ViewMode = "card" | "list";
 
 const statusFilterMap: Record<FilterKey, number | null> = {
   all: null,
@@ -114,6 +117,7 @@ const PAGE_SIZE = 9;
 export default function MyProjectsPage() {
   const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("card");
   const [searchText, setSearchText] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -312,6 +316,42 @@ export default function MyProjectsPage() {
           ))}
         </div>
         <div className="flex-1" />
+        <div
+          className="flex bg-white rounded-xl p-1 shadow-sm border border-slate-100"
+          role="group"
+          aria-label="项目视图"
+        >
+          <button
+            type="button"
+            onClick={() => setViewMode("card")}
+            title="卡片视图"
+            aria-label="卡片视图"
+            aria-pressed={viewMode === "card"}
+            className={cn(
+              "p-2 rounded-lg transition-colors",
+              viewMode === "card"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+            )}
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("list")}
+            title="列表视图"
+            aria-label="列表视图"
+            aria-pressed={viewMode === "list"}
+            className={cn(
+              "p-2 rounded-lg transition-colors",
+              viewMode === "list"
+                ? "bg-blue-600 text-white shadow-sm"
+                : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+            )}
+          >
+            <List className="w-4 h-4" />
+          </button>
+        </div>
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -325,10 +365,15 @@ export default function MyProjectsPage() {
       </div>
 
       {/* Loading */}
-      {loading && <CardPageSkeleton cards={6} />}
+      {loading &&
+        (viewMode === "card" ? (
+          <CardPageSkeleton cards={6} />
+        ) : (
+          <TablePageSkeleton columns={7} rows={6} />
+        ))}
 
       {/* Project Cards */}
-      {!loading && projects.length > 0 && (
+      {!loading && viewMode === "card" && projects.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {projects.map((project) => {
             const statusLabel = getStatusLabel(project.projectStatus);
@@ -495,6 +540,210 @@ export default function MyProjectsPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Projects Table */}
+      {!loading && viewMode === "list" && projects.length > 0 && (
+        <div className="glass-card rounded-2xl shadow-sm overflow-x-auto">
+          <table className="w-full min-w-[900px]">
+            <thead className="bg-slate-50/50">
+              <tr className="text-slate-500 text-xs uppercase tracking-wider">
+                <th className="py-4 px-4 text-left font-semibold">项目信息</th>
+                <th className="py-4 px-4 text-left font-semibold">分类</th>
+                <th className="py-4 px-4 text-left font-semibold">合同金额</th>
+                <th className="py-4 px-4 text-left font-semibold">项目成员</th>
+                <th className="py-4 px-4 text-left font-semibold">阶段进度</th>
+                <th className="py-4 px-4 text-center font-semibold">状态</th>
+                <th className="py-4 px-6 text-right font-semibold">操作</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {projects.map((project) => {
+                const statusLabel = getStatusLabel(project.projectStatus);
+                const category = getCategoryLabel(project);
+                const typeName = project.projectType?.projectTypeName ?? "";
+                const stages = project.projectStages ?? [];
+                const completedStages = getCompletedStageCount(project);
+                const totalStages = stages.length;
+                const currentStageName = getCurrentStageName(project);
+                const members = getMemberNames(project);
+                const contractAmt = project.contractAmount?.contractAmount ?? 0;
+                const contractTypeLabel =
+                  project.contractAmount?.contractType === 0
+                    ? "基本收费"
+                    : project.contractAmount?.contractType === 1
+                    ? "基本+效益"
+                    : "";
+                const manager = isManager(project);
+
+                return (
+                  <tr
+                    key={project.projectId}
+                    className="hover:bg-slate-50/50 transition-colors"
+                  >
+                    <td className="py-4 px-4">
+                      <p className="text-sm font-semibold text-slate-800">
+                        {project.projectName}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {project.projectCode}
+                      </p>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span
+                        className={cn(
+                          "text-xs px-2 py-1 rounded-md border font-medium",
+                          categoryStyles[category] ??
+                            "bg-slate-50 text-slate-600 border-slate-200"
+                        )}
+                      >
+                        {category}
+                      </span>
+                      {typeName && (
+                        <p className="text-xs text-slate-400 mt-1">{typeName}</p>
+                      )}
+                    </td>
+                    <td className="py-4 px-4">
+                      <p className="text-sm font-semibold text-slate-800">
+                        {contractAmt > 0
+                          ? `¥${(contractAmt / 10000).toFixed(1)}万`
+                          : "-"}
+                      </p>
+                      {contractTypeLabel && (
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          {contractTypeLabel}
+                        </p>
+                      )}
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex -space-x-1.5">
+                        {members.slice(0, 3).map((name, idx) => (
+                          <div
+                            key={idx}
+                            className="w-7 h-7 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center text-xs font-medium text-slate-600"
+                            title={name}
+                          >
+                            {name[0]}
+                          </div>
+                        ))}
+                        {members.length > 3 && (
+                          <div className="w-7 h-7 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-xs text-slate-500">
+                            +{members.length - 3}
+                          </div>
+                        )}
+                        {members.length === 0 && (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      {totalStages > 0 ? (
+                        <>
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="flex-1 flex gap-0.5 max-w-24">
+                              {stages.map((stage, index) => (
+                                <div
+                                  key={index}
+                                  className={cn(
+                                    "h-1.5 flex-1 rounded-full",
+                                    stage.stageStatus === 6 || stage.stageStatus === 3
+                                      ? "bg-emerald-500"
+                                      : stage.stageStatus === 1 &&
+                                        (stage.completionRatio ?? 0) > 0
+                                      ? "bg-amber-400"
+                                      : stage.stageStatus === 1
+                                      ? "bg-blue-500"
+                                      : stage.stageStatus === 2
+                                      ? "bg-amber-500"
+                                      : stage.stageStatus === 4
+                                      ? "bg-rose-500"
+                                      : "bg-slate-200"
+                                  )}
+                                />
+                              ))}
+                            </div>
+                            <span className="text-xs text-slate-500">
+                              {completedStages}/{totalStages}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400">
+                            {currentStageName}
+                          </p>
+                        </>
+                      ) : (
+                        <span className="text-xs text-slate-400">-</span>
+                      )}
+                    </td>
+                    <td className="py-4 px-4 text-center">
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "text-xs",
+                          statusStyles[statusLabel] ?? ""
+                        )}
+                      >
+                        {statusLabel}
+                      </Badge>
+                    </td>
+                    <td className="py-4 px-6 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedProjectId(project.projectId);
+                            setDetailOpen(true);
+                          }}
+                          title="查看详情"
+                          aria-label={`查看${project.projectName}详情`}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        {manager && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditProjectId(project.projectId);
+                              setEditOpen(true);
+                            }}
+                            title="编辑项目"
+                            aria-label={`编辑${project.projectName}`}
+                            className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        )}
+                        {manager && project.projectStatus === 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInspectionProject(project);
+                              setInspectionOpen(true);
+                            }}
+                            title="发起验工"
+                            aria-label={`为${project.projectName}发起验工`}
+                            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                            <ClipboardCheck className="w-4 h-4" />
+                          </button>
+                        )}
+                        {project.projectStatus === 2 && (
+                          <span
+                            title="等待审批"
+                            aria-label="等待审批"
+                            className="inline-flex p-1.5 text-amber-500"
+                          >
+                            <Clock className="w-4 h-4" />
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
