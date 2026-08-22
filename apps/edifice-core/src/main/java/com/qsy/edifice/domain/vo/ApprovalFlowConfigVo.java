@@ -21,6 +21,7 @@ public class ApprovalFlowConfigVo {
     private Integer allowUrge;
     private Integer allowCc;
     private Integer allowStarterSelectNext;
+    private Integer allowSelfApproval;
     private Integer version;
     private Integer status;
     private String remark;

@@ -91,6 +91,7 @@ public class ApprovalFlowConfigServiceImpl implements ApprovalFlowConfigService 
         entity.setAllowUrge(normalizeSwitch(dto.getAllowUrge(), 1));
         entity.setAllowCc(normalizeSwitch(dto.getAllowCc(), 1));
         entity.setAllowStarterSelectNext(normalizeSwitch(dto.getAllowStarterSelectNext(), 1));
+        entity.setAllowSelfApproval(normalizeSwitch(dto.getAllowSelfApproval(), 0));
         entity.setVersion(dto.getVersion() != null && dto.getVersion() > 0 ? dto.getVersion() : 1);
         entity.setStatus(dto.getStatus() != null ? dto.getStatus() : 1);
         entity.setRemark(StringUtils.hasText(dto.getRemark()) ? dto.getRemark().trim() : null);
@@ -198,6 +199,7 @@ public class ApprovalFlowConfigServiceImpl implements ApprovalFlowConfigService 
                 .allowUrge(entity.getAllowUrge())
                 .allowCc(entity.getAllowCc())
                 .allowStarterSelectNext(entity.getAllowStarterSelectNext())
+                .allowSelfApproval(entity.getAllowSelfApproval())
                 .version(entity.getVersion())
                 .status(entity.getStatus())
                 .remark(entity.getRemark())

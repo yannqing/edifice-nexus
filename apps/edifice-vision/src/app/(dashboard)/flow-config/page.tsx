@@ -80,6 +80,7 @@ function emptyForm(): SaveApprovalFlowConfigParams {
     allowUrge: 1,
     allowCc: 1,
     allowStarterSelectNext: 1,
+    allowSelfApproval: 0,
     version: 1,
     status: 1,
     remark: "",
@@ -200,6 +201,7 @@ export default function FlowConfigPage() {
       allowUrge: item.allowUrge,
       allowCc: item.allowCc,
       allowStarterSelectNext: item.allowStarterSelectNext,
+      allowSelfApproval: item.allowSelfApproval ?? 0,
       version: item.version,
       status: item.status,
       remark: item.remark ?? "",
@@ -371,6 +373,7 @@ export default function FlowConfigPage() {
                       {item.allowWithdraw === 1 && <Badge className="bg-blue-50 text-blue-600 hover:bg-blue-50">撤回</Badge>}
                       {item.allowUrge === 1 && <Badge className="bg-amber-50 text-amber-600 hover:bg-amber-50">催办</Badge>}
                       {item.allowCc === 1 && <Badge className="bg-emerald-50 text-emerald-600 hover:bg-emerald-50">抄送</Badge>}
+                      {item.allowSelfApproval === 1 && <Badge className="bg-rose-50 text-rose-600 hover:bg-rose-50">允许自审</Badge>}
                     </div>
                   </td>
                   <td className="px-5 py-4">
@@ -443,12 +446,13 @@ export default function FlowConfigPage() {
               </Field>
             </div>
 
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <SwitchField label="启用" value={form.enabled} onChange={(value) => setForm((prev) => ({ ...prev, enabled: value }))} />
               <SwitchField label="允许撤回" value={form.allowWithdraw} onChange={(value) => setForm((prev) => ({ ...prev, allowWithdraw: value }))} />
               <SwitchField label="允许催办" value={form.allowUrge} onChange={(value) => setForm((prev) => ({ ...prev, allowUrge: value }))} />
               <SwitchField label="允许抄送" value={form.allowCc} onChange={(value) => setForm((prev) => ({ ...prev, allowCc: value }))} />
               <SwitchField label="自选下一级" value={form.allowStarterSelectNext} onChange={(value) => setForm((prev) => ({ ...prev, allowStarterSelectNext: value }))} />
+              <SwitchField label="允许申请人自审" value={form.allowSelfApproval} onChange={(value) => setForm((prev) => ({ ...prev, allowSelfApproval: value }))} />
             </div>
 
             <Field label="备注">

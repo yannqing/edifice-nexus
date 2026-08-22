@@ -70,7 +70,7 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
         ApprovalFlowConfigVo config = approvalFlowConfigService.getEnabledByBizType(bt.getExt());
         ApprovalFlowNodeVo firstNode = nodeAt(config, 1);
         Long firstApproverId = resolveApproverForNode(config, firstNode, dto.getFirstApproverId());
-        validateApprover(firstApproverId, applyUserId == null ? Collections.emptySet() : Set.of(applyUserId));
+        validateApprover(firstApproverId, applyUserId, Collections.emptySet(), allowsSelfApproval(config));
         // 同一业务已有待审核节点，禁止重复提交
         ApprovalRecords current = getCurrentPending(bt, dto.getBizId());
         if (current != null) {
@@ -126,6 +126,9 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
 
         boolean rejected = !Boolean.TRUE.equals(dto.getPass());
         ApprovalFlowConfigVo config = approvalFlowConfigService.getEnabledByBizType(bt == null ? null : bt.getExt());
+        if (Objects.equals(operatorId, record.getApplyUserId()) && !allowsSelfApproval(config)) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "当前流程不允许申请人审批自己的流程");
+        }
         Long effectiveNextApproverId = rejected ? null : resolveNextApprover(
                 config, record, dto.getNextApproverId(), Boolean.TRUE.equals(dto.getTerminate()));
         if (!rejected && effectiveNextApproverId != null) {
@@ -133,8 +136,8 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
                     .map(ApprovalRecordVo::getApprover)
                     .filter(Objects::nonNull)
                     .collect(Collectors.toSet());
-            if (record.getApplyUserId() != null) previousApprovers.add(record.getApplyUserId());
-            validateApprover(effectiveNextApproverId, previousApprovers);
+            validateApprover(effectiveNextApproverId, record.getApplyUserId(), previousApprovers,
+                    allowsSelfApproval(config));
         }
         // 更新当前节点
         record.setInspectionFormStatus(rejected ? STATUS_REJECTED : STATUS_APPROVED);
@@ -303,15 +306,25 @@ public class ApprovalFlowServiceImpl implements ApprovalFlowService {
         }).collect(Collectors.toList());
     }
 
-    private void validateApprover(Long userId, Set<Long> previousApprovers) {
+    private void validateApprover(Long userId,
+                                  Long applyUserId,
+                                  Set<Long> previousApprovers,
+                                  boolean allowSelfApproval) {
         SysUser user = userId == null ? null : sysUserMapper.selectById(userId);
         if (user == null || !Integer.valueOf(1).equals(user.getStatus())
                 || Integer.valueOf(0).equals(user.getEmploymentStatus())) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "所选审批人不存在、已停用或已离职");
         }
-        if (previousApprovers.contains(userId)) {
-            throw new BusinessException(ErrorType.ARGS_INVALID, "申请人不能审批自己的流程，且审批人不能在审批链中重复出现");
+        if (!allowSelfApproval && Objects.equals(userId, applyUserId)) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "当前流程不允许申请人审批自己的流程");
         }
+        if (previousApprovers.contains(userId)) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "审批人不能在审批链中重复出现");
+        }
+    }
+
+    private boolean allowsSelfApproval(ApprovalFlowConfigVo config) {
+        return config != null && Integer.valueOf(1).equals(config.getAllowSelfApproval());
     }
 
     private ApprovalFlowNodeVo nodeAt(ApprovalFlowConfigVo config, int level) {

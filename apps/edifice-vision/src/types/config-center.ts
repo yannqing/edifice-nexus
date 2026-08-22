@@ -23,6 +23,7 @@ export interface ApprovalFlowConfigVo {
   allowUrge: number;
   allowCc: number;
   allowStarterSelectNext: number;
+  allowSelfApproval: number;
   version: number;
   status: number;
   remark?: string | null;
@@ -42,6 +43,7 @@ export interface SaveApprovalFlowConfigParams {
   allowUrge: number;
   allowCc: number;
   allowStarterSelectNext: number;
+  allowSelfApproval: number;
   version: number;
   status: number;
   remark?: string;

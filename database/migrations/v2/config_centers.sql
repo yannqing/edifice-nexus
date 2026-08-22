@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS approval_flow_config (
     allow_urge tinyint NOT NULL DEFAULT 1 COMMENT '允许催办',
     allow_cc tinyint NOT NULL DEFAULT 1 COMMENT '允许抄送',
     allow_starter_select_next tinyint NOT NULL DEFAULT 1 COMMENT '允许发起人/审批人自选下一级',
+    allow_self_approval tinyint NOT NULL DEFAULT 0 COMMENT '是否允许申请人审批自己的流程',
     version int NOT NULL DEFAULT 1 COMMENT '版本号',
     status tinyint NOT NULL DEFAULT 1 COMMENT '状态：1-有效/0-停用',
     remark varchar(500) DEFAULT NULL COMMENT '备注',
@@ -71,15 +72,15 @@ ON DUPLICATE KEY UPDATE
     is_delete = VALUES(is_delete);
 
 INSERT INTO approval_flow_config
-    (flow_config_id, biz_type, flow_name, enabled, allow_withdraw, allow_urge, allow_cc, allow_starter_select_next, version, status, remark, created_by, updated_by, is_delete)
+    (flow_config_id, biz_type, flow_name, enabled, allow_withdraw, allow_urge, allow_cc, allow_starter_select_next, allow_self_approval, version, status, remark, created_by, updated_by, is_delete)
 VALUES
-    (910000000000001001, 'inspection', '验工单默认审批流程', 1, 1, 1, 1, 1, 1, 1, '初始化配置：当前业务仍保留原审批逻辑，后续逐步接入配置读取。', NULL, NULL, 0),
-    (910000000000001002, 'file', '项目文件默认审批流程', 1, 1, 1, 1, 1, 1, 1, '初始化配置：模拟三级项目文件审批。', NULL, NULL, 0),
-    (910000000000001003, 'bid', '投标默认审批流程', 1, 1, 1, 1, 1, 1, 1, '初始化配置。', NULL, NULL, 0),
-    (910000000000001004, 'output', '产值分配默认审批流程', 1, 0, 1, 1, 1, 1, 1, '初始化配置：产值撤回暂走原业务页。', NULL, NULL, 0),
-    (910000000000001005, 'acceptance', '验收默认审批流程', 1, 1, 1, 1, 1, 1, 1, '初始化配置。', NULL, NULL, 0),
-    (910000000000001006, 'oa_application', 'OA申请默认审批流程', 1, 1, 1, 1, 1, 1, 1, '初始化配置。', NULL, NULL, 0),
-    (910000000000001007, 'timesheet', '工时默认审批流程', 1, 0, 1, 1, 1, 1, 1, '初始化配置：工时撤回暂走原业务页。', NULL, NULL, 0)
+    (910000000000001001, 'inspection', '验工单默认审批流程', 1, 1, 1, 1, 1, 0, 1, 1, '初始化配置：当前业务仍保留原审批逻辑，后续逐步接入配置读取。', NULL, NULL, 0),
+    (910000000000001002, 'file', '项目文件默认审批流程', 1, 1, 1, 1, 1, 0, 1, 1, '初始化配置：模拟三级项目文件审批。', NULL, NULL, 0),
+    (910000000000001003, 'bid', '投标默认审批流程', 1, 1, 1, 1, 1, 0, 1, 1, '初始化配置。', NULL, NULL, 0),
+    (910000000000001004, 'output', '产值分配默认审批流程', 1, 0, 1, 1, 1, 0, 1, 1, '初始化配置：产值撤回暂走原业务页。', NULL, NULL, 0),
+    (910000000000001005, 'acceptance', '验收默认审批流程', 1, 1, 1, 1, 1, 0, 1, 1, '初始化配置。', NULL, NULL, 0),
+    (910000000000001006, 'oa_application', 'OA申请默认审批流程', 1, 1, 1, 1, 1, 0, 1, 1, '初始化配置。', NULL, NULL, 0),
+    (910000000000001007, 'timesheet', '工时默认审批流程', 1, 0, 1, 1, 1, 0, 1, 1, '初始化配置：工时撤回暂走原业务页。', NULL, NULL, 0)
 ON DUPLICATE KEY UPDATE
     flow_name = VALUES(flow_name),
     enabled = VALUES(enabled),
@@ -87,6 +88,7 @@ ON DUPLICATE KEY UPDATE
     allow_urge = VALUES(allow_urge),
     allow_cc = VALUES(allow_cc),
     allow_starter_select_next = VALUES(allow_starter_select_next),
+    allow_self_approval = VALUES(allow_self_approval),
     status = VALUES(status),
     remark = VALUES(remark),
     updated_time = CURRENT_TIMESTAMP,

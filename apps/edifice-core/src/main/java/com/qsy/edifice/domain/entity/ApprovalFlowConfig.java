@@ -42,6 +42,9 @@ public class ApprovalFlowConfig {
     @TableField("allow_starter_select_next")
     private Integer allowStarterSelectNext;
 
+    @TableField("allow_self_approval")
+    private Integer allowSelfApproval;
+
     @TableField("version")
     private Integer version;
 
