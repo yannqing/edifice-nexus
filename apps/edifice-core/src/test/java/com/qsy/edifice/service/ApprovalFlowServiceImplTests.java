@@ -21,15 +21,18 @@ class ApprovalFlowServiceImplTests {
 
     private ApprovalRecordsMapper approvalRecordsMapper;
     private SysUserMapper sysUserMapper;
+    private ApprovalFlowConfigService approvalFlowConfigService;
     private ApprovalFlowServiceImpl service;
 
     @BeforeEach
     void setUp() {
         approvalRecordsMapper = mock(ApprovalRecordsMapper.class);
         sysUserMapper = mock(SysUserMapper.class);
+        approvalFlowConfigService = mock(ApprovalFlowConfigService.class);
         service = new ApprovalFlowServiceImpl();
         ReflectionTestUtils.setField(service, "approvalRecordsMapper", approvalRecordsMapper);
         ReflectionTestUtils.setField(service, "sysUserMapper", sysUserMapper);
+        ReflectionTestUtils.setField(service, "approvalFlowConfigService", approvalFlowConfigService);
     }
 
     @Test
@@ -76,7 +79,7 @@ class ApprovalFlowServiceImplTests {
         when(approvalRecordsMapper.updatePendingResult(any())).thenReturn(0);
 
         assertThrows(BusinessException.class,
-                () -> service.approve(new ApproveDto(100L, true, null, "同意"), 2L));
+                () -> service.approve(new ApproveDto(100L, true, null, false, "同意"), 2L));
         verify(approvalRecordsMapper, never()).insert(any(ApprovalRecords.class));
     }
 

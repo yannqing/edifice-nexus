@@ -469,12 +469,24 @@ public class InspectionFormServiceImpl implements InspectionFormService {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请上传验收材料");
         }
 
-        // 校验阶段状态：必须是 1(进行中) 才能提交验工
-        ProjectStage stage = projectStageService.getProjectStageById(dto.getProjectStageId());
+        // 锁定阶段及其验工单，防止重复点击或并发请求重复占用完成比例。
+        ProjectStage stage = projectStageMapper.selectByIdForUpdate(dto.getProjectStageId());
         if (stage == null) {
             throw new BusinessException(ErrorType.STAGE_NOT_FOUND);
         }
-        if (stage.getStageStatus() != 1) {
+        if (!Objects.equals(stage.getProjectId(), dto.getProjectId())) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "所选阶段不属于当前项目");
+        }
+        List<InspectionForm> existingForms = inspectionFormMapper
+                .selectByProjectStageIdForUpdate(dto.getProjectStageId());
+
+        InspectionForm sourceForm = validateResubmitSource(dto, userId, existingForms);
+        boolean restartedRejectedStage = sourceForm != null && Objects.equals(stage.getStageStatus(), 4);
+        if (restartedRejectedStage) {
+            stage.setStageStatus(1);
+            projectStageMapper.updateById(stage);
+        }
+        if (!Objects.equals(stage.getStageStatus(), 1)) {
             throw new BusinessException(ErrorType.STAGE_STATUS_INVALID,
                     "阶段[" + stage.getStageName() + "]当前状态不是[进行中]，无法提交验工");
         }
@@ -485,7 +497,6 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         if (applyRatio.compareTo(new BigDecimal("100")) > 0) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "完成比例不能超过100%");
         }
-        List<InspectionForm> existingForms = inspectionFormMapper.selectByProjectStageId(dto.getProjectStageId());
         BigDecimal approvedSum = BigDecimal.ZERO;
         BigDecimal pendingSum = BigDecimal.ZERO;
         if (existingForms != null) {
@@ -530,8 +541,46 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         log.info("验工单已提交审批 inspectionId={} firstApprover={} recordId={} completionRatio={}%",
                 form.getInspectionFormId(), dto.getFirstApproverId(), record.getApprovalRecordId(), applyRatio);
 
+        if (restartedRejectedStage) {
+            projectStageService.syncProjectStatus(stage.getProjectId());
+            log.info("已驳回验工单重新提交，阶段自动恢复进行中 sourceInspectionId={} newInspectionId={} stageId={}",
+                    sourceForm.getInspectionFormId(), form.getInspectionFormId(), stage.getProjectStageId());
+        }
+
         // 阶段状态保持 1(进行中)，不再变更为 2(待验收)——部分完成模式下阶段始终处于进行中
         return form.getInspectionFormId();
+    }
+
+    private InspectionForm validateResubmitSource(ApplyInspectionDto dto,
+                                                   Long userId,
+                                                   List<InspectionForm> existingForms) {
+        if (dto.getSourceInspectionFormId() == null) {
+            return null;
+        }
+        InspectionForm source = existingForms == null ? null : existingForms.stream()
+                .filter(form -> Objects.equals(form.getInspectionFormId(), dto.getSourceInspectionFormId()))
+                .findFirst()
+                .orElse(null);
+        if (source == null || !Objects.equals(source.getInspectionFormStatus(), 2)) {
+            throw new BusinessException(ErrorType.INSPECTION_FORM_STATUS_INVALID,
+                    "仅已驳回的验工单可以重新提交");
+        }
+        if (!Objects.equals(source.getApplyUserId(), userId)) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只有原申请人可以重新提交该验工单");
+        }
+        if (!Objects.equals(source.getProjectId(), String.valueOf(dto.getProjectId()))
+                || !Objects.equals(source.getProjectStageId(), dto.getProjectStageId())) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "重新提交的项目或阶段与原验工单不一致");
+        }
+        boolean hasNewerForm = existingForms.stream()
+                .map(InspectionForm::getInspectionFormId)
+                .filter(Objects::nonNull)
+                .anyMatch(id -> id.compareTo(source.getInspectionFormId()) > 0);
+        if (hasNewerForm) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED,
+                    "该验工单之后已存在新的申请，请刷新后处理最新记录");
+        }
+        return source;
     }
 
     // ==================== 审批验工单 ====================
@@ -612,8 +661,9 @@ public class InspectionFormServiceImpl implements InspectionFormService {
             ProjectStage stage = projectStageService.getProjectStageById(form.getProjectStageId());
             if (stage != null) {
                 if (result.rejected) {
-                    stage.setStageStatus(4); // 已驳回
-                    log.info("验工审批驳回: stageId={}, stageName={}",
+                    // 驳回的是本次验工申请，不应停止整个项目阶段。
+                    stage.setStageStatus(1);
+                    log.info("验工审批驳回，阶段保持进行中: stageId={}, stageName={}",
                             stage.getProjectStageId(), stage.getStageName());
                 } else {
                     // 终审通过：累加完成比例

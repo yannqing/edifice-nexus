@@ -12,6 +12,8 @@ import {
   Banknote,
   ChevronLeft,
   ChevronRight,
+  Loader2,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +43,7 @@ import type {
 } from "@/types/inspection";
 import { INSPECTION_STATUS_MAP } from "@/types/inspection";
 import { AttachmentFileList, parseFileIdList } from "@/components/file/attachment-file-list";
+import { useAuth } from "@/store/auth-context";
 
 type TabKey = "all" | "pending" | "passed" | "rejected";
 
@@ -101,6 +104,7 @@ function formatAmount(amount: number | null | undefined): string {
 const PAGE_SIZE = 10;
 
 export default function InspectionManagementPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [searchText, setSearchText] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -117,6 +121,8 @@ export default function InspectionManagementPage() {
 
   // 发起验工弹窗
   const [createOpen, setCreateOpen] = useState(false);
+  const [resubmitSource, setResubmitSource] = useState<InspectionFormDetailVo | null>(null);
+  const [resubmitLoadingId, setResubmitLoadingId] = useState<string | null>(null);
 
   // 搜索防抖
   useEffect(() => {
@@ -186,6 +192,23 @@ export default function InspectionManagementPage() {
     finally { setDetailLoading(false); }
   };
 
+  const canResubmit = (item: Pick<InspectionFormListVo, "inspectionFormStatus" | "applyUserId">) =>
+    item.inspectionFormStatus === 2 && String(item.applyUserId) === String(user?.userId ?? "");
+
+  const openResubmit = async (id: string) => {
+    setResubmitLoadingId(id);
+    try {
+      const res = await getInspectionDetail(id);
+      if (res.code === ResponseCode.SUCCESS && res.data) {
+        setResubmitSource(res.data);
+        setDetailOpen(false);
+        setCreateOpen(true);
+      }
+    } finally {
+      setResubmitLoadingId(null);
+    }
+  };
+
   const allCount = (statistics?.pendingApproval ?? 0) + (statistics?.pendingFirstReview ?? 0)
     + (statistics?.approved ?? 0) + (statistics?.rejected ?? 0);
 
@@ -221,7 +244,10 @@ export default function InspectionManagementPage() {
             <Download className="w-4 h-4" /> 导出
           </Button>
           <Button
-            onClick={() => setCreateOpen(true)}
+            onClick={() => {
+              setResubmitSource(null);
+              setCreateOpen(true);
+            }}
             className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
           >
             <Plus className="w-4 h-4" /> 发起验工
@@ -332,12 +358,28 @@ export default function InspectionManagementPage() {
                       </Badge>
                     </td>
                     <td className="py-4 px-6 text-right">
-                      <button
-                        onClick={() => openDetail(item.inspectionFormId)}
-                        className="px-3 py-1.5 text-xs text-slate-600 font-medium bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-                      >
-                        查看详情
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => openDetail(item.inspectionFormId)}
+                          className="px-3 py-1.5 text-xs text-slate-600 font-medium bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                        >
+                          查看详情
+                        </button>
+                        {canResubmit(item) && (
+                          <button
+                            onClick={() => openResubmit(item.inspectionFormId)}
+                            disabled={resubmitLoadingId === item.inspectionFormId}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs text-blue-700 font-medium bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-60"
+                          >
+                            {resubmitLoadingId === item.inspectionFormId ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            )}
+                            重新提交
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -390,12 +432,19 @@ export default function InspectionManagementPage() {
         onOpenChange={setDetailOpen}
         detail={detail}
         loading={detailLoading}
+        canResubmit={Boolean(detail && canResubmit(detail))}
+        resubmitting={Boolean(detail && resubmitLoadingId === detail.inspectionFormId)}
+        onResubmit={() => detail && openResubmit(detail.inspectionFormId)}
       />
 
       {/* Create Dialog */}
       <CreateInspectionDialog
         open={createOpen}
-        onOpenChange={setCreateOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) setResubmitSource(null);
+        }}
+        initialInspection={resubmitSource}
         onSuccess={() => { fetchList(); fetchStats(); }}
       />
     </div>
@@ -429,11 +478,22 @@ function StatCard({ icon, label, value, color }: {
 
 // ==================== 验工单详情弹窗 ====================
 
-function InspectionDetailDialog({ open, onOpenChange, detail, loading }: {
+function InspectionDetailDialog({
+  open,
+  onOpenChange,
+  detail,
+  loading,
+  canResubmit,
+  resubmitting,
+  onResubmit,
+}: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   detail: InspectionFormDetailVo | null;
   loading: boolean;
+  canResubmit: boolean;
+  resubmitting: boolean;
+  onResubmit: () => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -504,6 +564,22 @@ function InspectionDetailDialog({ open, onOpenChange, detail, loading }: {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+              {canResubmit && (
+                <div className="flex justify-end pt-4 border-t border-slate-100">
+                  <Button
+                    onClick={onResubmit}
+                    disabled={resubmitting}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {resubmitting ? (
+                      <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                    ) : (
+                      <RotateCcw className="w-4 h-4 mr-1" />
+                    )}
+                    基于此单重新提交
+                  </Button>
                 </div>
               )}
             </div>

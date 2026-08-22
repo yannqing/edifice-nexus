@@ -13,6 +13,9 @@ import java.util.List;
 @Mapper
 public interface ProjectStageMapper extends BaseMapper<ProjectStage> {
 
+    /** 根据阶段id加行锁查询，用于验工提交等并发敏感流程。 */
+    ProjectStage selectByIdForUpdate(@Param("projectStageId") Long projectStageId);
+
     /**
      * 根据项目id查询项目阶段列表
      * @param projectId 项目id

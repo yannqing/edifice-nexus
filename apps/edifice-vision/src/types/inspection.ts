@@ -80,6 +80,8 @@ export interface ApplyInspectionParams {
   fileIds?: string;
   firstApproverId: string;
   completionRatio?: number;
+  /** 重新提交所基于的已驳回验工单；首次提交不传 */
+  sourceInspectionFormId?: string;
 }
 
 // ==================== 审批参数 ====================

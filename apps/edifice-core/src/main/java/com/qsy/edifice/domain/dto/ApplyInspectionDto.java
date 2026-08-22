@@ -33,4 +33,7 @@ public class ApplyInspectionDto {
 
     @Schema(description = "本次完成比例（%，0-100）。不填默认100。")
     private BigDecimal completionRatio;
+
+    @Schema(description = "重新提交所基于的已驳回验工单id；首次提交时不传")
+    private Long sourceInspectionFormId;
 }

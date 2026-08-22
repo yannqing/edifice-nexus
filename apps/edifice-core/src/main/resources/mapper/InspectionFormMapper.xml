@@ -52,6 +52,15 @@
         AND is_delete = 0
     </select>
 
+    <select id="selectByProjectStageIdForUpdate" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM inspection_form
+        WHERE project_stage_id = #{projectStageId}
+        AND is_delete = 0
+        FOR UPDATE
+    </select>
+
     <!-- 根据申请人id查询验工单列表 -->
     <select id="selectByApplyUserId" resultMap="BaseResultMap">
         SELECT

@@ -35,6 +35,11 @@ public interface InspectionFormMapper extends BaseMapper<InspectionForm> {
     List<InspectionForm> selectByProjectStageId(@Param("projectStageId") Long projectStageId);
 
     /**
+     * 锁定阶段下的全部验工单，防止并发提交导致完成比例重复占用。
+     */
+    List<InspectionForm> selectByProjectStageIdForUpdate(@Param("projectStageId") Long projectStageId);
+
+    /**
      * 根据申请人id查询验工单列表
      * @param applyUserId 申请人id
      * @return 验工单列表

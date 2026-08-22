@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,11 @@ import {
 } from "@/services/project";
 import { ResponseCode } from "@/types/api";
 import type { FilesVo, ProjectListVo, ProjectStageVo, UserListItem } from "@/types/project";
-import { EditableAttachmentFileList } from "@/components/file/attachment-file-list";
+import type { InspectionFormDetailVo } from "@/types/inspection";
+import {
+  EditableAttachmentFileList,
+  parseFileIdList,
+} from "@/components/file/attachment-file-list";
 
 type InitialInspectionProject = Pick<ProjectListVo, "projectId" | "projectName" | "projectCode">;
 
@@ -30,6 +34,19 @@ interface CreateInspectionDialogProps {
   onOpenChange: (value: boolean) => void;
   onSuccess: () => void;
   initialProject?: InitialInspectionProject | null;
+  initialInspection?: InspectionFormDetailVo | null;
+}
+
+function inheritedFile(fileId: string, index: number): FilesVo {
+  return {
+    fileId,
+    fileType: "",
+    displayName: `原验收材料${index + 1}`,
+    fileExtension: "",
+    fileUrl: "",
+    fileSize: "0",
+    status: 1,
+  };
 }
 
 export function CreateInspectionDialog({
@@ -37,8 +54,26 @@ export function CreateInspectionDialog({
   onOpenChange,
   onSuccess,
   initialProject,
+  initialInspection,
 }: CreateInspectionDialogProps) {
-  const initialProjectId = initialProject?.projectId ? String(initialProject.projectId) : "";
+  const sourceProject = useMemo(
+    () =>
+      initialInspection
+        ? {
+            projectId: initialInspection.projectId,
+            projectName: initialInspection.projectName,
+            projectCode: initialInspection.projectCode,
+          }
+        : initialProject,
+    [initialInspection, initialProject]
+  );
+  const initialProjectId = sourceProject?.projectId ? String(sourceProject.projectId) : "";
+  const initialStageId = initialInspection?.projectStageId
+    ? String(initialInspection.projectStageId)
+    : "";
+  const initialApproverId = initialInspection?.approvalRecords?.[0]?.approver
+    ? String(initialInspection.approvalRecords[0].approver)
+    : "";
   const [projects, setProjects] = useState<InitialInspectionProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [stages, setStages] = useState<ProjectStageVo[]>([]);
@@ -67,6 +102,15 @@ export function CreateInspectionDialog({
     }
 
     setSelectedProjectId(initialProjectId);
+    setSelectedStageId(initialStageId);
+    setFirstApproverId(initialApproverId);
+    setDescription(initialInspection?.inspectionFormDescription ?? "");
+    setCompletionRatio(String(initialInspection?.completionRatio ?? 100));
+    setFiles(
+      parseFileIdList(initialInspection?.fileIds).map((fileId, index) =>
+        inheritedFile(fileId, index)
+      )
+    );
 
     async function loadProjects() {
       try {
@@ -76,21 +120,21 @@ export function CreateInspectionDialog({
         ]);
         if (projectRes.code === ResponseCode.SUCCESS && projectRes.data) {
           const records = projectRes.data.records ?? [];
-          const hasInitialProject = initialProject
-            ? records.some((project) => String(project.projectId) === String(initialProject.projectId))
+          const hasInitialProject = sourceProject
+            ? records.some((project) => String(project.projectId) === String(sourceProject.projectId))
             : true;
-          setProjects(hasInitialProject || !initialProject ? records : [initialProject, ...records]);
+          setProjects(hasInitialProject || !sourceProject ? records : [sourceProject, ...records]);
         }
         if (userRes.code === ResponseCode.SUCCESS && userRes.data) {
           setUsers(userRes.data.records ?? []);
         }
       } catch {
-        if (initialProject) setProjects([initialProject]);
+        if (sourceProject) setProjects([sourceProject]);
       }
     }
 
     loadProjects();
-  }, [open, initialProjectId, initialProject]);
+  }, [open, initialProjectId, initialStageId, initialApproverId, initialInspection, sourceProject]);
 
   useEffect(() => {
     if (!selectedProjectId) {
@@ -104,9 +148,16 @@ export function CreateInspectionDialog({
       try {
         const res = await getProjectDetail(selectedProjectId);
         if (res.code === ResponseCode.SUCCESS && res.data) {
-          const inProgressStages = (res.data.projectStages ?? []).filter((stage) => stage.stageStatus === 1);
+          const inProgressStages = (res.data.projectStages ?? []).filter(
+            (stage) =>
+              stage.stageStatus === 1 ||
+              (Boolean(initialInspection) &&
+                String(stage.projectStageId) === initialStageId &&
+                stage.stageStatus === 4)
+          );
           setStages(inProgressStages);
-          setFirstApproverId("");
+          setSelectedStageId(initialInspection ? initialStageId : "");
+          setFirstApproverId(initialInspection ? initialApproverId : "");
         }
       } catch {
         setStages([]);
@@ -115,7 +166,7 @@ export function CreateInspectionDialog({
     }
 
     loadStages();
-  }, [selectedProjectId]);
+  }, [selectedProjectId, initialInspection, initialStageId, initialApproverId]);
 
   const handleFileUpload = async (file: File) => {
     if (file.size > MAX_ATTACHMENT_FILE_SIZE) {
@@ -173,10 +224,11 @@ export function CreateInspectionDialog({
         fileIds,
         firstApproverId,
         completionRatio: Number(completionRatio) || 100,
+        sourceInspectionFormId: initialInspection?.inspectionFormId,
       });
 
       if (res.code === ResponseCode.SUCCESS) {
-        toast.success("验工单提交成功");
+        toast.success(initialInspection ? "验工单已重新提交" : "验工单提交成功");
         onOpenChange(false);
         onSuccess();
       }
@@ -191,8 +243,12 @@ export function CreateInspectionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>发起验工申请</DialogTitle>
-          <DialogDescription>选择项目和阶段，提交验工材料</DialogDescription>
+          <DialogTitle>{initialInspection ? "重新提交验工申请" : "发起验工申请"}</DialogTitle>
+          <DialogDescription>
+            {initialInspection
+              ? "已载入原验工单内容，请根据驳回意见调整后重新提交"
+              : "选择项目和阶段，提交验工材料"}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="mt-4 space-y-5">
@@ -204,6 +260,7 @@ export function CreateInspectionDialog({
               value={selectedProjectId}
               onChange={(event) => setSelectedProjectId(event.target.value)}
               className="form-input"
+              disabled={Boolean(initialInspection)}
             >
               <option value="">请选择进行中的项目</option>
               {projects.map((project) => (
@@ -222,7 +279,7 @@ export function CreateInspectionDialog({
               value={selectedStageId}
               onChange={(event) => setSelectedStageId(event.target.value)}
               className="form-input"
-              disabled={!selectedProjectId}
+              disabled={!selectedProjectId || Boolean(initialInspection)}
             >
               <option value="">{selectedProjectId ? "请选择阶段" : "请先选择项目"}</option>
               {stages.map((stage) => (
@@ -372,7 +429,7 @@ export function CreateInspectionDialog({
                 提交中...
               </>
             ) : (
-              "提交验工"
+              initialInspection ? "重新提交" : "提交验工"
             )}
           </Button>
         </div>
