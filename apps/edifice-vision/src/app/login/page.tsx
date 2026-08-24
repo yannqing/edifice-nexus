@@ -25,6 +25,7 @@ export default function LoginPage() {
     password?: string;
   }>({});
 
+
   const validateForm = () => {
     const newErrors: { username?: string; password?: string } = {};
 
