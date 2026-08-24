@@ -354,6 +354,15 @@ create table output_value
     base_amount_snapshot       decimal(20, 2) null comment '创建时合同基本金额快照',
     benefit_amount_snapshot    decimal(20, 2) null comment '创建时合同效益金额快照',
     calculation_version        varchar(64) null comment '产值计算版本',
+    stage_completion_ratio     decimal(5, 2) default 100.00 not null comment '创建时阶段累计完成比例',
+    stage_incremental_ratio    decimal(5, 2) default 100.00 not null comment '本次增量完成比例',
+    coefficient                decimal(5, 2) default 1.00 not null comment '分配时使用的阶段系数',
+    allocation_version         varchar(32) null comment '人员分配计算版本',
+    allocation_rule_version_id bigint null comment '人员分配规则版本id',
+    employee_pool_amount       decimal(20, 2) null comment '名义员工池金额',
+    company_base_amount        decimal(20, 2) null comment '公司基础留存金额',
+    work_transfer_amount       decimal(20, 2) null comment '工作类型超限转公司金额',
+    project_pool_amount        decimal(20, 2) null comment '项目人员可分配金额',
     created_time       datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updated_time       datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
     is_delete          tinyint  default 0                 not null comment '逻辑删除',
@@ -406,6 +415,10 @@ create table output_value_distribution
     ratio             decimal(10, 2) default 0.00        not null comment '分配比例（%，旧字段，保留以兼容历史数据）',
     alloc_ratio       decimal(10, 4) default 0.0000      not null comment '分配比例（%），新口径',
     completion_ratio  decimal(10, 4) default 0.0000      not null comment '完成比例（%）',
+    work_pool_id      bigint                             null comment '工作类型资金池id',
+    role_alloc_ratio  decimal(10, 4)                     null comment '工作类型资金池内分配比例（%）',
+    planned_amount    decimal(20, 2)                     null comment '人员计划分配金额',
+    company_delta     decimal(20, 2)                     null comment '兑现不足或离职转公司金额',
     dist_type         tinyint        default 0           not null comment '类型：0-员工正常/1-员工降档/2-（v0.4 废弃）/3-公司留存（不生成行）/4-离职兜底',
     is_active         tinyint        default 1           not null comment '下单时成员是否在职（0-离职/1-在职）',
     amount            decimal(20, 2) default 0.00        not null comment '分配金额（元）',
@@ -417,6 +430,60 @@ create table output_value_distribution
     key idx_dist_type (dist_type)
 )
     comment '产值分配明细表';
+
+create table output_allocation_rule_version
+(
+    rule_version_id      bigint auto_increment primary key,
+    project_type_id      bigint                             not null comment '项目类型id',
+    version_no           int                                not null comment '项目类型内版本号',
+    employee_pool_rate   decimal(10, 4) default 40.0000     not null comment '名义员工池比例（%）',
+    company_base_rate    decimal(10, 4) default 60.0000     not null comment '公司基础留存比例（%）',
+    status               tinyint        default 1           not null comment '0-历史版本/1-当前生效',
+    created_by           bigint                             null comment '创建人',
+    effective_time       datetime       default CURRENT_TIMESTAMP not null,
+    created_time         datetime       default CURRENT_TIMESTAMP not null,
+    updated_time         datetime       default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    is_delete            tinyint        default 0           not null,
+    unique key uk_output_rule_version (project_type_id, version_no),
+    key idx_output_rule_active (project_type_id, status, is_delete)
+) comment '产值分配规则版本';
+
+create table output_allocation_rule_item
+(
+    rule_item_id         bigint auto_increment primary key,
+    rule_version_id      bigint                             not null,
+    stage_name           varchar(255)                       not null,
+    stage_order          int                                not null,
+    work_type            tinyint                            not null,
+    work_weight          decimal(10, 4)                     not null,
+    project_cap_rate     decimal(10, 4)                     null,
+    created_time         datetime default CURRENT_TIMESTAMP not null,
+    updated_time         datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    is_delete            tinyint  default 0                 not null,
+    unique key uk_output_rule_item (rule_version_id, stage_name, work_type),
+    key idx_output_rule_item_version (rule_version_id, stage_order, work_type)
+) comment '产值分配阶段工作权重';
+
+create table output_value_work_pool
+(
+    work_pool_id         bigint auto_increment primary key,
+    output_value_id      bigint                             not null,
+    rule_version_id      bigint                             not null,
+    rule_version_no      int                                not null,
+    work_type            tinyint                            not null,
+    stage_work_ratio     decimal(10, 4)                     not null,
+    gross_rate           decimal(10, 4)                     not null,
+    gross_amount         decimal(20, 2)                     not null,
+    project_rate         decimal(10, 4)                     not null,
+    project_amount       decimal(20, 2)                     not null,
+    company_rate         decimal(10, 4)                     not null,
+    company_amount       decimal(20, 2)                     not null,
+    created_time         datetime default CURRENT_TIMESTAMP not null,
+    updated_time         datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    is_delete            tinyint  default 0                 not null,
+    unique key uk_output_work_pool (output_value_id, work_type),
+    key idx_output_work_pool_output (output_value_id)
+) comment '产值分配工作类型资金池快照';
 
 
 -- ==================== 工时模块 ====================

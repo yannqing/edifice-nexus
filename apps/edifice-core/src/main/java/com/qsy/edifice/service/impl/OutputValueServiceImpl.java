@@ -7,6 +7,7 @@ import com.qsy.edifice.domain.dto.CreateOutputValueDto;
 import com.qsy.edifice.domain.dto.SubmitApprovalDto;
 import com.qsy.edifice.domain.entity.*;
 import com.qsy.edifice.domain.excel.OutputValueExcelData;
+import com.qsy.edifice.domain.model.OutputAllocationContext;
 import com.qsy.edifice.domain.vo.OutputValuePreviewVo;
 import com.qsy.edifice.domain.vo.OutputValueVo;
 import com.qsy.edifice.enums.ApprovalBizType;
@@ -15,8 +16,10 @@ import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.OutputValueAdjustmentDetailMapper;
 import com.qsy.edifice.mapper.OutputValueDistributionMapper;
 import com.qsy.edifice.mapper.OutputValueMapper;
+import com.qsy.edifice.mapper.OutputValueWorkPoolMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
 import com.qsy.edifice.service.*;
+import com.qsy.edifice.service.support.OutputAllocationCalculator;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -42,15 +45,15 @@ import java.util.stream.Collectors;
  *   基本+效益：本期 totalAmount = contract.base_amount × stage.stage_output / 100
  *                              + contract.benefit_amount × stage.benefit_inclusion_ratio / 100
  *
- *   employeePool   = totalAmount × 40%      （员工池）
- *   companyAccount = totalAmount × 60%      （公司账主体）
- *   planned_i      = employeePool × allocRatio_i / 100
+ *   allocation_v2 先按项目类型与阶段拆分管理/基础/智励工作资金池，
+ *   再在每个工作类型资金池内按 roleAllocRatio 分配给人员。
+ *   planned_i      = workPool.projectAmount × roleAllocRatio_i / 100
  *   actual_i       = planned_i × completionRatio_i / 100  （在职员工）
  *   降档差额（planned_i - actual_i） → 公司账
  *   离职成员 planned_i → 公司账（独立记 other_amount，但实际归公司）
  *
  * 守恒：Σ actual + companyReserve = totalAmount
- *   其中 companyReserve = 60% 主体 + 降档差额 + 离职兜底
+ *   其中 companyReserve = 公司基础留存 + 工作类型转公司 + 降档差额 + 离职兜底
  */
 @Slf4j
 @Service
@@ -58,10 +61,6 @@ public class OutputValueServiceImpl implements OutputValueService {
 
     private static final Long ROLE_MANAGER_ID = 101L;
 
-    /** 公司账比例（%）— v0.4 修订：60% */
-    private static final BigDecimal COMPANY_RESERVE_RATE = new BigDecimal("60");
-    /** 员工池比例（%）— v0.4 修订：40% */
-    private static final BigDecimal PERSONAL_POOL_RATE = new BigDecimal("40");
     private static final BigDecimal BD_100 = new BigDecimal("100");
     private static final BigDecimal BD_10000 = new BigDecimal("10000");
     /** 守恒校验容差（元），避免 BigDecimal 舍入带来的微分误差误报 */
@@ -96,6 +95,9 @@ public class OutputValueServiceImpl implements OutputValueService {
     private OutputValueAdjustmentDetailMapper adjustmentDetailMapper;
 
     @Resource
+    private OutputValueWorkPoolMapper workPoolMapper;
+
+    @Resource
     private ProjectService projectService;
 
     @Resource
@@ -115,6 +117,9 @@ public class OutputValueServiceImpl implements OutputValueService {
 
     @Resource
     private BusinessRuleConfigService businessRuleConfigService;
+
+    @Resource
+    private OutputAllocationRuleService outputAllocationRuleService;
 
     @Resource
     private ApprovalFlowService approvalFlowService;
@@ -142,7 +147,8 @@ public class OutputValueServiceImpl implements OutputValueService {
         ProjectStage stage = projectStageService.getProjectStageById(projectStageId);
         BigDecimal coeff = (stage != null && stage.getCoefficient() != null && stage.getCoefficient().signum() > 0)
                 ? stage.getCoefficient() : BigDecimal.ONE;
-        return toPreviewVo(calcOutputValue(projectId, projectStageId, coeff));
+        OutputValueCalculationResult calculation = calcOutputValue(projectId, projectStageId, coeff);
+        return toPreviewVo(calculation, calculateAllocation(projectId, projectStageId, calculation));
     }
 
     @Override
@@ -153,7 +159,8 @@ public class OutputValueServiceImpl implements OutputValueService {
         if (coefficient == null || coefficient.signum() <= 0) {
             coefficient = BigDecimal.ONE;
         }
-        return toPreviewVo(calcOutputValue(projectId, projectStageId, coefficient));
+        OutputValueCalculationResult calculation = calcOutputValue(projectId, projectStageId, coefficient);
+        return toPreviewVo(calculation, calculateAllocation(projectId, projectStageId, calculation));
     }
 
     // ==================== 创建（v0.4） ====================
@@ -221,80 +228,134 @@ public class OutputValueServiceImpl implements OutputValueService {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "本次多退少补结果为负，请先在规则配置中允许负产值");
         }
 
-        // 2. v0.4 比例：员工 40% / 公司 60%
-        BigDecimal employeePool = total.multiply(PERSONAL_POOL_RATE)
-                .divide(BD_100, 2, RoundingMode.HALF_UP);
-        BigDecimal companyMain = total.multiply(COMPANY_RESERVE_RATE)
-                .divide(BD_100, 2, RoundingMode.HALF_UP);
+        // 2. allocation_v2：按项目类型与阶段拆出三个工作类型资金池
+        OutputAllocationContext allocation = calculateAllocation(
+                dto.getProjectId(), dto.getProjectStageId(), calculation);
+        Map<Integer, OutputAllocationContext.WorkPool> poolByWorkType = allocation.getWorkPools().stream()
+                .collect(Collectors.toMap(OutputAllocationContext.WorkPool::getWorkType, item -> item));
+        Map<Integer, List<CreateOutputValueDto.DistributionItem>> distributionsByWorkType =
+                dto.getDistributions().stream().collect(Collectors.groupingBy(
+                        item -> item.getWorkType() == null ? 1 : item.getWorkType()));
 
-        // 3. 校验分配比例合计 ≈ 100
-        BigDecimal sumAllocRatio = dto.getDistributions().stream()
-                .map(i -> i.getAllocRatio() == null ? BigDecimal.ZERO : i.getAllocRatio())
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        if (sumAllocRatio.subtract(BD_100).abs().compareTo(ALLOC_TOLERANCE) > 0) {
-            throw new BusinessException(ErrorType.ARGS_INVALID,
-                    "分配比例合计应为 100%，当前为 " + sumAllocRatio.stripTrailingZeros().toPlainString() + "%");
+        Set<String> userWorkKeys = new HashSet<>();
+        for (Map.Entry<Integer, List<CreateOutputValueDto.DistributionItem>> entry
+                : distributionsByWorkType.entrySet()) {
+            if (!poolByWorkType.containsKey(entry.getKey())) {
+                throw new BusinessException(ErrorType.ARGS_INVALID, "存在无效的工作类型分配明细");
+            }
+            for (CreateOutputValueDto.DistributionItem item : entry.getValue()) {
+                if (item.getUserId() != null && !userWorkKeys.add(entry.getKey() + ":" + item.getUserId())) {
+                    throw new BusinessException(ErrorType.ARGS_INVALID,
+                            "同一人员不能在同一个工作类型中重复分配");
+                }
+            }
         }
 
-        // 4. 逐条计算分配明细
+        for (OutputAllocationContext.WorkPool pool : allocation.getWorkPools()) {
+            List<CreateOutputValueDto.DistributionItem> items = distributionsByWorkType
+                    .getOrDefault(pool.getWorkType(), Collections.emptyList());
+            if (pool.getProjectAmount().signum() == 0) {
+                if (!items.isEmpty()) {
+                    throw new BusinessException(ErrorType.ARGS_INVALID,
+                            WORK_TYPE_LABELS.get(pool.getWorkType()) + "当前没有可分配金额，请删除对应人员明细");
+                }
+                continue;
+            }
+            if (items.isEmpty()) {
+                throw new BusinessException(ErrorType.ARGS_NOT_NULL,
+                        "请填写" + WORK_TYPE_LABELS.get(pool.getWorkType()) + "的人员分配明细");
+            }
+            BigDecimal roleRatioSum = items.stream()
+                    .map(item -> item.getRoleAllocRatio() != null
+                            ? item.getRoleAllocRatio()
+                            : defaultIfNull(item.getAllocRatio(), BigDecimal.ZERO))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (roleRatioSum.subtract(BD_100).abs().compareTo(ALLOC_TOLERANCE) > 0) {
+                throw new BusinessException(ErrorType.ARGS_INVALID,
+                        WORK_TYPE_LABELS.get(pool.getWorkType()) + "人员比例合计应为100%，当前为"
+                                + roleRatioSum.stripTrailingZeros().toPlainString() + "%");
+            }
+        }
+
+        // 3. 在每个工作类型资金池内逐人计算计划金额与实得金额
         BigDecimal downgradeDelta = BigDecimal.ZERO;  // 降档差额（→ 公司账）
         BigDecimal otherAmount = BigDecimal.ZERO;     // 离职兜底（→ 公司账，独立记账）
         List<OutputValueDistribution> distEntities = new ArrayList<>();
 
-        for (int i = 0; i < dto.getDistributions().size(); i++) {
-            CreateOutputValueDto.DistributionItem item = dto.getDistributions().get(i);
-            int rowNum = i + 1;
+        for (OutputAllocationContext.WorkPool pool : allocation.getWorkPools()) {
+            List<CreateOutputValueDto.DistributionItem> items = distributionsByWorkType
+                    .getOrDefault(pool.getWorkType(), Collections.emptyList());
+            BigDecimal groupPlanned = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            for (int i = 0; i < items.size(); i++) {
+                CreateOutputValueDto.DistributionItem item = items.get(i);
+                if (item.getUserId() == null) {
+                    throw new BusinessException(ErrorType.ARGS_NOT_NULL,
+                            WORK_TYPE_LABELS.get(pool.getWorkType()) + "第" + (i + 1) + "行分配对象为空");
+                }
+                BigDecimal roleRatio = item.getRoleAllocRatio() != null
+                        ? item.getRoleAllocRatio()
+                        : defaultIfNull(item.getAllocRatio(), BigDecimal.ZERO);
+                BigDecimal completion = defaultIfNull(item.getCompletionRatio(), BD_100);
+                if (roleRatio.signum() < 0 || roleRatio.compareTo(BD_100) > 0) {
+                    throw new BusinessException(ErrorType.ARGS_INVALID, "角色内分配比例应在0-100之间");
+                }
+                if (completion.signum() < 0 || completion.compareTo(BD_100) > 0) {
+                    throw new BusinessException(ErrorType.ARGS_INVALID, "兑现比例应在0-100之间");
+                }
 
-            if (item.getUserId() == null) {
-                throw new BusinessException(ErrorType.ARGS_NOT_NULL, "第 " + rowNum + " 行分配对象为空");
-            }
-            BigDecimal alloc = item.getAllocRatio() == null ? BigDecimal.ZERO : item.getAllocRatio();
-            BigDecimal completion = item.getCompletionRatio() == null ? BD_100 : item.getCompletionRatio();
-
-            if (alloc.signum() < 0 || alloc.compareTo(BD_100) > 0) {
-                throw new BusinessException(ErrorType.ARGS_INVALID, "第 " + rowNum + " 行分配比例应在 0-100 之间");
-            }
-            if (completion.signum() < 0 || completion.compareTo(BD_100) > 0) {
-                throw new BusinessException(ErrorType.ARGS_INVALID, "第 " + rowNum + " 行完成比例应在 0-100 之间");
-            }
-
-            int isActive = resolveIsActive(item.getUserId(), item.getIsActive());
-
-            // 注意：负 total 会让 planned 也是负；按比例计算自然成立
-            BigDecimal planned = employeePool.multiply(alloc)
-                    .divide(BD_100, 2, RoundingMode.HALF_UP);
-
-            int distType;
-            BigDecimal actualAmount;
-
-            if (isActive == 0) {
-                distType = DIST_TYPE_OTHER;
-                actualAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-                otherAmount = otherAmount.add(planned);
-            } else if (completion.compareTo(BD_100) < 0) {
-                distType = DIST_TYPE_DOWNGRADE;
-                actualAmount = planned.multiply(completion)
+                BigDecimal planned = i == items.size() - 1
+                        ? pool.getProjectAmount().subtract(groupPlanned).setScale(2, RoundingMode.HALF_UP)
+                        : pool.getProjectAmount().multiply(roleRatio)
                         .divide(BD_100, 2, RoundingMode.HALF_UP);
-                downgradeDelta = downgradeDelta.add(planned.subtract(actualAmount));
-            } else {
-                distType = DIST_TYPE_NORMAL;
-                actualAmount = planned;
-            }
+                groupPlanned = groupPlanned.add(planned);
+                int isActive = resolveIsActive(item.getUserId(), item.getIsActive());
+                int distType;
+                BigDecimal actualAmount;
+                BigDecimal companyDelta;
 
-            distEntities.add(OutputValueDistribution.builder()
-                    .userId(item.getUserId())
-                    .workType(item.getWorkType() != null ? item.getWorkType() : 1)
-                    .ratio(alloc)
-                    .allocRatio(alloc)
-                    .completionRatio(completion)
-                    .distType(distType)
-                    .isActive(isActive)
-                    .amount(actualAmount)
-                    .build());
+                if (isActive == 0) {
+                    distType = DIST_TYPE_OTHER;
+                    actualAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+                    companyDelta = planned;
+                    otherAmount = otherAmount.add(planned);
+                } else if (completion.compareTo(BD_100) < 0) {
+                    distType = DIST_TYPE_DOWNGRADE;
+                    actualAmount = planned.multiply(completion)
+                            .divide(BD_100, 2, RoundingMode.HALF_UP);
+                    companyDelta = planned.subtract(actualAmount).setScale(2, RoundingMode.HALF_UP);
+                    downgradeDelta = downgradeDelta.add(companyDelta);
+                } else {
+                    distType = DIST_TYPE_NORMAL;
+                    actualAmount = planned;
+                    companyDelta = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+                }
+
+                BigDecimal globalAllocRatio = allocation.getEmployeePoolAmount().signum() == 0
+                        ? BigDecimal.ZERO
+                        : planned.multiply(BD_100).divide(
+                        allocation.getEmployeePoolAmount(), 4, RoundingMode.HALF_UP);
+                distEntities.add(OutputValueDistribution.builder()
+                        .userId(item.getUserId())
+                        .workType(pool.getWorkType())
+                        .ratio(globalAllocRatio)
+                        .allocRatio(globalAllocRatio)
+                        .roleAllocRatio(roleRatio)
+                        .plannedAmount(planned)
+                        .companyDelta(companyDelta)
+                        .completionRatio(completion)
+                        .distType(distType)
+                        .isActive(isActive)
+                        .amount(actualAmount)
+                        .build());
+            }
         }
 
-        // 5. 公司账（v0.4）= 60% 主体 + 降档差额 + 离职兜底
-        BigDecimal companyReserve = companyMain.add(downgradeDelta).add(otherAmount);
+        // 4. 公司账 = 基础留存 + 工作类型超限转入 + 降档差额 + 离职兜底
+        BigDecimal companyReserve = allocation.getCompanyBaseAmount()
+                .add(allocation.getWorkTransferAmount())
+                .add(downgradeDelta)
+                .add(otherAmount)
+                .setScale(2, RoundingMode.HALF_UP);
 
         // 6. 守恒校验：Σ actual + companyReserve ≈ total
         BigDecimal sumActual = distEntities.stream()
@@ -303,8 +364,10 @@ public class OutputValueServiceImpl implements OutputValueService {
         BigDecimal sum = companyReserve.add(sumActual);
         if (sum.subtract(total).abs().compareTo(INVARIANT_TOLERANCE) > 0) {
             throw new BusinessException(ErrorType.OPERATION_FAILED,
-                    "金额守恒失败：公司账 " + companyReserve + "（60% 主体 " + companyMain
-                            + " + 降档差额 " + downgradeDelta + " + 离职兜底 " + otherAmount
+                    "金额守恒失败：公司账 " + companyReserve + "（基础留存 "
+                            + allocation.getCompanyBaseAmount() + " + 工作类型转入 "
+                            + allocation.getWorkTransferAmount() + " + 降档差额 " + downgradeDelta
+                            + " + 离职兜底 " + otherAmount
                             + "）+ 员工实得 " + sumActual + " = " + sum + "，应为 " + total);
         }
 
@@ -333,6 +396,12 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .baseAmountSnapshot(calculation.baseAmount)
                 .benefitAmountSnapshot(calculation.benefitAmount)
                 .calculationVersion("output_adjustment_v1")
+                .allocationVersion("allocation_v2")
+                .allocationRuleVersionId(allocation.getRuleVersionId())
+                .employeePoolAmount(allocation.getEmployeePoolAmount())
+                .companyBaseAmount(allocation.getCompanyBaseAmount())
+                .workTransferAmount(allocation.getWorkTransferAmount())
+                .projectPoolAmount(allocation.getProjectPoolAmount())
                 .status(0)
                 .submitUserId(userId)
                 .confirmUserId(dto.getConfirmUserId())
@@ -346,15 +415,36 @@ public class OutputValueServiceImpl implements OutputValueService {
             adjustmentDetailMapper.insert(detail);
         }
 
+        Map<Integer, Long> workPoolIds = new HashMap<>();
+        for (OutputAllocationContext.WorkPool pool : allocation.getWorkPools()) {
+            OutputValueWorkPool entity = OutputValueWorkPool.builder()
+                    .outputValueId(ov.getOutputValueId())
+                    .ruleVersionId(allocation.getRuleVersionId())
+                    .ruleVersionNo(allocation.getRuleVersionNo())
+                    .workType(pool.getWorkType())
+                    .stageWorkRatio(pool.getWorkWeight())
+                    .grossRate(pool.getGrossRate())
+                    .grossAmount(pool.getGrossAmount())
+                    .projectRate(pool.getProjectRate())
+                    .projectAmount(pool.getProjectAmount())
+                    .companyRate(pool.getCompanyRate())
+                    .companyAmount(pool.getCompanyAmount())
+                    .build();
+            workPoolMapper.insert(entity);
+            workPoolIds.put(pool.getWorkType(), entity.getWorkPoolId());
+        }
+
         for (OutputValueDistribution d : distEntities) {
             d.setOutputValueId(ov.getOutputValueId());
+            d.setWorkPoolId(workPoolIds.get(d.getWorkType()));
             distributionMapper.insert(d);
         }
 
-        log.info("[output_adjustment_v1] 创建产值分配单 id={} 季度={} total={}（当前阶段{} + 补差{}；基本{} + 效益{}） 公司账={} 员工实得={}",
+        log.info("[allocation_v2] 创建产值分配单 id={} 季度={} total={}（当前阶段{} + 补差{}；基本{} + 效益{}） 项目人员池={} 工作转公司={} 公司账={} 员工实得={}",
                 ov.getOutputValueId(), ov.getQuarter(), total,
                 calculation.currentStageAmount, calculation.adjustmentAmount,
                 calculation.basePart, calculation.benefitPart,
+                allocation.getProjectPoolAmount(), allocation.getWorkTransferAmount(),
                 companyReserve, sumActual);
 
         // 同步提交到统一审批流（供统一待办/消息中心消费）
@@ -370,7 +460,7 @@ public class OutputValueServiceImpl implements OutputValueService {
     }
 
     /**
-     * 计算指定阶段产值。阶段比例是单阶段比例；历史补差并入本次阶段总额，不拆到个人。
+     * 计算指定阶段产值。阶段比例是单阶段比例；历史补差并入本次分配总额。
      */
     private OutputValueCalculationResult calcOutputValue(Long projectId, Long stageId, BigDecimal coefficient) {
         ProjectStage stage = projectStageService.getProjectStageById(stageId);
@@ -574,7 +664,25 @@ public class OutputValueServiceImpl implements OutputValueService {
         return output.getBenefitSnapshot();
     }
 
-    private OutputValuePreviewVo toPreviewVo(OutputValueCalculationResult calculation) {
+    private OutputAllocationContext calculateAllocation(Long projectId,
+                                                        Long currentStageId,
+                                                        OutputValueCalculationResult calculation) {
+        List<OutputAllocationContext> components = new ArrayList<>();
+        components.add(outputAllocationRuleService.calculate(
+                projectId, currentStageId, calculation.currentStageAmount));
+        for (OutputValueAdjustmentDetail detail : calculation.adjustmentDetails) {
+            if (detail.getSourceProjectStageId() == null || detail.getAdjustmentAmount() == null
+                    || detail.getAdjustmentAmount().signum() == 0) {
+                continue;
+            }
+            components.add(outputAllocationRuleService.calculate(
+                    projectId, detail.getSourceProjectStageId(), detail.getAdjustmentAmount()));
+        }
+        return OutputAllocationCalculator.merge(calculation.totalAmount, components);
+    }
+
+    private OutputValuePreviewVo toPreviewVo(OutputValueCalculationResult calculation,
+                                             OutputAllocationContext allocation) {
         OutputValuePreviewVo vo = new OutputValuePreviewVo();
         vo.setBaseAmount(calculation.baseAmount);
         vo.setBenefitAmount(calculation.benefitAmount);
@@ -588,10 +696,52 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setAlreadyAllocated(calculation.alreadyAllocated);
         vo.setIncrementalRatio(calculation.incrementalRatio);
         vo.setCoefficient(calculation.coefficient);
+        vo.setAllocationVersion("allocation_v2");
+        vo.setAllocationRuleVersionId(allocation.getRuleVersionId());
+        vo.setAllocationRuleVersionNo(allocation.getRuleVersionNo());
+        vo.setEmployeePoolRate(allocation.getEmployeePoolRate());
+        vo.setCompanyBaseRate(allocation.getCompanyBaseRate());
+        vo.setEmployeePoolAmount(allocation.getEmployeePoolAmount());
+        vo.setCompanyBaseAmount(allocation.getCompanyBaseAmount());
+        vo.setWorkTransferAmount(allocation.getWorkTransferAmount());
+        vo.setProjectPoolAmount(allocation.getProjectPoolAmount());
+        vo.setWorkPools(allocation.getWorkPools().stream()
+                .map(this::toWorkPoolVo)
+                .collect(Collectors.toList()));
         vo.setAdjustmentDetails(calculation.adjustmentDetails.stream()
                 .map(this::toAdjustmentDetailVo)
                 .collect(Collectors.toList()));
         return vo;
+    }
+
+    private OutputValuePreviewVo.WorkPoolVo toWorkPoolVo(OutputAllocationContext.WorkPool pool) {
+        return new OutputValuePreviewVo.WorkPoolVo(
+                null,
+                pool.getWorkType(),
+                WORK_TYPE_LABELS.get(pool.getWorkType()),
+                pool.getWorkWeight(),
+                pool.getGrossRate(),
+                pool.getGrossAmount(),
+                pool.getProjectRate(),
+                pool.getProjectAmount(),
+                pool.getCompanyRate(),
+                pool.getCompanyAmount()
+        );
+    }
+
+    private OutputValuePreviewVo.WorkPoolVo toWorkPoolVo(OutputValueWorkPool pool) {
+        return new OutputValuePreviewVo.WorkPoolVo(
+                pool.getWorkPoolId(),
+                pool.getWorkType(),
+                WORK_TYPE_LABELS.get(pool.getWorkType()),
+                pool.getStageWorkRatio(),
+                pool.getGrossRate(),
+                pool.getGrossAmount(),
+                pool.getProjectRate(),
+                pool.getProjectAmount(),
+                pool.getCompanyRate(),
+                pool.getCompanyAmount()
+        );
     }
 
     /**
@@ -853,6 +1003,9 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .baseAmountPart(item.getBaseAmountPart())
                 .benefitAmountPart(item.getBenefitAmountPart())
                 .companyReserve(item.getCompanyReserve())
+                .companyBaseAmount(item.getCompanyBaseAmount())
+                .workTransferAmount(item.getWorkTransferAmount())
+                .projectPoolAmount(item.getProjectPoolAmount())
                 .otherAmount(item.getOtherAmount())
                 .subsidyAmount(item.getSubsidyAmount())
                 .submitUserName(item.getSubmitUserName())
@@ -863,9 +1016,11 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .userRole(distribution == null ? null : distribution.getUserRole())
                 .workType(distribution == null ? null : labelOf(WORK_TYPE_LABELS, distribution.getWorkType()))
                 .allocRatio(distribution == null ? null : defaultIfNull(distribution.getAllocRatio(), distribution.getRatio()))
+                .roleAllocRatio(distribution == null ? null : distribution.getRoleAllocRatio())
                 .completionRatio(distribution == null ? null : distribution.getCompletionRatio())
                 .distType(distribution == null ? null : labelOf(DIST_TYPE_LABELS, distribution.getDistType()))
                 .activeStatus(distribution == null ? null : Objects.equals(distribution.getIsActive(), 0) ? "离职" : "在职")
+                .plannedAmount(distribution == null ? null : distribution.getPlannedAmount())
                 .actualAmount(distribution == null ? null : distribution.getAmount())
                 .build();
     }
@@ -920,6 +1075,12 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setBaseAmountSnapshot(ov.getBaseAmountSnapshot());
         vo.setBenefitAmountSnapshot(ov.getBenefitAmountSnapshot());
         vo.setCalculationVersion(ov.getCalculationVersion());
+        vo.setAllocationVersion(ov.getAllocationVersion());
+        vo.setAllocationRuleVersionId(ov.getAllocationRuleVersionId());
+        vo.setEmployeePoolAmount(ov.getEmployeePoolAmount());
+        vo.setCompanyBaseAmount(ov.getCompanyBaseAmount());
+        vo.setWorkTransferAmount(ov.getWorkTransferAmount());
+        vo.setProjectPoolAmount(ov.getProjectPoolAmount());
         vo.setStatus(ov.getStatus());
         vo.setConfirmUserId(ov.getConfirmUserId());
         vo.setApproveUserId(ov.getApproveUserId());
@@ -980,6 +1141,10 @@ public class OutputValueServiceImpl implements OutputValueService {
             item.setRatio(d.getRatio());
             item.setAllocRatio(d.getAllocRatio());
             item.setCompletionRatio(d.getCompletionRatio());
+            item.setWorkPoolId(d.getWorkPoolId());
+            item.setRoleAllocRatio(d.getRoleAllocRatio());
+            item.setPlannedAmount(d.getPlannedAmount());
+            item.setCompanyDelta(d.getCompanyDelta());
             item.setDistType(d.getDistType());
             item.setIsActive(d.getIsActive());
             item.setAmount(d.getAmount());
@@ -994,6 +1159,9 @@ public class OutputValueServiceImpl implements OutputValueService {
         }).collect(Collectors.toList());
 
         vo.setDistributions(distVos);
+        vo.setWorkPools(outputAllocationRuleService.getWorkPools(ov.getOutputValueId()).stream()
+                .map(this::toWorkPoolVo)
+                .collect(Collectors.toList()));
 
         LambdaQueryWrapper<OutputValueAdjustmentDetail> adjustmentWrapper = new LambdaQueryWrapper<>();
         adjustmentWrapper.eq(OutputValueAdjustmentDetail::getOutputValueId, ov.getOutputValueId())

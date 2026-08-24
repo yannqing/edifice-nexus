@@ -44,7 +44,7 @@ public class OutputValueVo implements Serializable {
     /** 阶段产值总额 */
     private BigDecimal totalAmount;
 
-    /** 公司留存金额（40%） */
+    /** 公司留存金额（公司基础留存 + 各类转入） */
     private BigDecimal companyReserve;
 
     /** 领导兜底（降档差额累计） */
@@ -96,6 +96,19 @@ public class OutputValueVo implements Serializable {
 
     /** 计算版本 */
     private String calculationVersion;
+
+    /** 人员分配计算版本 */
+    private String allocationVersion;
+
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long allocationRuleVersionId;
+
+    private BigDecimal employeePoolAmount;
+    private BigDecimal companyBaseAmount;
+    private BigDecimal workTransferAmount;
+    private BigDecimal projectPoolAmount;
+
+    private List<OutputValuePreviewVo.WorkPoolVo> workPools;
 
     /** 0-待确认/1-待审核/2-已审批/3-已发放 */
     private Integer status;
@@ -155,6 +168,18 @@ public class OutputValueVo implements Serializable {
 
         /** 完成比例（%） */
         private BigDecimal completionRatio;
+
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long workPoolId;
+
+        /** allocation_v2：对应工作类型资金池内比例 */
+        private BigDecimal roleAllocRatio;
+
+        /** 兑现前计划金额 */
+        private BigDecimal plannedAmount;
+
+        /** 兑现不足或离职转公司金额 */
+        private BigDecimal companyDelta;
 
         /** 0-员工正常/1-员工降档/2-领导兜底/3-公司留存/4-其他金额 */
         private Integer distType;

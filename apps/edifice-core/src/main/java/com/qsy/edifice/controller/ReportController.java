@@ -553,7 +553,7 @@ public class ReportController {
         Map<Long, BigDecimal> userCompletion = new HashMap<>();   // 实得
         Map<Long, Set<Long>> userProjects = new HashMap<>();      // 参与项目
 
-        // v0.4：员工池 = total × 40%（与 OutputValueServiceImpl.PERSONAL_POOL_RATE 保持一致）
+        // 仅用于兼容 allocation_v2 上线前的历史记录。
         BigDecimal pool40 = new BigDecimal("0.40");
         BigDecimal bd100 = new BigDecimal("100");
 
@@ -562,10 +562,13 @@ public class ReportController {
             BigDecimal total = ovToTotal.get(d.getOutputValueId());
             if (total == null) continue;
 
-            // planned = total × 40% × allocRatio%
-            BigDecimal alloc = d.getAllocRatio() != null ? d.getAllocRatio() : BigDecimal.ZERO;
-            BigDecimal planned = total.multiply(pool40)
-                    .multiply(alloc).divide(bd100, 2, RoundingMode.HALF_UP);
+            // allocation_v2 直接读取创建时保存的计划金额；历史记录按旧40%口径兼容。
+            BigDecimal planned = d.getPlannedAmount();
+            if (planned == null) {
+                BigDecimal alloc = d.getAllocRatio() != null ? d.getAllocRatio() : BigDecimal.ZERO;
+                planned = total.multiply(pool40)
+                        .multiply(alloc).divide(bd100, 2, RoundingMode.HALF_UP);
+            }
 
             BigDecimal actual = d.getAmount() != null ? d.getAmount() : BigDecimal.ZERO;
 

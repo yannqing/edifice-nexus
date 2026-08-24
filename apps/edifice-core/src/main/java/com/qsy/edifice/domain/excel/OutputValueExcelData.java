@@ -66,6 +66,18 @@ public class OutputValueExcelData {
     @ColumnWidth(16)
     private BigDecimal companyReserve;
 
+    @ExcelProperty("公司基础留存(元)")
+    @ColumnWidth(18)
+    private BigDecimal companyBaseAmount;
+
+    @ExcelProperty("工作类型转公司(元)")
+    @ColumnWidth(20)
+    private BigDecimal workTransferAmount;
+
+    @ExcelProperty("项目人员可分配(元)")
+    @ColumnWidth(20)
+    private BigDecimal projectPoolAmount;
+
     @ExcelProperty("离职兜底(元)")
     @ColumnWidth(16)
     private BigDecimal otherAmount;
@@ -106,6 +118,10 @@ public class OutputValueExcelData {
     @ColumnWidth(14)
     private BigDecimal allocRatio;
 
+    @ExcelProperty("工作类型内比例(%)")
+    @ColumnWidth(18)
+    private BigDecimal roleAllocRatio;
+
     @ExcelProperty("完成比例(%)")
     @ColumnWidth(14)
     private BigDecimal completionRatio;
@@ -117,6 +133,10 @@ public class OutputValueExcelData {
     @ExcelProperty("人员状态")
     @ColumnWidth(12)
     private String activeStatus;
+
+    @ExcelProperty("计划金额(元)")
+    @ColumnWidth(16)
+    private BigDecimal plannedAmount;
 
     @ExcelProperty("实得金额(元)")
     @ColumnWidth(16)

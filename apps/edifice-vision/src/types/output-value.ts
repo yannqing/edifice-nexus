@@ -7,10 +7,17 @@ export interface DistributionItemVo {
   workType: number;
   /** 旧口径比例，保留展示以兼容历史数据 */
   ratio: number;
-  /** 分配比例（%，60% 个人池内） */
+  /** 历史全局员工池分配比例（allocation_v2 仅兼容展示） */
   allocRatio: number;
   /** 完成比例（%） */
   completionRatio: number;
+  workPoolId?: string | null;
+  /** allocation_v2：对应工作类型资金池内比例 */
+  roleAllocRatio?: number | null;
+  /** 兑现前计划金额 */
+  plannedAmount?: number | null;
+  /** 兑现不足或离职转公司金额 */
+  companyDelta?: number | null;
   /** 0-员工正常/1-员工降档/2-领导兜底/3-公司留存/4-其他金额 */
   distType: number;
   /** 下单时成员是否在职：0-离职/1-在职 */
@@ -84,6 +91,13 @@ export interface OutputValueVo {
   benefitAmountSnapshot: number | null;
   /** 计算版本 */
   calculationVersion: string | null;
+  allocationVersion?: string | null;
+  allocationRuleVersionId?: string | null;
+  employeePoolAmount?: number | null;
+  companyBaseAmount?: number | null;
+  workTransferAmount?: number | null;
+  projectPoolAmount?: number | null;
+  workPools?: OutputValueWorkPool[];
 
   /** 0-待确认/1-待审核/2-已审批/3-已发放 */
   status: number;
@@ -107,8 +121,10 @@ export interface OutputValueVo {
 export interface CreateDistributionItem {
   userId: string;
   workType: number;
-  /** 分配比例（%，60% 池内，合计应为 100） */
-  allocRatio: number;
+  /** 旧口径全局员工池比例，仅兼容历史接口 */
+  allocRatio?: number;
+  /** allocation_v2：对应工作类型资金池内比例 */
+  roleAllocRatio: number;
   /** 完成比例（%，0-100） */
   completionRatio: number;
   /** 可空：在职快照，0-离职/1-在职 */
@@ -150,7 +166,30 @@ export interface OutputValuePreview {
   incrementalRatio?: number;
   /** 系数 */
   coefficient?: number;
+  allocationVersion?: string;
+  allocationRuleVersionId?: string;
+  allocationRuleVersionNo?: number;
+  employeePoolRate?: number;
+  companyBaseRate?: number;
+  employeePoolAmount?: number;
+  companyBaseAmount?: number;
+  workTransferAmount?: number;
+  projectPoolAmount?: number;
+  workPools: OutputValueWorkPool[];
   adjustmentDetails: OutputValueAdjustmentDetailVo[];
+}
+
+export interface OutputValueWorkPool {
+  workPoolId?: string | null;
+  workType: number;
+  workTypeName: string;
+  workWeight: number;
+  grossRate: number;
+  grossAmount: number;
+  projectRate: number;
+  projectAmount: number;
+  companyRate: number;
+  companyAmount: number;
 }
 
 export interface OutputValueStats {

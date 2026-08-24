@@ -399,12 +399,18 @@ export default function OutputValuePage() {
 
                     {isExpanded && (
                       <div className="px-5 pb-5 border-t border-slate-100">
-                        {/* 派生金额卡片（v0.4） */}
+                        {/* 产值与人员分配金额快照 */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-xs">
                           <BreakdownBox label="当前阶段产值" value={item.currentStageAmount ?? item.stageCumulativeAmount ?? 0} tone="blue" />
                           <BreakdownBox label="历史补差合计" value={item.adjustmentAmount ?? item.previousCumulativeAmount ?? 0} tone="amber" />
-                          <BreakdownBox label="公司账 (60% + 转入)" value={item.companyReserve ?? 0} tone="slate" />
-                          <BreakdownBox label="离职兜底（独立记账）" value={item.otherAmount ?? 0} tone="rose" />
+                          <BreakdownBox
+                            label={item.allocationVersion === "allocation_v2" ? "项目人员可分配" : "员工池"}
+                            value={item.allocationVersion === "allocation_v2"
+                              ? (item.projectPoolAmount ?? 0)
+                              : Math.round((item.totalAmount ?? 0) * 0.4 * 100) / 100}
+                            tone="slate"
+                          />
+                          <BreakdownBox label="公司账（基础 + 转入）" value={item.companyReserve ?? 0} tone="rose" />
                         </div>
                         {item.stageCumulativeAmount != null && (
                           <p className="text-xs text-slate-400 mt-2">
@@ -415,6 +421,39 @@ export default function OutputValuePage() {
                               <> · 创建时效益值 ¥{(item.benefitSnapshot ?? 0).toLocaleString()}</>
                             )}
                           </p>
+                        )}
+
+                        {(item.workPools ?? []).length > 0 && (
+                          <div className="mt-4 border border-slate-200 rounded-lg overflow-x-auto">
+                            <div className="px-3 py-2 bg-slate-50 text-sm font-semibold text-slate-700">
+                              工作类型资金池
+                              <span className="ml-2 text-xs font-normal text-slate-400">
+                                {item.allocationVersion} · 规则 #{item.allocationRuleVersionId}
+                              </span>
+                            </div>
+                            <table className="w-full min-w-[700px] text-xs">
+                              <thead className="text-slate-500">
+                                <tr>
+                                  <th className="text-left py-2 px-3 font-medium">工作类型</th>
+                                  <th className="text-right py-2 px-3 font-medium">本期综合权重</th>
+                                  <th className="text-right py-2 px-3 font-medium">名义金额</th>
+                                  <th className="text-right py-2 px-3 font-medium">项目分配</th>
+                                  <th className="text-right py-2 px-3 font-medium">转公司</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(item.workPools ?? []).map((pool) => (
+                                  <tr key={pool.workPoolId ?? pool.workType} className="border-t border-slate-100">
+                                    <td className="py-2 px-3 text-slate-700">{pool.workTypeName}</td>
+                                    <td className="py-2 px-3 text-right">{pool.workWeight}%</td>
+                                    <td className="py-2 px-3 text-right">{pool.grossRate}% · {formatAmount(pool.grossAmount)}</td>
+                                    <td className="py-2 px-3 text-right text-blue-700">{pool.projectRate}% · {formatAmount(pool.projectAmount)}</td>
+                                    <td className="py-2 px-3 text-right text-amber-700">{pool.companyRate}% · {formatAmount(pool.companyAmount)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         )}
 
                         {(item.adjustmentDetails ?? []).length > 0 && (
@@ -471,8 +510,9 @@ export default function OutputValuePage() {
                               <th className="text-left py-2 font-semibold">分配人员</th>
                               <th className="text-left py-2 font-semibold">角色</th>
                               <th className="text-left py-2 font-semibold">工作类型</th>
-                              <th className="text-center py-2 font-semibold">分配%</th>
-                              <th className="text-center py-2 font-semibold">完成%</th>
+                              <th className="text-center py-2 font-semibold">角色内分配%</th>
+                              <th className="text-right py-2 font-semibold">计划金额</th>
+                              <th className="text-center py-2 font-semibold">兑现%</th>
                               <th className="text-center py-2 font-semibold">类型</th>
                               <th className="text-right py-2 font-semibold">实得金额</th>
                             </tr>
@@ -498,7 +538,10 @@ export default function OutputValuePage() {
                                   </span>
                                 </td>
                                 <td className="py-3 text-center text-slate-600">
-                                  {d.allocRatio ?? d.ratio ?? 0}%
+                                  {d.roleAllocRatio ?? d.allocRatio ?? d.ratio ?? 0}%
+                                </td>
+                                <td className="py-3 text-right text-slate-600">
+                                  {d.plannedAmount == null ? "-" : formatAmount(d.plannedAmount)}
                                 </td>
                                 <td className="py-3 text-center text-slate-600">
                                   {d.completionRatio ?? 100}%

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, Tag, Layers } from "lucide-react";
+import { Plus, Pencil, Trash2, Tag, Layers, Calculator } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,13 +24,15 @@ import {
 import type { StageTemplateVo } from "@/services/stage-template";
 import { getAllProjectTypes } from "@/services/project-type";
 import { ResponseCode } from "@/types/api";
+import { OutputAllocationRulePanel } from "@/components/project-config/output-allocation-rule-panel";
 
-type TabKey = "type" | "stage";
+type TabKey = "type" | "stage" | "allocation";
 const PAGE_SIZE = 10;
 
 const tabs: { key: TabKey; label: string; icon: typeof Tag }[] = [
   { key: "type", label: "项目类型", icon: Tag },
   { key: "stage", label: "阶段模板", icon: Layers },
+  { key: "allocation", label: "产值分配规则", icon: Calculator },
 ];
 
 function formatTime(value?: string | null) {
@@ -239,7 +241,7 @@ export default function ProjectConfigPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">项目配置</h1>
-        <p className="text-slate-500 text-sm mt-1">管理项目类型与阶段模板，配置后新建项目时自动生效。</p>
+        <p className="text-slate-500 text-sm mt-1">管理项目类型、阶段模板和产值分配规则。</p>
       </div>
 
       {/* Tabs */}
@@ -433,6 +435,10 @@ export default function ProjectConfigPage() {
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === "allocation" && (
+        <OutputAllocationRulePanel projectTypes={projectTypes} />
       )}
 
       {/* ==================== 项目类型弹窗 ==================== */}

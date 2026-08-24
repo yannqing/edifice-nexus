@@ -39,6 +39,7 @@
         FROM project_stage
         WHERE project_id = #{projectId}
         AND is_delete = 0
+        ORDER BY project_stage_id ASC
     </select>
 
     <!-- 根据项目id和阶段状态查询项目阶段列表 -->

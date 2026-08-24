@@ -45,11 +45,11 @@ interface DistRow extends CreateDistributionItem {
   _key: string;
 }
 
-const newRow = (userId = ""): DistRow => ({
+const newRow = (workType: number, userId = ""): DistRow => ({
   _key: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
   userId,
-  workType: 1,
-  allocRatio: 0,
+  workType,
+  roleAllocRatio: 0,
   completionRatio: 100,
 });
 
@@ -85,6 +85,7 @@ const EMPTY_PREVIEW: OutputValuePreview = {
   thisPeriodTotal: 0,
   alreadyAllocated: 0,
   incrementalRatio: 0,
+  workPools: [],
   adjustmentDetails: [],
 };
 
@@ -106,7 +107,7 @@ export function CreateOutputValueDialog({
   const [confirmUserId, setConfirmUserId] = useState<string>("");
   const [subsidyAmount, setSubsidyAmount] = useState<string>("");
   const [coefficient, setCoefficient] = useState<string>("1");
-  const [rows, setRows] = useState<DistRow[]>([newRow()]);
+  const [rows, setRows] = useState<DistRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -121,7 +122,7 @@ export function CreateOutputValueDialog({
     setConfirmUserId("");
     setSubsidyAmount("");
     setCoefficient("1");
-    setRows([newRow()]);
+    setRows([]);
     setError("");
   }, []);
 
@@ -210,7 +211,11 @@ export function CreateOutputValueDialog({
 
   // 选择阶段时，自动填入阶段的默认系数
   useEffect(() => {
-    if (!stageId) return;
+    if (!stageId) {
+      setRows([]);
+      return;
+    }
+    setRows([]);
     const stage = stages.find((s) => s.projectStageId === stageId);
     if (stage?.coefficient != null && stage.coefficient > 0) {
       setCoefficient(String(stage.coefficient));
@@ -235,6 +240,11 @@ export function CreateOutputValueDialog({
         if (cancelled) return;
         if (res.code === ResponseCode.SUCCESS && res.data) {
           setPreview(res.data);
+          setRows((current) => current.length > 0
+            ? current
+            : (res.data?.workPools ?? [])
+              .filter((pool) => Math.abs(pool.projectAmount) > 0.001)
+              .map((pool) => newRow(pool.workType)));
         } else {
           setPreview(EMPTY_PREVIEW);
           setError(res.msg || "产值预览计算失败");
@@ -278,23 +288,23 @@ export function CreateOutputValueDialog({
   const previewCoefficient = preview.coefficient ?? 1;
   const hasCoefficient = previewCoefficient !== 1;
 
-  // 派生数据（员工池 / 公司账 / 实得汇总等）
-  const { totalNum, subsidyNum, companyMain, employeePool, sumAlloc, sumActual, downgradeDelta, otherAmount } = useMemo(() => {
+  // allocation_v2 派生数据：每个工作类型独立分配，人员可跨工作类型出现。
+  const { totalNum, subsidyNum, companyMain, employeePool, projectPool, workTransfer, sumActual, downgradeDelta, otherAmount } = useMemo(() => {
     const t = preview.thisPeriodTotal;
     const s = Number(subsidyAmount) || 0;
-    const cmpMain = Math.round(t * 0.6 * 100) / 100;
-    const empPool = Math.round(t * 0.4 * 100) / 100;
+    const cmpMain = preview.companyBaseAmount ?? Math.round(t * 0.6 * 100) / 100;
+    const empPool = preview.employeePoolAmount ?? Math.round(t * 0.4 * 100) / 100;
+    const poolMap = new Map((preview.workPools ?? []).map((pool) => [pool.workType, pool]));
 
-    let allocSum = 0;
     let actual = 0;
     let downgrade = 0;
     let other = 0;
     rows.forEach((r) => {
-      const alloc = Number(r.allocRatio) || 0;
+      const roleAlloc = Number(r.roleAllocRatio) || 0;
       const comp = Number(r.completionRatio) || 0;
       const isActive = r.isActive !== 0;
-      allocSum += alloc;
-      const planned = Math.round(empPool * (alloc / 100) * 100) / 100;
+      const rolePool = poolMap.get(r.workType)?.projectAmount ?? 0;
+      const planned = Math.round(rolePool * (roleAlloc / 100) * 100) / 100;
       if (!isActive) {
         other += planned;
       } else if (comp < 100) {
@@ -310,22 +320,46 @@ export function CreateOutputValueDialog({
       subsidyNum: s,
       companyMain: cmpMain,
       employeePool: empPool,
-      sumAlloc: allocSum,
+      projectPool: preview.projectPoolAmount ?? 0,
+      workTransfer: preview.workTransferAmount ?? 0,
       sumActual: Math.round(actual * 100) / 100,
       downgradeDelta: Math.round(downgrade * 100) / 100,
       otherAmount: Math.round(other * 100) / 100,
     };
   }, [preview, subsidyAmount, rows]);
 
-  const companyAccount = Math.round((companyMain + downgradeDelta + otherAmount) * 100) / 100;
+  const companyAccount = Math.round((companyMain + workTransfer + downgradeDelta + otherAmount) * 100) / 100;
+
+  const personnelSummary = useMemo(() => {
+    const poolMap = new Map((preview.workPools ?? []).map((pool) => [pool.workType, pool]));
+    const userMap = new Map(memberOptions.map((user) => [user.userId, user]));
+    const summary = new Map<string, { userName: string; amounts: Record<number, number>; total: number }>();
+    rows.filter((row) => row.userId).forEach((row) => {
+      const poolAmount = poolMap.get(row.workType)?.projectAmount ?? 0;
+      const planned = poolAmount * ((Number(row.roleAllocRatio) || 0) / 100);
+      const actual = row.isActive === 0
+        ? 0
+        : planned * ((Number(row.completionRatio) || 0) / 100);
+      const user = userMap.get(row.userId);
+      const item = summary.get(row.userId) ?? {
+        userName: user?.realName || user?.username || row.userId,
+        amounts: {},
+        total: 0,
+      };
+      item.amounts[row.workType] = Math.round(((item.amounts[row.workType] ?? 0) + actual) * 100) / 100;
+      item.total = Math.round((item.total + actual) * 100) / 100;
+      summary.set(row.userId, item);
+    });
+    return Array.from(summary.entries()).map(([userId, item]) => ({ userId, ...item }));
+  }, [memberOptions, preview.workPools, rows]);
 
   const updateRow = (key: string, patch: Partial<DistRow>) => {
     setRows((prev) => prev.map((r) => (r._key === key ? { ...r, ...patch } : r)));
   };
 
-  const addRow = () => setRows((prev) => [...prev, newRow()]);
-  const removeRow = (key: string) =>
-    setRows((prev) => (prev.length > 1 ? prev.filter((r) => r._key !== key) : prev));
+  const addRow = (workType: number) => setRows((prev) => [...prev, newRow(workType)]);
+  const removeRow = (key: string, workType: number) =>
+    setRows((prev) => prev.filter((r) => r._key !== key || r.workType !== workType));
 
   const quarterOptions = useMemo(() => generateQuarterOptions(8), []);
 
@@ -344,13 +378,27 @@ export function CreateOutputValueDialog({
         "本次产值为 0：请先检查合同金额、预计效益金额、阶段产值比例或历史补差",
       );
     }
-    if (Math.abs(sumAlloc - 100) > 0.01)
-      return setError(`分配比例合计应为 100%，当前为 ${sumAlloc}%`);
+    for (const pool of preview.workPools ?? []) {
+      const roleRows = rows.filter((row) => row.workType === pool.workType);
+      if (Math.abs(pool.projectAmount) <= 0.001) {
+        if (roleRows.length > 0) return setError(`${pool.workTypeName}当前没有可分配金额`);
+        continue;
+      }
+      if (roleRows.length === 0) return setError(`请添加${pool.workTypeName}分配人员`);
+      const roleSum = roleRows.reduce((sum, row) => sum + (Number(row.roleAllocRatio) || 0), 0);
+      if (Math.abs(roleSum - 100) > 0.01) {
+        return setError(`${pool.workTypeName}人员比例合计应为 100%，当前为 ${roleSum.toFixed(2)}%`);
+      }
+      const roleUsers = roleRows.map((row) => row.userId).filter(Boolean);
+      if (new Set(roleUsers).size !== roleUsers.length) {
+        return setError(`${pool.workTypeName}中存在重复人员`);
+      }
+    }
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       if (!r.userId) return setError(`第 ${i + 1} 行未选择分配人员`);
-      if (r.allocRatio < 0 || r.allocRatio > 100)
-        return setError(`第 ${i + 1} 行分配比例应在 0-100 之间`);
+      if (r.roleAllocRatio < 0 || r.roleAllocRatio > 100)
+        return setError(`第 ${i + 1} 行角色内分配比例应在 0-100 之间`);
       if (r.completionRatio < 0 || r.completionRatio > 100)
         return setError(`第 ${i + 1} 行完成比例应在 0-100 之间`);
     }
@@ -368,7 +416,7 @@ export function CreateOutputValueDialog({
         distributions: rows.map((r) => ({
           userId: r.userId,
           workType: r.workType,
-          allocRatio: Number(r.allocRatio) || 0,
+          roleAllocRatio: Number(r.roleAllocRatio) || 0,
           completionRatio: Number(r.completionRatio) || 0,
           isActive: r.isActive,
         })),
@@ -399,7 +447,7 @@ export function CreateOutputValueDialog({
         <DialogHeader>
           <DialogTitle>新建产值分配单</DialogTitle>
           <DialogDescription>
-            阶段产值由系统按合同、阶段比例和历史补差自动计算；员工池 40%、公司账 60%（含降档差额、离职兜底）。
+            阶段产值由系统按合同、阶段比例和历史补差自动计算，再按工作类型资金池分配。
           </DialogDescription>
         </DialogHeader>
 
@@ -631,153 +679,197 @@ export function CreateOutputValueDialog({
             </div>
           </div>
 
-          {/* 派生统计（v0.4：员工 40% / 公司 60%） */}
+          {/* allocation_v2 资金池概览 */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-            <MetricBox label="员工池 (40%)" value={employeePool} tone="blue" />
-            <MetricBox label="公司账主体 (60%)" value={companyMain} tone="slate" />
-            <MetricBox label="降档归公司" value={downgradeDelta} tone="amber" />
-            <MetricBox label="离职归公司" value={otherAmount} tone="rose" />
+            <MetricBox label={`名义员工池 (${preview.employeePoolRate ?? 40}%)`} value={employeePool} tone="blue" />
+            <MetricBox label="项目人员可分配" value={projectPool} tone="emerald" />
+            <MetricBox label="工作类型转公司" value={workTransfer} tone="amber" />
+            <MetricBox label={`公司基础留存 (${preview.companyBaseRate ?? 60}%)`} value={companyMain} tone="slate" />
           </div>
 
-          {/* 分配明细 */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-slate-700">分配明细</span>
-              <Button variant="outline" size="sm" onClick={addRow}>
-                <Plus className="w-4 h-4 mr-1" /> 添加一行
-              </Button>
+              <span className="text-xs text-slate-400">
+                规则版本 v{preview.allocationRuleVersionNo ?? "-"} · 各工作类型内比例分别合计100%
+              </span>
             </div>
-            <div className="overflow-x-auto border border-slate-200 rounded-xl">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-xs text-slate-500">
+            {(preview.workPools ?? []).map((pool) => {
+              const roleRows = rows.filter((row) => row.workType === pool.workType);
+              const roleSum = roleRows.reduce(
+                (sum, row) => sum + (Number(row.roleAllocRatio) || 0),
+                0,
+              );
+              const isZeroPool = Math.abs(pool.projectAmount) <= 0.001;
+              return (
+                <section key={pool.workType} className="border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="flex flex-wrap items-center gap-3 bg-slate-50 px-3 py-2">
+                    <span className="text-sm font-semibold text-slate-700">{pool.workTypeName}</span>
+                    <span className="text-xs text-slate-500">本期综合权重 {pool.workWeight}%</span>
+                    <span className="text-xs text-slate-500">
+                      名义 {pool.grossRate}% · ¥{pool.grossAmount.toLocaleString()}
+                    </span>
+                    <span className="text-xs font-medium text-blue-700">
+                      项目分配 {pool.projectRate}% · ¥{pool.projectAmount.toLocaleString()}
+                    </span>
+                    {pool.companyAmount !== 0 && (
+                      <span className="text-xs text-amber-700">
+                        转公司 {pool.companyRate}% · ¥{pool.companyAmount.toLocaleString()}
+                      </span>
+                    )}
+                    <div className="flex-1" />
+                    {!isZeroPool && (
+                      <Button variant="outline" size="sm" onClick={() => addRow(pool.workType)}>
+                        <Plus className="w-4 h-4 mr-1" /> 添加人员
+                      </Button>
+                    )}
+                  </div>
+                  {isZeroPool ? (
+                    <div className="px-3 py-4 text-xs text-slate-400">本阶段该工作类型无项目人员可分配金额</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[720px] text-sm">
+                        <thead className="text-xs text-slate-500">
+                          <tr>
+                            <th className="text-left py-2 px-3 font-medium">分配人员</th>
+                            <th className="text-center py-2 px-3 font-medium">角色内比例</th>
+                            <th className="text-right py-2 px-3 font-medium">计划金额</th>
+                            <th className="text-center py-2 px-3 font-medium">兑现比例</th>
+                            <th className="text-center py-2 px-3 font-medium">在职</th>
+                            <th className="text-right py-2 px-3 font-medium">预计实得</th>
+                            <th className="w-10" />
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {roleRows.map((row) => {
+                            const roleAlloc = Number(row.roleAllocRatio) || 0;
+                            const completion = Number(row.completionRatio) || 0;
+                            const planned = Math.round(pool.projectAmount * (roleAlloc / 100) * 100) / 100;
+                            const isActive = row.isActive !== 0;
+                            const actual = isActive
+                              ? Math.round(planned * (completion / 100) * 100) / 100
+                              : 0;
+                            return (
+                              <tr key={row._key} className="border-t border-slate-100">
+                                <td className="py-2 px-3">
+                                  <select
+                                    className="w-full px-2 py-1 rounded border border-slate-200 text-sm bg-white"
+                                    value={row.userId}
+                                    onChange={(event) => updateRow(row._key, { userId: event.target.value })}
+                                  >
+                                    <option value="">请选择</option>
+                                    {memberOptions.map((user) => (
+                                      <option key={user.userId} value={user.userId}>
+                                        {user.realName || user.username}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    step={0.01}
+                                    value={row.roleAllocRatio}
+                                    onChange={(event) => updateRow(row._key, {
+                                      roleAllocRatio: Number(event.target.value),
+                                    })}
+                                    className="w-full px-2 py-1 rounded border border-slate-200 text-sm text-center"
+                                  />
+                                </td>
+                                <td className="py-2 px-3 text-right text-slate-600">¥{planned.toLocaleString()}</td>
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    step={0.01}
+                                    value={row.completionRatio}
+                                    onChange={(event) => updateRow(row._key, {
+                                      completionRatio: Number(event.target.value),
+                                    })}
+                                    className="w-full px-2 py-1 rounded border border-slate-200 text-sm text-center"
+                                  />
+                                </td>
+                                <td className="py-2 px-3 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={isActive}
+                                    onChange={(event) => updateRow(row._key, {
+                                      isActive: event.target.checked ? 1 : 0,
+                                    })}
+                                  />
+                                </td>
+                                <td className="py-2 px-3 text-right font-semibold text-slate-700">¥{actual.toLocaleString()}</td>
+                                <td className="py-2 px-2 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => removeRow(row._key, pool.workType)}
+                                    className="text-slate-400 hover:text-rose-500 disabled:opacity-30"
+                                    disabled={roleRows.length <= 1}
+                                    title={roleRows.length <= 1 ? "至少保留一名分配人员" : "删除此行"}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {!isZeroPool && (
+                    <div className="flex justify-between border-t border-slate-100 px-3 py-2 text-xs text-slate-500">
+                      <span>
+                        角色内比例合计
+                        <strong className={cn(
+                          "ml-1",
+                          Math.abs(roleSum - 100) > 0.01 ? "text-rose-600" : "text-emerald-600",
+                        )}>
+                          {roleSum.toFixed(2)}%
+                        </strong>
+                      </span>
+                      <span>应等于100%</span>
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+
+          {personnelSummary.length > 0 && (
+            <div className="border border-slate-200 rounded-lg overflow-x-auto">
+              <div className="px-3 py-2 bg-slate-50 text-sm font-semibold text-slate-700">按人员汇总</div>
+              <table className="w-full min-w-[620px] text-sm">
+                <thead className="text-xs text-slate-500">
                   <tr>
-                    <th className="text-left py-2 px-3 font-medium">分配人员</th>
-                    <th className="text-left py-2 px-3 font-medium">工作类型</th>
-                    <th className="text-center py-2 px-3 font-medium">分配比例%</th>
-                    <th className="text-center py-2 px-3 font-medium">完成比例%</th>
-                    <th className="text-center py-2 px-3 font-medium">在职</th>
-                    <th className="text-right py-2 px-3 font-medium">预计实得</th>
-                    <th className="w-10"></th>
+                    <th className="text-left py-2 px-3 font-medium">人员</th>
+                    {Object.entries(WORK_TYPE_LABELS).map(([workType, label]) => (
+                      <th key={workType} className="text-right py-2 px-3 font-medium">{label}</th>
+                    ))}
+                    <th className="text-right py-2 px-3 font-medium">实得合计</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => {
-                    const alloc = Number(r.allocRatio) || 0;
-                    const comp = Number(r.completionRatio) || 0;
-                    const planned = Math.round(employeePool * (alloc / 100) * 100) / 100;
-                    const isActive = r.isActive !== 0;
-                    const actual = !isActive
-                      ? 0
-                      : Math.round(planned * (comp / 100) * 100) / 100;
-                    return (
-                      <tr key={r._key} className="border-t border-slate-100">
-                        <td className="py-2 px-3">
-                          <select
-                            className="w-full px-2 py-1 rounded border border-slate-200 text-sm bg-white"
-                            value={r.userId}
-                            onChange={(e) => updateRow(r._key, { userId: e.target.value })}
-                          >
-                            <option value="">请选择</option>
-                            {memberOptions.map((u) => (
-                              <option key={u.userId} value={u.userId}>
-                                {u.realName || u.username}
-                              </option>
-                            ))}
-                          </select>
+                  {personnelSummary.map((item) => (
+                    <tr key={item.userId} className="border-t border-slate-100">
+                      <td className="py-2 px-3 text-slate-700">{item.userName}</td>
+                      {[0, 1, 2].map((workType) => (
+                        <td key={workType} className="py-2 px-3 text-right text-slate-500">
+                          ¥{(item.amounts[workType] ?? 0).toLocaleString()}
                         </td>
-                        <td className="py-2 px-3">
-                          <select
-                            className="w-full px-2 py-1 rounded border border-slate-200 text-sm bg-white"
-                            value={r.workType}
-                            onChange={(e) =>
-                              updateRow(r._key, { workType: Number(e.target.value) })
-                            }
-                          >
-                            {Object.entries(WORK_TYPE_LABELS).map(([k, v]) => (
-                              <option key={k} value={k}>
-                                {v}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="py-2 px-3">
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={0.01}
-                            value={r.allocRatio}
-                            onChange={(e) =>
-                              updateRow(r._key, { allocRatio: Number(e.target.value) })
-                            }
-                            className="w-full px-2 py-1 rounded border border-slate-200 text-sm text-center"
-                          />
-                        </td>
-                        <td className="py-2 px-3">
-                          <input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={0.01}
-                            value={r.completionRatio}
-                            onChange={(e) =>
-                              updateRow(r._key, { completionRatio: Number(e.target.value) })
-                            }
-                            className="w-full px-2 py-1 rounded border border-slate-200 text-sm text-center"
-                          />
-                        </td>
-                        <td className="py-2 px-3 text-center">
-                          <input
-                            type="checkbox"
-                            checked={isActive}
-                            onChange={(e) =>
-                              updateRow(r._key, { isActive: e.target.checked ? 1 : 0 })
-                            }
-                          />
-                        </td>
-                        <td className="py-2 px-3 text-right font-semibold text-slate-700">
-                          ¥{actual.toLocaleString()}
-                        </td>
-                        <td className="py-2 px-2 text-center">
-                          <button
-                            type="button"
-                            onClick={() => removeRow(r._key)}
-                            className="text-slate-400 hover:text-rose-500"
-                            disabled={rows.length <= 1}
-                            title={rows.length <= 1 ? "至少保留一行" : "删除此行"}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                      ))}
+                      <td className="py-2 px-3 text-right font-semibold text-slate-800">¥{item.total.toLocaleString()}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
-            <div className="flex justify-between text-xs text-slate-500 mt-2">
-              <span>
-                分配比例合计:
-                <span
-                  className={cn(
-                    "ml-1 font-semibold",
-                    Math.abs(sumAlloc - 100) > 0.01 ? "text-rose-500" : "text-emerald-600",
-                  )}
-                >
-                  {sumAlloc.toFixed(2)}%
-                </span>
-                （应等于 100%）
-              </span>
-              <span>
-                员工实得合计:
-                <span className="ml-1 font-semibold text-slate-700">
-                  ¥{sumActual.toLocaleString()}
-                </span>
-              </span>
-            </div>
-          </div>
+          )}
 
-          {/* v0.4 守恒预览 */}
+          {/* allocation_v2 守恒预览 */}
           <div className="p-3 bg-slate-50 rounded-lg text-xs text-slate-600 leading-relaxed">
             守恒预览：公司账 ¥{companyAccount.toLocaleString()} + 员工实得 ¥
             {sumActual.toLocaleString()} ={" "}
@@ -786,8 +878,9 @@ export function CreateOutputValueDialog({
             </span>{" "}
             / 本期产值 ¥{totalNum.toLocaleString()}
             <span className="ml-2 text-slate-400">
-              （公司账 = 60% 主体 ¥{companyMain.toLocaleString()} + 降档 ¥
-              {downgradeDelta.toLocaleString()} + 离职 ¥{otherAmount.toLocaleString()}）
+              （公司账 = 基础留存 ¥{companyMain.toLocaleString()} + 工作类型转入 ¥
+              {workTransfer.toLocaleString()} + 兑现差额 ¥{downgradeDelta.toLocaleString()} + 离职 ¥
+              {otherAmount.toLocaleString()}）
             </span>
           </div>
 
@@ -822,11 +915,12 @@ function MetricBox({
 }: {
   label: string;
   value: number;
-  tone: "slate" | "blue" | "amber" | "rose";
+  tone: "slate" | "blue" | "emerald" | "amber" | "rose";
 }) {
   const toneMap: Record<string, string> = {
     slate: "bg-slate-100 text-slate-700",
     blue: "bg-blue-50 text-blue-700",
+    emerald: "bg-emerald-50 text-emerald-700",
     amber: "bg-amber-50 text-amber-700",
     rose: "bg-rose-50 text-rose-700",
   };

@@ -65,7 +65,7 @@ public class OutputValue implements Serializable {
     @TableField("quarter")
     private String quarter;
 
-    /** 公司留存金额（40%） */
+    /** 公司留存金额（公司基础留存 + 各类转入） */
     @TableField("company_reserve")
     private BigDecimal companyReserve;
 
@@ -132,6 +132,25 @@ public class OutputValue implements Serializable {
     /** 计算版本 */
     @TableField("calculation_version")
     private String calculationVersion;
+
+    /** 人员分配计算版本，allocation_v2 起按工作类型资金池分配 */
+    @TableField("allocation_version")
+    private String allocationVersion;
+
+    @TableField("allocation_rule_version_id")
+    private Long allocationRuleVersionId;
+
+    @TableField("employee_pool_amount")
+    private BigDecimal employeePoolAmount;
+
+    @TableField("company_base_amount")
+    private BigDecimal companyBaseAmount;
+
+    @TableField("work_transfer_amount")
+    private BigDecimal workTransferAmount;
+
+    @TableField("project_pool_amount")
+    private BigDecimal projectPoolAmount;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;

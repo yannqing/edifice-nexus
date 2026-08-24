@@ -16,13 +16,13 @@ import java.util.List;
  *   基本收费按合同金额 × 当前阶段比例；
  *   基本+效益按 base_amount × 当前阶段比例 + benefit_amount × 当前阶段效益比例；
  * - 比例对调：员工池 40%、公司账 60%（v0.2 写反了）
- * - 每人应得 = 员工池 × allocRatio%
+ * - allocation_v2：先按项目类型/阶段拆分工作类型资金池，再按 roleAllocRatio 分配人员
  * - 每人实得 = 每人应得 × completionRatio%
  * - 降档差额（应得-实得）→ 公司账
  * - 离职成员应得 → 公司账（独立记账 other_amount，但实际归公司）
  * - 不再使用 leader_extra（始终 0）
  * - 守恒：Σ员工实得 + company_reserve = totalAmount
- *   其中 company_reserve = 60% 主体 + 降档差额 + 离职兜底
+ *   其中 company_reserve = 公司基础留存 + 工作类型转入 + 降档差额 + 离职兜底
  */
 @Data
 @AllArgsConstructor
@@ -74,9 +74,13 @@ public class CreateOutputValueDto {
         @Schema(description = "工作类型")
         private Integer workType;
 
-        /** 在员工池（40%）内的分配比例，0-100，合计应为 100 */
-        @Schema(description = "分配比例（%，在 40% 员工池内；正常 ~20.15% 即对应 8.06% of 总产值）")
+        /** 历史兼容字段；allocation_v2 客户端应传 roleAllocRatio */
+        @Schema(description = "[allocation_v2 已废弃] 旧员工池内分配比例")
         private BigDecimal allocRatio;
+
+        /** allocation_v2：在对应工作类型资金池内的分配比例，按工作类型分别合计100% */
+        @Schema(description = "工作类型资金池内分配比例（%，同一工作类型合计100）")
+        private BigDecimal roleAllocRatio;
 
         /** 完成比例，0-100；100 为全完成；低于 100 则差额归公司账 */
         @Schema(description = "完成比例（%）")

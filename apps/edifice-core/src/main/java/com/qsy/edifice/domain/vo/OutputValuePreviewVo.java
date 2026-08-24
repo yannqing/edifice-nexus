@@ -34,7 +34,39 @@ public class OutputValuePreviewVo implements Serializable {
     private BigDecimal incrementalRatio;
     /** 系数 */
     private BigDecimal coefficient;
+    /** 人员分配计算版本 */
+    private String allocationVersion;
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long allocationRuleVersionId;
+    private Integer allocationRuleVersionNo;
+    private BigDecimal employeePoolRate;
+    private BigDecimal companyBaseRate;
+    private BigDecimal employeePoolAmount;
+    private BigDecimal companyBaseAmount;
+    private BigDecimal workTransferAmount;
+    private BigDecimal projectPoolAmount;
+    private List<WorkPoolVo> workPools;
     private List<AdjustmentDetailVo> adjustmentDetails;
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class WorkPoolVo implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long workPoolId;
+        private Integer workType;
+        private String workTypeName;
+        private BigDecimal workWeight;
+        private BigDecimal grossRate;
+        private BigDecimal grossAmount;
+        private BigDecimal projectRate;
+        private BigDecimal projectAmount;
+        private BigDecimal companyRate;
+        private BigDecimal companyAmount;
+    }
 
     @Data
     @AllArgsConstructor

@@ -46,6 +46,22 @@ public class OutputValueDistribution implements Serializable {
     @TableField("completion_ratio")
     private BigDecimal completionRatio;
 
+    /** allocation_v2：关联的工作类型资金池 */
+    @TableField("work_pool_id")
+    private Long workPoolId;
+
+    /** allocation_v2：对应工作类型资金池内的人员比例 */
+    @TableField("role_alloc_ratio")
+    private BigDecimal roleAllocRatio;
+
+    /** allocation_v2：兑现前计划金额 */
+    @TableField("planned_amount")
+    private BigDecimal plannedAmount;
+
+    /** allocation_v2：兑现不足或离职转公司金额 */
+    @TableField("company_delta")
+    private BigDecimal companyDelta;
+
     /** 类型：0-员工正常/1-员工降档/2-领导兜底/3-公司留存/4-其他金额 */
     @TableField("dist_type")
     private Integer distType;
