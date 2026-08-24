@@ -275,6 +275,8 @@ export function CreateOutputValueDialog({
   );
 
   const hasBenefit = preview.benefitAmount !== 0 || preview.benefitRatio !== 0;
+  const previewCoefficient = preview.coefficient ?? 1;
+  const hasCoefficient = previewCoefficient !== 1;
 
   // 派生数据（员工池 / 公司账 / 实得汇总等）
   const { totalNum, subsidyNum, companyMain, employeePool, sumAlloc, sumActual, downgradeDelta, otherAmount } = useMemo(() => {
@@ -509,8 +511,12 @@ export function CreateOutputValueDialog({
               产值预览（系统计算）
               <span className="ml-2 text-xs text-slate-400 font-normal">
                 {hasBenefit
-                  ? "基本+效益 · 本阶段产值 = 基本部分 + 效益部分"
-                  : "基本收费 · 本阶段产值 = 合同金额 × 阶段比例"}
+                  ? hasCoefficient
+                    ? "基本+效益 · 本阶段产值 =（基本部分 + 效益部分）× 系数"
+                    : "基本+效益 · 本阶段产值 = 基本部分 + 效益部分"
+                  : hasCoefficient
+                    ? "基本收费 · 本阶段产值 = 基本部分 × 系数"
+                    : "基本收费 · 本阶段产值 = 合同金额 × 阶段比例"}
               </span>
               {previewLoading && (
                 <Loader2 className="inline-block w-3.5 h-3.5 animate-spin ml-2 text-blue-500" />
@@ -522,9 +528,6 @@ export function CreateOutputValueDialog({
                 {(preview.incrementalRatio ?? 0) > 0 && (preview.incrementalRatio ?? 0) < 100 && (
                   <span> × {preview.incrementalRatio}%（增量）</span>
                 )}
-                {(preview.coefficient ?? 1) !== 1 && (
-                  <span> × {preview.coefficient}（系数）</span>
-                )}
                 <span className="font-semibold text-slate-800 ml-1">
                   = ¥{preview.basePart.toLocaleString()}
                 </span>
@@ -535,15 +538,22 @@ export function CreateOutputValueDialog({
                   {(preview.incrementalRatio ?? 0) > 0 && (preview.incrementalRatio ?? 0) < 100 && (
                     <span> × {preview.incrementalRatio}%（增量）</span>
                   )}
-                  {(preview.coefficient ?? 1) !== 1 && (
-                    <span> × {preview.coefficient}（系数）</span>
-                  )}
                   <span className="font-semibold text-slate-800 ml-1">
                     = ¥{preview.benefitPart.toLocaleString()}
                   </span>
                 </div>
               )}
             </div>
+            {hasCoefficient && (
+              <div className="pt-2 border-t border-blue-100 text-slate-700">
+                系数调整：
+                <span className="font-semibold text-slate-800 ml-1">
+                  {hasBenefit && "("}¥{preview.basePart.toLocaleString()}
+                  {hasBenefit && ` + ¥${preview.benefitPart.toLocaleString()})`}
+                  {" × "}{previewCoefficient} = ¥{preview.currentStageAmount.toLocaleString()}
+                </span>
+              </div>
+            )}
             <div className="pt-2 border-t border-blue-100 text-slate-700">
               当前阶段产值：
               <span className="text-base font-bold text-blue-700 ml-2">
