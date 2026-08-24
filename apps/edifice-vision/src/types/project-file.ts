@@ -55,4 +55,4 @@ export const PROJECT_FILE_STATUS_MAP: Record<number, string> = {
   3: "已驳回",
 };
 
-export const FILE_CATEGORY_OPTIONS = ["图纸", "合同", "报告", "其他"];
+export const FILE_CATEGORY_OPTIONS = ["图纸", "合同", "成果文件", "计算底稿", "其他"];

@@ -54,7 +54,7 @@ public class ProjectFiles implements Serializable {
     @JsonSerialize(using = ToStringSerializer.class)
     private Long uploadUserId;
 
-    /** 文件分类：图纸 / 合同 / 报告 / 其他 */
+    /** 文件分类：图纸 / 合同 / 成果文件 / 计算底稿 / 其他 */
     @TableField("file_category")
     private String fileCategory;
 

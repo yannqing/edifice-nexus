@@ -139,7 +139,7 @@ create table project_files
     file_id             bigint                             not null comment '文件id',
     file_name           varchar(255)                       null     comment '用户填写的文件名称',
     upload_user_id      bigint                             null     comment '上传人id',
-    file_category       varchar(64)                        null     comment '文件分类：图纸/合同/报告/其他',
+    file_category       varchar(64)                        null     comment '文件分类：图纸/合同/成果文件/计算底稿/其他',
     description         varchar(512)                       null     comment '文件说明',
     approval_status     tinyint  default 0                 not null comment '审批状态：0-待提交/1-审批中/2-通过/3-驳回',
     current_record_id   bigint                             null     comment '当前待审记录id（快照）',

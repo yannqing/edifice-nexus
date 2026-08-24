@@ -29,7 +29,7 @@ public class CreateProjectFileDto {
     @Schema(description = "用户填写的文件名称（展示名）")
     private String fileName;
 
-    @Schema(description = "文件分类：图纸/合同/报告/其他")
+    @Schema(description = "文件分类：图纸/合同/成果文件/计算底稿/其他")
     private String fileCategory;
 
     @Schema(description = "文件说明")
