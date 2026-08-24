@@ -6,6 +6,7 @@ import com.qsy.edifice.domain.entity.ApprovalRecords;
 import com.qsy.edifice.domain.entity.InspectionForm;
 import com.qsy.edifice.domain.entity.ProjectStage;
 import com.qsy.edifice.enums.ApprovalBizType;
+import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.InspectionFormMapper;
 import com.qsy.edifice.mapper.ProjectStageMapper;
 import com.qsy.edifice.service.impl.InspectionFormServiceImpl;
@@ -18,6 +19,8 @@ import java.math.BigDecimal;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -142,5 +145,47 @@ class InspectionFormServiceImplTests {
         assertEquals(0, created.getInspectionFormStatus());
         assertEquals("补充验收材料后重新提交", created.getInspectionFormDescription());
         assertEquals(new BigDecimal("40"), created.getCompletionRatio());
+    }
+
+    @Test
+    void completionRatioCannotExceedApprovedAndPendingRemainder() {
+        ProjectStage stage = ProjectStage.builder()
+                .projectStageId(20L)
+                .projectId(10L)
+                .stageName("成果编制")
+                .stageStatus(1)
+                .build();
+        InspectionForm approved = InspectionForm.builder()
+                .inspectionFormId(100L)
+                .projectStageId(20L)
+                .inspectionFormStatus(3)
+                .completionRatio(new BigDecimal("40"))
+                .build();
+        InspectionForm pending = InspectionForm.builder()
+                .inspectionFormId(101L)
+                .projectStageId(20L)
+                .inspectionFormStatus(0)
+                .completionRatio(new BigDecimal("30"))
+                .build();
+
+        when(projectStageMapper.selectByIdForUpdate(20L)).thenReturn(stage);
+        when(inspectionFormMapper.selectByProjectStageIdForUpdate(20L))
+                .thenReturn(List.of(approved, pending));
+
+        ApplyInspectionDto dto = new ApplyInspectionDto(
+                10L,
+                20L,
+                "申请剩余阶段验工",
+                "[9001]",
+                2L,
+                new BigDecimal("31"),
+                null
+        );
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> service.applyInspection(dto, 1L));
+
+        assertTrue(exception.getMessage().contains("本次最多可申请30%"));
     }
 }

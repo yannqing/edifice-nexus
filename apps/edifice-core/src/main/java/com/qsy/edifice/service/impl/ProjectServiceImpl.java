@@ -1718,12 +1718,13 @@ public class ProjectServiceImpl implements ProjectService {
         // 项目阶段
         List<ProjectStage> stages = projectStageService.getProjectStagesByProjectId(project.getProjectId());
         if (stages != null && !stages.isEmpty()) {
+            Map<Long, BigDecimal> pendingInspectionRatios = getPendingInspectionRatios(project.getProjectId());
             // 设置最新阶段
             ProjectStage latestStage = stages.get(stages.size() - 1);
-            vo.setProjectStage(convertToProjectStageVo(latestStage));
+            vo.setProjectStage(convertToProjectStageVo(latestStage, pendingInspectionRatios));
             // 设置所有阶段列表
             vo.setProjectStages(stages.stream()
-                    .map(this::convertToProjectStageVo)
+                    .map(stage -> convertToProjectStageVo(stage, pendingInspectionRatios))
                     .collect(Collectors.toList()));
         }
 
@@ -1787,6 +1788,33 @@ public class ProjectServiceImpl implements ProjectService {
         BeanUtils.copyProperties(projectStage,vo);
 
         return vo;
+    }
+
+    private ProjectStageVo convertToProjectStageVo(ProjectStage projectStage,
+                                                    Map<Long, BigDecimal> pendingInspectionRatios) {
+        ProjectStageVo vo = convertToProjectStageVo(projectStage);
+        vo.setPendingInspectionRatio(pendingInspectionRatios.getOrDefault(
+                projectStage.getProjectStageId(), BigDecimal.ZERO));
+
+        return vo;
+    }
+
+    private Map<Long, BigDecimal> getPendingInspectionRatios(Long projectId) {
+        List<InspectionForm> forms = inspectionFormMapper.selectByProjectId(String.valueOf(projectId));
+        if (forms == null || forms.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return forms.stream()
+                .filter(form -> form.getProjectStageId() != null)
+                .filter(form -> Objects.equals(form.getInspectionFormStatus(), 0)
+                        || Objects.equals(form.getInspectionFormStatus(), 1))
+                .collect(Collectors.groupingBy(
+                        InspectionForm::getProjectStageId,
+                        Collectors.reducing(
+                                BigDecimal.ZERO,
+                                form -> form.getCompletionRatio() == null
+                                        ? new BigDecimal("100") : form.getCompletionRatio(),
+                                BigDecimal::add)));
     }
     private ContractVo convertToContractVo(Contract contract) {
         if (contract == null) {

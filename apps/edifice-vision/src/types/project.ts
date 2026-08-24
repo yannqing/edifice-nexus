@@ -21,6 +21,8 @@ export interface ProjectStageVo {
   benefitInclusionRatio?: number;
   /** 已审批通过的累计完成比例（%，0-100） */
   completionRatio?: number;
+  /** 待审核或审核中的验工单累计占用比例（%，0-100） */
+  pendingInspectionRatio?: number;
   /** 阶段系数（默认 1.00） */
   coefficient?: number;
 }

@@ -492,8 +492,11 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         }
 
         // 校验完成比例：已审批 + 待审核 + 本次申请 ≤ 100%
-        BigDecimal applyRatio = dto.getCompletionRatio() != null && dto.getCompletionRatio().signum() > 0
-                ? dto.getCompletionRatio() : new BigDecimal("100");
+        BigDecimal applyRatio = dto.getCompletionRatio() == null
+                ? new BigDecimal("100") : dto.getCompletionRatio();
+        if (applyRatio.signum() <= 0) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "完成比例必须大于0%");
+        }
         if (applyRatio.compareTo(new BigDecimal("100")) > 0) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "完成比例不能超过100%");
         }

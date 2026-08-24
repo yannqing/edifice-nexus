@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2, RefreshCw, Upload, UserRoundSearch } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,17 +15,17 @@ import { applyInspection } from "@/services/inspection";
 import {
   getMyProjects,
   getProjectDetail,
-  getUserList,
   MAX_ATTACHMENT_FILE_SIZE,
   uploadProjectAttachment,
 } from "@/services/project";
 import { ResponseCode } from "@/types/api";
-import type { FilesVo, ProjectListVo, ProjectStageVo, UserListItem } from "@/types/project";
+import type { FilesVo, ProjectListVo, ProjectStageVo } from "@/types/project";
 import type { InspectionFormDetailVo } from "@/types/inspection";
 import {
   EditableAttachmentFileList,
   parseFileIdList,
 } from "@/components/file/attachment-file-list";
+import { UserPickerDialog } from "@/components/user/user-picker-dialog";
 
 type InitialInspectionProject = Pick<ProjectListVo, "projectId" | "projectName" | "projectCode">;
 
@@ -47,6 +47,26 @@ function inheritedFile(fileId: string, index: number): FilesVo {
     fileSize: "0",
     status: 1,
   };
+}
+
+function availableStages(stages: ProjectStageVo[], rejectedStageId = "") {
+  return stages.filter(
+    (stage) =>
+      stage.stageStatus === 1 ||
+      (rejectedStageId &&
+        String(stage.projectStageId) === rejectedStageId &&
+        stage.stageStatus === 4)
+  );
+}
+
+function normalizedPercentage(value?: number) {
+  const numericValue = Number(value ?? 0);
+  if (!Number.isFinite(numericValue)) return 0;
+  return Math.min(100, Math.max(0, numericValue));
+}
+
+function formatPercentage(value: number) {
+  return String(Math.round(value * 100) / 100);
 }
 
 export function CreateInspectionDialog({
@@ -74,20 +94,41 @@ export function CreateInspectionDialog({
   const initialApproverId = initialInspection?.approvalRecords?.[0]?.approver
     ? String(initialInspection.approvalRecords[0].approver)
     : "";
+  const initialApproverName = initialInspection?.approvalRecords?.[0]?.approverName ?? "";
+  const projectLocked = Boolean(sourceProject && initialProjectId);
+  const projectLabel = sourceProject
+    ? [sourceProject.projectName, sourceProject.projectCode].filter(Boolean).join(" · ")
+    : "";
   const [projects, setProjects] = useState<InitialInspectionProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [stages, setStages] = useState<ProjectStageVo[]>([]);
-  const [users, setUsers] = useState<UserListItem[]>([]);
   const [selectedStageId, setSelectedStageId] = useState("");
   const [firstApproverId, setFirstApproverId] = useState("");
+  const [firstApproverName, setFirstApproverName] = useState("");
+  const [approverPickerOpen, setApproverPickerOpen] = useState(false);
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<FilesVo[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [completionRatio, setCompletionRatio] = useState("100");
+  const [dataReady, setDataReady] = useState(false);
+  const [stageLoading, setStageLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [reloadVersion, setReloadVersion] = useState(0);
+  const selectedStage = useMemo(
+    () => stages.find((stage) => String(stage.projectStageId) === selectedStageId),
+    [stages, selectedStageId]
+  );
+  const approvedInspectionRatio = normalizedPercentage(selectedStage?.completionRatio);
+  const pendingInspectionRatio = normalizedPercentage(selectedStage?.pendingInspectionRatio);
+  const remainingInspectionRatio = selectedStage
+    ? Math.max(0, Math.round((100 - approvedInspectionRatio - pendingInspectionRatio) * 100) / 100)
+    : 0;
 
   useEffect(() => {
+    let cancelled = false;
+
     if (!open) {
       setSelectedProjectId("");
       setSelectedStageId("");
@@ -96,14 +137,23 @@ export function CreateInspectionDialog({
       setUploadProgress(0);
       setStages([]);
       setFirstApproverId("");
+      setFirstApproverName("");
+      setApproverPickerOpen(false);
       setProjects([]);
       setCompletionRatio("100");
+      setDataReady(false);
+      setStageLoading(false);
+      setLoadError("");
       return;
     }
 
+    setDataReady(false);
+    setStageLoading(false);
+    setLoadError("");
     setSelectedProjectId(initialProjectId);
     setSelectedStageId(initialStageId);
     setFirstApproverId(initialApproverId);
+    setFirstApproverName(initialApproverName);
     setDescription(initialInspection?.inspectionFormDescription ?? "");
     setCompletionRatio(String(initialInspection?.completionRatio ?? 100));
     setFiles(
@@ -111,62 +161,113 @@ export function CreateInspectionDialog({
         inheritedFile(fileId, index)
       )
     );
+    setStages([]);
+    setProjects(sourceProject ? [sourceProject] : []);
 
-    async function loadProjects() {
+    async function loadInitialData() {
       try {
-        const [projectRes, userRes] = await Promise.all([
-          getMyProjects({ projectStatus: 1, pageSize: 100 }),
-          getUserList(),
-        ]);
-        if (projectRes.code === ResponseCode.SUCCESS && projectRes.data) {
-          const records = projectRes.data.records ?? [];
-          const hasInitialProject = sourceProject
-            ? records.some((project) => String(project.projectId) === String(sourceProject.projectId))
-            : true;
-          setProjects(hasInitialProject || !sourceProject ? records : [sourceProject, ...records]);
+        if (sourceProject && initialProjectId) {
+          const detailRes = await getProjectDetail(initialProjectId);
+          if (cancelled) return;
+          if (detailRes.code !== ResponseCode.SUCCESS || !detailRes.data) {
+            throw new Error("Failed to load inspection form data");
+          }
+
+          setStages(
+            availableStages(detailRes.data.projectStages ?? [], initialInspection ? initialStageId : "")
+          );
+          setDataReady(true);
+          return;
         }
-        if (userRes.code === ResponseCode.SUCCESS && userRes.data) {
-          setUsers(userRes.data.records ?? []);
+
+        const projectRes = await getMyProjects({ projectStatus: 1, pageSize: 100 });
+        if (cancelled) return;
+        if (projectRes.code !== ResponseCode.SUCCESS || !projectRes.data) {
+          throw new Error("Failed to load inspection form data");
         }
+
+        setProjects(projectRes.data.records ?? []);
+        setDataReady(true);
       } catch {
-        if (sourceProject) setProjects([sourceProject]);
+        if (cancelled) return;
+        setLoadError("验工申请数据加载失败，请稍后重试");
+        setStages([]);
       }
     }
 
-    loadProjects();
-  }, [open, initialProjectId, initialStageId, initialApproverId, initialInspection, sourceProject]);
+    loadInitialData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    open,
+    initialProjectId,
+    initialStageId,
+    initialApproverId,
+    initialApproverName,
+    initialInspection,
+    sourceProject,
+    reloadVersion,
+  ]);
 
   useEffect(() => {
+    if (!open || !dataReady || projectLocked || loadError) return;
+
     if (!selectedProjectId) {
       setStages([]);
       setSelectedStageId("");
       setFirstApproverId("");
+      setFirstApproverName("");
+      setStageLoading(false);
       return;
     }
 
+    let cancelled = false;
+
     async function loadStages() {
+      setStageLoading(true);
+      setStages([]);
+      setSelectedStageId("");
+      setFirstApproverId("");
+      setFirstApproverName("");
       try {
         const res = await getProjectDetail(selectedProjectId);
+        if (cancelled) return;
         if (res.code === ResponseCode.SUCCESS && res.data) {
-          const inProgressStages = (res.data.projectStages ?? []).filter(
-            (stage) =>
-              stage.stageStatus === 1 ||
-              (Boolean(initialInspection) &&
-                String(stage.projectStageId) === initialStageId &&
-                stage.stageStatus === 4)
-          );
-          setStages(inProgressStages);
-          setSelectedStageId(initialInspection ? initialStageId : "");
-          setFirstApproverId(initialInspection ? initialApproverId : "");
+          setStages(availableStages(res.data.projectStages ?? []));
         }
       } catch {
+        if (cancelled) return;
         setStages([]);
         setFirstApproverId("");
+        setFirstApproverName("");
+      } finally {
+        if (!cancelled) setStageLoading(false);
       }
     }
 
     loadStages();
-  }, [selectedProjectId, initialInspection, initialStageId, initialApproverId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, selectedProjectId, dataReady, projectLocked, loadError]);
+
+  useEffect(() => {
+    if (!selectedStage) return;
+    setCompletionRatio((currentValue) => {
+      const numericValue = Number(currentValue);
+      if (
+        !Number.isFinite(numericValue) ||
+        numericValue <= 0 ||
+        numericValue > remainingInspectionRatio
+      ) {
+        return formatPercentage(remainingInspectionRatio);
+      }
+      return currentValue;
+    });
+  }, [selectedStage, remainingInspectionRatio]);
 
   const handleFileUpload = async (file: File) => {
     if (file.size > MAX_ATTACHMENT_FILE_SIZE) {
@@ -200,6 +301,19 @@ export function CreateInspectionDialog({
       toast.error("请选择验工阶段");
       return;
     }
+    if (!selectedStage) {
+      toast.error("验工阶段数据尚未加载完成");
+      return;
+    }
+    const applyRatio = Number(completionRatio);
+    if (!Number.isFinite(applyRatio) || applyRatio <= 0) {
+      toast.error("本次完成比例必须大于0");
+      return;
+    }
+    if (applyRatio > remainingInspectionRatio) {
+      toast.error(`本次完成比例不能超过${formatPercentage(remainingInspectionRatio)}%`);
+      return;
+    }
     if (!firstApproverId) {
       toast.error("请选择一级审批人");
       return;
@@ -223,7 +337,7 @@ export function CreateInspectionDialog({
         inspectionFormDescription: description,
         fileIds,
         firstApproverId,
-        completionRatio: Number(completionRatio) || 100,
+        completionRatio: applyRatio,
         sourceInspectionFormId: initialInspection?.inspectionFormId,
       });
 
@@ -240,36 +354,57 @@ export function CreateInspectionDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl max-h-[85vh] min-h-[420px] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{initialInspection ? "重新提交验工申请" : "发起验工申请"}</DialogTitle>
           <DialogDescription>
             {initialInspection
               ? "已载入原验工单内容，请根据驳回意见调整后重新提交"
-              : "选择项目和阶段，提交验工材料"}
+              : projectLocked
+                ? projectLabel
+                : "选择项目和阶段，提交验工材料"}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="mt-4 space-y-5">
-          <div>
-            <label className="text-sm font-medium text-slate-700 mb-1.5 block">
-              选择项目 <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={selectedProjectId}
-              onChange={(event) => setSelectedProjectId(event.target.value)}
-              className="form-input"
-              disabled={Boolean(initialInspection)}
-            >
-              <option value="">请选择进行中的项目</option>
-              {projects.map((project) => (
-                <option key={project.projectId} value={project.projectId}>
-                  {project.projectName} ({project.projectCode})
-                </option>
-              ))}
-            </select>
+        {!dataReady && !loadError && (
+          <div className="flex min-h-[300px] flex-col items-center justify-center gap-3 text-slate-500">
+            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            <p className="text-sm">正在加载验工数据...</p>
           </div>
+        )}
+
+        {loadError && (
+          <div className="flex min-h-[300px] flex-col items-center justify-center gap-4 text-center">
+            <p className="text-sm text-slate-500">{loadError}</p>
+            <Button variant="outline" onClick={() => setReloadVersion((value) => value + 1)}>
+              <RefreshCw className="mr-1.5 h-4 w-4" />
+              重新加载
+            </Button>
+          </div>
+        )}
+
+        <div className={dataReady && !loadError ? "mt-4 space-y-5" : "hidden"}>
+          {!projectLocked && (
+            <div>
+              <label className="text-sm font-medium text-slate-700 mb-1.5 block">
+                选择项目 <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={selectedProjectId}
+                onChange={(event) => setSelectedProjectId(event.target.value)}
+                className="form-input"
+              >
+                <option value="">请选择进行中的项目</option>
+                {projects.map((project) => (
+                  <option key={project.projectId} value={project.projectId}>
+                    {project.projectName} ({project.projectCode})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="text-sm font-medium text-slate-700 mb-1.5 block">
@@ -279,16 +414,18 @@ export function CreateInspectionDialog({
               value={selectedStageId}
               onChange={(event) => setSelectedStageId(event.target.value)}
               className="form-input"
-              disabled={!selectedProjectId || Boolean(initialInspection)}
+              disabled={!selectedProjectId || Boolean(initialInspection) || stageLoading}
             >
-              <option value="">{selectedProjectId ? "请选择阶段" : "请先选择项目"}</option>
+              <option value="">
+                {stageLoading ? "阶段加载中..." : selectedProjectId ? "请选择阶段" : "请先选择项目"}
+              </option>
               {stages.map((stage) => (
                 <option key={stage.projectStageId} value={stage.projectStageId}>
                   {stage.stageName} (产值比例 {stage.stageOutput}%)
                 </option>
               ))}
             </select>
-            {selectedProjectId && stages.length === 0 && (
+            {selectedProjectId && !stageLoading && stages.length === 0 && (
               <p className="text-xs text-amber-500 mt-1">
                 该项目暂无进行中的阶段，请先在项目详情中启动阶段
               </p>
@@ -299,31 +436,34 @@ export function CreateInspectionDialog({
             <label className="text-sm font-medium text-slate-700 mb-1.5 block">
               本次完成比例 (%) <span className="text-rose-500">*</span>
             </label>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <input
                 type="number"
-                min="1"
-                max="100"
-                step="1"
+                min="0.01"
+                max={remainingInspectionRatio}
+                step="0.01"
                 value={completionRatio}
-                onChange={(e) => setCompletionRatio(e.target.value)}
-                placeholder="1-100"
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  const numericValue = Number(nextValue);
+                  if (nextValue && Number.isFinite(numericValue) && numericValue > remainingInspectionRatio) {
+                    setCompletionRatio(formatPercentage(remainingInspectionRatio));
+                    return;
+                  }
+                  setCompletionRatio(nextValue);
+                }}
+                placeholder={selectedStage ? `最多 ${formatPercentage(remainingInspectionRatio)}` : "请先选择阶段"}
                 className="form-input w-32"
+                disabled={!selectedStage || remainingInspectionRatio <= 0}
               />
               <span className="text-sm text-slate-500">%</span>
-              {(() => {
-                const selectedStage = stages.find((s) => String(s.projectStageId) === selectedStageId);
-                if (selectedStage) {
-                  const used = selectedStage.completionRatio ?? 0;
-                  const remaining = 100 - used;
-                  return (
-                    <span className="text-xs text-slate-400">
-                      该阶段已完成 {used}%，剩余可申请 {remaining}%
-                    </span>
-                  );
-                }
-                return null;
-              })()}
+              {selectedStage && (
+                <span className={remainingInspectionRatio > 0 ? "text-xs text-slate-400" : "text-xs text-amber-500"}>
+                  已通过 {formatPercentage(approvedInspectionRatio)}%
+                  {pendingInspectionRatio > 0 && `，待审核 ${formatPercentage(pendingInspectionRatio)}%`}
+                  ，本次最多可申请 {formatPercentage(remainingInspectionRatio)}%
+                </span>
+              )}
             </div>
           </div>
 
@@ -331,28 +471,18 @@ export function CreateInspectionDialog({
             <label className="text-sm font-medium text-slate-700 mb-1.5 block">
               一级审批人 <span className="text-rose-500">*</span>
             </label>
-            <select
-              value={firstApproverId}
-              onChange={(event) => setFirstApproverId(event.target.value)}
-              className="form-input"
-              disabled={!selectedProjectId || users.length === 0}
+            <button
+              type="button"
+              className="form-input flex items-center justify-between gap-3 text-left disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+              disabled={!selectedProjectId}
+              aria-haspopup="dialog"
+              onClick={() => setApproverPickerOpen(true)}
             >
-              <option value="">
-                {!selectedProjectId
-                  ? "请先选择项目"
-                  : users.length === 0
-                    ? "暂无可选审批人"
-                    : "请选择一级审批人"}
-              </option>
-              {users.map((user) => (
-                <option key={user.userId} value={user.userId}>
-                  {user.realName || user.username}
-                </option>
-              ))}
-            </select>
-            {selectedProjectId && users.length === 0 && (
-              <p className="text-xs text-amber-500 mt-1">暂无可选审批人，请先维护启用员工</p>
-            )}
+              <span className={firstApproverId ? "truncate text-slate-700" : "truncate text-slate-400"}>
+                {!selectedProjectId ? "请先选择项目" : firstApproverName || "请选择一级审批人"}
+              </span>
+              <UserRoundSearch className="h-4 w-4 shrink-0 text-slate-400" />
+            </button>
           </div>
 
           <div>
@@ -414,7 +544,13 @@ export function CreateInspectionDialog({
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
+        <div
+          className={
+            dataReady && !loadError
+              ? "flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4"
+              : "hidden"
+          }
+        >
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             取消
           </Button>
@@ -433,7 +569,19 @@ export function CreateInspectionDialog({
             )}
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <UserPickerDialog
+        open={approverPickerOpen}
+        onOpenChange={setApproverPickerOpen}
+        value={firstApproverId}
+        title="选择一级审批人"
+        onSelect={(user) => {
+          setFirstApproverId(String(user.userId));
+          setFirstApproverName(user.realName || user.username);
+        }}
+      />
+    </>
   );
 }

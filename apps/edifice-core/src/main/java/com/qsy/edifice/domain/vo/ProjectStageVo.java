@@ -59,6 +59,11 @@ public class ProjectStageVo implements Serializable {
     private BigDecimal completionRatio;
 
     /**
+     * 待审核或审核中的验工单累计占用比例（%，0-100）
+     */
+    private BigDecimal pendingInspectionRatio;
+
+    /**
      * 阶段系数（默认 1.00）
      */
     private BigDecimal coefficient;
