@@ -27,6 +27,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { isAbortError } from "@/lib/request";
+import { notifySidebarCountsUpdated } from "@/lib/sidebar-counts";
 import { TablePageSkeleton, DialogSkeleton } from "@/components/ui/skeleton";
 import {
   getMyPendingInspectionList,
@@ -243,6 +244,7 @@ export default function InspectionApprovalPage() {
       });
       if (res.code === ResponseCode.SUCCESS) {
         toast.success(result === 1 ? "审批通过" : "已驳回");
+        notifySidebarCountsUpdated();
         setDetailOpen(false);
         fetchList();
         fetchStats();
