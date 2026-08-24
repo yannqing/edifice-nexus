@@ -163,7 +163,7 @@ public class OutputValueVo implements Serializable {
         /** 旧口径比例，保留展示以兼容历史数据 */
         private BigDecimal ratio;
 
-        /** 分配比例（%，60% 池内） */
+        /** 历史全局员工池分配比例（allocation_v2 仅兼容展示） */
         private BigDecimal allocRatio;
 
         /** 完成比例（%） */

@@ -225,7 +225,7 @@ export default function OutputValuePage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">产值分配</h1>
           <p className="text-slate-500 text-sm mt-1">
-            按季度维度分配阶段产值：公司留存 40% + 个人池 60%（分配比例 × 完成比例）。
+            按项目类型和阶段规则拆分管理、基础、智励工作资金池，并按兑现比例核算。
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2">
