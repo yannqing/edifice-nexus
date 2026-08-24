@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -110,6 +110,10 @@ export function CreateOutputValueDialog({
   const [rows, setRows] = useState<DistRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [dataReady, setDataReady] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [reloadVersion, setReloadVersion] = useState(0);
+  const [projectLoading, setProjectLoading] = useState(false);
 
   const reset = useCallback(() => {
     setProjectId("");
@@ -127,25 +131,24 @@ export function CreateOutputValueDialog({
   }, []);
 
   const fetchOptions = useCallback(async () => {
-    try {
-      const [projectsRes, usersRes, outputValuesRes] = await Promise.all([
-        getAllProjects({ pageSize: 200 }),
-        getUserList(),
-        getOutputValueList(),
-      ]);
-      if (projectsRes.code === ResponseCode.SUCCESS && projectsRes.data) {
-        // 已归档项目不能创建产值分配
-        setProjects((projectsRes.data.records ?? []).filter((p) => p.archiveStatus !== 1));
-      }
-      if (usersRes.code === ResponseCode.SUCCESS && usersRes.data) {
-        setUsers(usersRes.data.records ?? []);
-      }
-      if (outputValuesRes.code === ResponseCode.SUCCESS && outputValuesRes.data) {
-        setOutputValues(outputValuesRes.data ?? []);
-      }
-    } catch {
-      /* 静默 */
+    const [projectsRes, usersRes, outputValuesRes] = await Promise.all([
+      getAllProjects({ pageSize: 200 }),
+      getUserList(),
+      getOutputValueList(),
+    ]);
+    if (
+      projectsRes.code !== ResponseCode.SUCCESS || !projectsRes.data ||
+      usersRes.code !== ResponseCode.SUCCESS || !usersRes.data ||
+      outputValuesRes.code !== ResponseCode.SUCCESS || !outputValuesRes.data
+    ) {
+      throw new Error("Failed to load output value form data");
     }
+
+    return {
+      projects: (projectsRes.data.records ?? []).filter((project) => project.archiveStatus !== 1),
+      users: usersRes.data.records ?? [],
+      outputValues: outputValuesRes.data ?? [],
+    };
   }, []);
 
   // 记录每个阶段已确认的最大分配完成比例
@@ -175,11 +178,46 @@ export function CreateOutputValueDialog({
   );
 
   useEffect(() => {
-    if (open) {
+    let cancelled = false;
+
+    if (!open) {
       reset();
-      fetchOptions();
+      setProjects([]);
+      setUsers([]);
+      setOutputValues([]);
+      setDataReady(false);
+      setLoadError("");
+      setProjectLoading(false);
+      return;
     }
-  }, [open, fetchOptions, reset]);
+
+    reset();
+    setProjects([]);
+    setUsers([]);
+    setOutputValues([]);
+    setDataReady(false);
+    setLoadError("");
+    setProjectLoading(false);
+
+    async function loadInitialData() {
+      try {
+        const options = await fetchOptions();
+        if (cancelled) return;
+        setProjects(options.projects);
+        setUsers(options.users);
+        setOutputValues(options.outputValues);
+        setDataReady(true);
+      } catch {
+        if (cancelled) return;
+        setLoadError("产值分配数据加载失败，请稍后重试");
+      }
+    }
+
+    loadInitialData();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, fetchOptions, reset, reloadVersion]);
 
   // 选择项目后加载阶段和成员（依赖 isStageAvailable 确保 outputValues 加载后重新筛选）
   useEffect(() => {
@@ -188,9 +226,17 @@ export function CreateOutputValueDialog({
       setStages([]);
       setStageId("");
       setPreview(EMPTY_PREVIEW);
+      setProjectLoading(false);
+      setError("");
       return;
     }
     let cancelled = false;
+    setError("");
+    setProjectLoading(true);
+    setProjectDetail(null);
+    setStages([]);
+    setStageId("");
+    setPreview(EMPTY_PREVIEW);
     (async () => {
       try {
         const res = await getProjectDetail(projectId);
@@ -199,9 +245,13 @@ export function CreateOutputValueDialog({
           setProjectDetail(res.data);
           setStages((res.data.projectStages ?? []).filter(isStageAvailable));
           setStageId("");
+        } else {
+          setError(res.msg || "项目数据加载失败");
         }
       } catch {
-        /* 静默 */
+        if (!cancelled) setError("项目数据加载失败，请重新选择项目");
+      } finally {
+        if (!cancelled) setProjectLoading(false);
       }
     })();
     return () => {
@@ -443,7 +493,7 @@ export function CreateOutputValueDialog({
         onOpenChange(v);
       }}
     >
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] min-h-[460px] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>新建产值分配单</DialogTitle>
           <DialogDescription>
@@ -451,7 +501,24 @@ export function CreateOutputValueDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5 mt-4">
+        {!dataReady && !loadError && (
+          <div className="flex min-h-[340px] flex-col items-center justify-center gap-3 text-slate-500">
+            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            <p className="text-sm">正在加载产值分配数据...</p>
+          </div>
+        )}
+
+        {loadError && (
+          <div className="flex min-h-[340px] flex-col items-center justify-center gap-4 text-center">
+            <p className="text-sm text-slate-500">{loadError}</p>
+            <Button variant="outline" onClick={() => setReloadVersion((value) => value + 1)}>
+              <RefreshCw className="mr-1.5 h-4 w-4" />
+              重新加载
+            </Button>
+          </div>
+        )}
+
+        <div className={dataReady && !loadError ? "space-y-5 mt-4" : "hidden"}>
           {/* 基本信息 */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -480,10 +547,14 @@ export function CreateOutputValueDialog({
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white disabled:bg-slate-50"
                 value={stageId}
                 onChange={(e) => setStageId(e.target.value)}
-                disabled={!projectId || stages.length === 0}
+                disabled={!projectId || projectLoading || stages.length === 0}
               >
                 <option value="">
-                  {projectId && stages.length === 0 ? "该项目暂无可创建产值的阶段" : "请选择已完成阶段"}
+                  {projectLoading
+                    ? "项目阶段加载中..."
+                    : projectId && stages.length === 0
+                      ? "该项目暂无可创建产值的阶段"
+                      : "请选择已完成阶段"}
                 </option>
                 {stages.map((s) => (
                   <option key={s.projectStageId} value={s.projectStageId}>
@@ -891,7 +962,10 @@ export function CreateOutputValueDialog({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-slate-100">
+        <div className={dataReady && !loadError
+          ? "flex justify-end gap-2 pt-4 mt-4 border-t border-slate-100"
+          : "hidden"}
+        >
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             取消
           </Button>
