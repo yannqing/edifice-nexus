@@ -26,6 +26,7 @@ import {
   parseFileIdList,
 } from "@/components/file/attachment-file-list";
 import { UserPickerDialog } from "@/components/user/user-picker-dialog";
+import { notifySidebarCountsUpdated } from "@/lib/sidebar-counts";
 
 type InitialInspectionProject = Pick<ProjectListVo, "projectId" | "projectName" | "projectCode">;
 
@@ -343,6 +344,7 @@ export function CreateInspectionDialog({
 
       if (res.code === ResponseCode.SUCCESS) {
         toast.success(initialInspection ? "验工单已重新提交" : "验工单提交成功");
+        notifySidebarCountsUpdated();
         onOpenChange(false);
         onSuccess();
       }

@@ -26,6 +26,7 @@ import {
   markAllMessagesRead,
   markMessageRead,
 } from "@/services/message-center";
+import { notifySidebarCountsUpdated } from "@/lib/sidebar-counts";
 
 const PAGE_SIZE = 12;
 
@@ -87,7 +88,7 @@ export default function MessageCenterPage() {
     try {
       if (!item.read) {
         await markMessageRead(item.sourceType, item.sourceId);
-        window.dispatchEvent(new Event("message-center:updated"));
+        notifySidebarCountsUpdated();
       }
     } finally {
       router.push(item.link || "/");
@@ -100,7 +101,7 @@ export default function MessageCenterPage() {
       const res = await markAllMessagesRead();
       if (res.code === ResponseCode.SUCCESS) {
         toast.success("已全部标记为已读");
-        window.dispatchEvent(new Event("message-center:updated"));
+        notifySidebarCountsUpdated();
         fetchList();
       }
     } finally {

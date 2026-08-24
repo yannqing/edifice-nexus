@@ -52,6 +52,7 @@ import type { ApprovalRecordVo } from "@/types/approval";
 import type { ApprovalFlowConfigVo, ApprovalFlowNodeVo } from "@/types/config-center";
 import type { UserListItem } from "@/types/project";
 import type { TodoCenterDetail, TodoCenterItem, TodoCenterStats, TodoCenterTab } from "@/types/todo-center";
+import { notifySidebarCountsUpdated } from "@/lib/sidebar-counts";
 
 const PAGE_SIZE = 10;
 
@@ -209,7 +210,7 @@ export default function TodoCenterPage() {
   const refreshAll = useCallback(() => {
     fetchStats();
     fetchList();
-    window.dispatchEvent(new Event("message-center:updated"));
+    notifySidebarCountsUpdated();
   }, [fetchList, fetchStats]);
 
   const openOriginalPage = (item: TodoCenterItem) => {
@@ -275,7 +276,7 @@ export default function TodoCenterPage() {
       const res = await urgeApproval({ recordId: item.todoId });
       if (res.code === ResponseCode.SUCCESS) {
         toast.success("已发送催办提醒");
-        window.dispatchEvent(new Event("message-center:updated"));
+        notifySidebarCountsUpdated();
       }
     } catch {
       // request interceptor shows the business error.

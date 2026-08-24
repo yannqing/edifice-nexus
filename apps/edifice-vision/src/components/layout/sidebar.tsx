@@ -43,6 +43,9 @@ import { getMyPendingCounts } from "@/services/approval-flow";
 import { getUnreadMessageCount } from "@/services/message-center";
 import { ResponseCode } from "@/types/api";
 import { hasPermission } from "@/lib/permissions";
+import { SIDEBAR_COUNTS_UPDATED_EVENT } from "@/lib/sidebar-counts";
+
+const COUNTS_POLL_INTERVAL_MS = 30_000;
 
 /**
  * 侧边栏 item.id -> 业务类型 ext 的映射。
@@ -113,16 +116,29 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps = {}
     }
   }, []);
 
-  // 挂载 + 路由切换时刷新（路由切换往往意味着刚完成了一次审批 / 上传）
+  // 本页操作通过事件立即刷新；其他用户产生的待办通过焦点恢复和短轮询同步。
   useEffect(() => {
     if (!isHydrated || !isAuthenticated) return;
     const controller = new AbortController();
-    fetchPendingCounts(controller.signal);
-    const refresh = () => fetchPendingCounts();
-    window.addEventListener("message-center:updated", refresh);
+    void fetchPendingCounts(controller.signal);
+
+    const refresh = () => {
+      void fetchPendingCounts();
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    const timer = window.setInterval(refreshWhenVisible, COUNTS_POLL_INTERVAL_MS);
+
+    window.addEventListener(SIDEBAR_COUNTS_UPDATED_EVENT, refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       controller.abort();
-      window.removeEventListener("message-center:updated", refresh);
+      window.clearInterval(timer);
+      window.removeEventListener(SIDEBAR_COUNTS_UPDATED_EVENT, refresh);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [fetchPendingCounts, isAuthenticated, isHydrated, pathname]);
 
