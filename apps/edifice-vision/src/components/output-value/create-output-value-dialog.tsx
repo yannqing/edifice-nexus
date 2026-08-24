@@ -338,8 +338,8 @@ export function CreateOutputValueDialog({
   const previewCoefficient = preview.coefficient ?? 1;
   const hasCoefficient = previewCoefficient !== 1;
 
-  // allocation_v2 派生数据：每个工作类型独立分配，人员可跨工作类型出现。
-  const { totalNum, subsidyNum, companyMain, employeePool, projectPool, workTransfer, sumActual, downgradeDelta, otherAmount } = useMemo(() => {
+  // 每个工作类型独立分配，人员可跨工作类型出现。
+  const { subsidyNum, companyMain, employeePool, projectPool, sumActual } = useMemo(() => {
     const t = preview.thisPeriodTotal;
     const s = Number(subsidyAmount) || 0;
     const cmpMain = preview.companyBaseAmount ?? Math.round(t * 0.6 * 100) / 100;
@@ -347,38 +347,24 @@ export function CreateOutputValueDialog({
     const poolMap = new Map((preview.workPools ?? []).map((pool) => [pool.workType, pool]));
 
     let actual = 0;
-    let downgrade = 0;
-    let other = 0;
     rows.forEach((r) => {
       const roleAlloc = Number(r.roleAllocRatio) || 0;
       const comp = Number(r.completionRatio) || 0;
       const isActive = r.isActive !== 0;
       const rolePool = poolMap.get(r.workType)?.projectAmount ?? 0;
       const planned = Math.round(rolePool * (roleAlloc / 100) * 100) / 100;
-      if (!isActive) {
-        other += planned;
-      } else if (comp < 100) {
-        const a = Math.round(planned * (comp / 100) * 100) / 100;
-        actual += a;
-        downgrade += planned - a;
-      } else {
-        actual += planned;
+      if (isActive) {
+        actual += Math.round(planned * (comp / 100) * 100) / 100;
       }
     });
     return {
-      totalNum: t,
       subsidyNum: s,
       companyMain: cmpMain,
       employeePool: empPool,
       projectPool: preview.projectPoolAmount ?? 0,
-      workTransfer: preview.workTransferAmount ?? 0,
       sumActual: Math.round(actual * 100) / 100,
-      downgradeDelta: Math.round(downgrade * 100) / 100,
-      otherAmount: Math.round(other * 100) / 100,
     };
   }, [preview, subsidyAmount, rows]);
-
-  const companyAccount = Math.round((companyMain + workTransfer + downgradeDelta + otherAmount) * 100) / 100;
 
   const personnelSummary = useMemo(() => {
     const poolMap = new Map((preview.workPools ?? []).map((pool) => [pool.workType, pool]));
@@ -750,11 +736,9 @@ export function CreateOutputValueDialog({
             </div>
           </div>
 
-          {/* allocation_v2 资金池概览 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
             <MetricBox label={`名义员工池 (${preview.employeePoolRate ?? 40}%)`} value={employeePool} tone="blue" />
             <MetricBox label="项目人员可分配" value={projectPool} tone="emerald" />
-            <MetricBox label="工作类型转公司" value={workTransfer} tone="amber" />
             <MetricBox label={`公司基础留存 (${preview.companyBaseRate ?? 60}%)`} value={companyMain} tone="slate" />
           </div>
 
@@ -776,18 +760,9 @@ export function CreateOutputValueDialog({
                 <section key={pool.workType} className="border border-slate-200 rounded-lg overflow-hidden">
                   <div className="flex flex-wrap items-center gap-3 bg-slate-50 px-3 py-2">
                     <span className="text-sm font-semibold text-slate-700">{pool.workTypeName}</span>
-                    <span className="text-xs text-slate-500">本期综合权重 {pool.workWeight}%</span>
-                    <span className="text-xs text-slate-500">
-                      名义 {pool.grossRate}% · ¥{pool.grossAmount.toLocaleString()}
-                    </span>
                     <span className="text-xs font-medium text-blue-700">
                       项目分配 {pool.projectRate}% · ¥{pool.projectAmount.toLocaleString()}
                     </span>
-                    {pool.companyAmount !== 0 && (
-                      <span className="text-xs text-amber-700">
-                        转公司 {pool.companyRate}% · ¥{pool.companyAmount.toLocaleString()}
-                      </span>
-                    )}
                     <div className="flex-1" />
                     {!isZeroPool && (
                       <Button variant="outline" size="sm" onClick={() => addRow(pool.workType)}>
@@ -940,19 +915,9 @@ export function CreateOutputValueDialog({
             </div>
           )}
 
-          {/* allocation_v2 守恒预览 */}
           <div className="p-3 bg-slate-50 rounded-lg text-xs text-slate-600 leading-relaxed">
-            守恒预览：公司账 ¥{companyAccount.toLocaleString()} + 员工实得 ¥
-            {sumActual.toLocaleString()} ={" "}
-            <span className="font-semibold text-slate-800">
-              ¥{(companyAccount + sumActual).toLocaleString()}
-            </span>{" "}
-            / 本期产值 ¥{totalNum.toLocaleString()}
-            <span className="ml-2 text-slate-400">
-              （公司账 = 基础留存 ¥{companyMain.toLocaleString()} + 工作类型转入 ¥
-              {workTransfer.toLocaleString()} + 兑现差额 ¥{downgradeDelta.toLocaleString()} + 离职 ¥
-              {otherAmount.toLocaleString()}）
-            </span>
+            人员分配预览：计划分配 ¥{projectPool.toLocaleString()}，当前预计实得 ¥
+            {sumActual.toLocaleString()}。
           </div>
 
           {error && (

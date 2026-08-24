@@ -87,6 +87,67 @@ public final class OutputAllocationCalculator {
         );
     }
 
+    public static OutputAllocationContext calculateByRates(BigDecimal totalAmount,
+                                                            Long ruleVersionId,
+                                                            Integer ruleVersionNo,
+                                                            BigDecimal employeePoolRate,
+                                                            BigDecimal companyBaseRate,
+                                                            List<PoolRateRule> rules) {
+        BigDecimal total = money(totalAmount);
+        List<PoolRateRule> sortedRules = rules.stream()
+                .sorted(Comparator.comparing(PoolRateRule::workType))
+                .toList();
+
+        BigDecimal employeePool = percentOf(total, employeePoolRate);
+        BigDecimal companyBase = total.subtract(employeePool).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal allocatedGross = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        List<OutputAllocationContext.WorkPool> pools = new ArrayList<>();
+
+        for (int index = 0; index < sortedRules.size(); index++) {
+            PoolRateRule rule = sortedRules.get(index);
+            BigDecimal grossAmount = index == sortedRules.size() - 1
+                    ? employeePool.subtract(allocatedGross).setScale(2, RoundingMode.HALF_UP)
+                    : percentOf(total, rule.grossRate());
+            allocatedGross = allocatedGross.add(grossAmount);
+
+            BigDecimal projectAmount = percentOf(total, rule.projectRate());
+            BigDecimal companyAmount = grossAmount.subtract(projectAmount).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal workWeight = employeePoolRate.signum() == 0
+                    ? BigDecimal.ZERO.setScale(RATE_SCALE, RoundingMode.HALF_UP)
+                    : rule.grossRate().multiply(BD_100)
+                    .divide(employeePoolRate, RATE_SCALE, RoundingMode.HALF_UP);
+
+            pools.add(new OutputAllocationContext.WorkPool(
+                    rule.workType(),
+                    workWeight,
+                    rule.grossRate().setScale(RATE_SCALE, RoundingMode.HALF_UP),
+                    grossAmount,
+                    rule.projectRate().setScale(RATE_SCALE, RoundingMode.HALF_UP),
+                    projectAmount,
+                    rule.companyRate().setScale(RATE_SCALE, RoundingMode.HALF_UP),
+                    companyAmount
+            ));
+        }
+
+        BigDecimal projectPool = pools.stream()
+                .map(OutputAllocationContext.WorkPool::getProjectAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal workTransfer = employeePool.subtract(projectPool).setScale(2, RoundingMode.HALF_UP);
+
+        return new OutputAllocationContext(
+                ruleVersionId,
+                ruleVersionNo,
+                employeePoolRate.setScale(RATE_SCALE, RoundingMode.HALF_UP),
+                companyBaseRate.setScale(RATE_SCALE, RoundingMode.HALF_UP),
+                employeePool,
+                companyBase,
+                workTransfer,
+                projectPool,
+                pools
+        );
+    }
+
     public static OutputAllocationContext merge(BigDecimal totalAmount,
                                                 List<OutputAllocationContext> contexts) {
         if (contexts == null || contexts.isEmpty()) {
@@ -170,5 +231,11 @@ public final class OutputAllocationCalculator {
     }
 
     public record WorkRule(Integer workType, BigDecimal workWeight, BigDecimal projectCapRate) {
+    }
+
+    public record PoolRateRule(Integer workType,
+                               BigDecimal grossRate,
+                               BigDecimal projectRate,
+                               BigDecimal companyRate) {
     }
 }

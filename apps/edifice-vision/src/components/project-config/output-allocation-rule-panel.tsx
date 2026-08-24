@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2, Save } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -49,34 +49,6 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
     return () => controller.abort();
   }, [projectTypeId]);
 
-  const managementCap = rule?.stages[0]?.workRules.find((item) => item.workType === 0)?.projectCapRate ?? 4;
-  const wisdomCap = rule?.stages[0]?.workRules.find((item) => item.workType === 2)?.projectCapRate ?? 4;
-
-  const weightedSummary = useMemo(() => {
-    if (!rule) return [];
-    return WORK_TYPES.map((workType) => {
-      let grossRate = 0;
-      let projectRate = 0;
-      rule.stages.forEach((stage) => {
-        const item = stage.workRules.find((workRule) => workRule.workType === workType);
-        if (!item) return;
-        const stageOutput = Number(stage.stageOutput) || 0;
-        const stageGrossRate = rule.employeePoolRate * item.workWeight / 100;
-        const stageProjectRate = item.projectCapRate == null
-          ? stageGrossRate
-          : Math.min(stageGrossRate, item.projectCapRate);
-        grossRate += stageOutput * stageGrossRate / 100;
-        projectRate += stageOutput * stageProjectRate / 100;
-      });
-      return {
-        workType,
-        grossRate,
-        projectRate,
-        companyRate: grossRate - projectRate,
-      };
-    });
-  }, [rule]);
-
   const updatePoolRate = (employeePoolRate: number) => {
     if (!rule) return;
     setRule({
@@ -86,16 +58,15 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
     });
   };
 
-  const updateCap = (workType: number, value: number) => {
+  const updateWorkRate = (workType: number, field: "grossRate" | "projectRate", value: number) => {
     if (!rule) return;
     setRule({
       ...rule,
-      stages: rule.stages.map((stage) => ({
-        ...stage,
-        workRules: stage.workRules.map((item) => item.workType === workType
-          ? { ...item, projectCapRate: value }
-          : item),
-      })),
+      workRates: rule.workRates.map((item) => {
+        if (item.workType !== workType) return item;
+        const next = { ...item, [field]: value };
+        return { ...next, companyRate: Math.max(0, next.grossRate - next.projectRate) };
+      }),
     });
   };
 
@@ -120,6 +91,17 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
       toast.error("名义员工池比例应在0-100之间");
       return;
     }
+    const grossTotal = rule.workRates.reduce((sum, item) => sum + Number(item.grossRate || 0), 0);
+    if (Math.abs(grossTotal - rule.employeePoolRate) > 0.01) {
+      toast.error(`三类工作占总收入比例合计应为${rule.employeePoolRate}%，当前为${grossTotal.toFixed(2)}%`);
+      return;
+    }
+    for (const item of rule.workRates) {
+      if (item.grossRate < 0 || item.projectRate < 0 || item.projectRate > item.grossRate) {
+        toast.error(`${WORK_LABELS[item.workType]}项目人员比例不能超过该工作类型占总收入比例`);
+        return;
+      }
+    }
     for (const stage of rule.stages) {
       const total = stage.workRules.reduce((sum, item) => sum + Number(item.workWeight || 0), 0);
       if (Math.abs(total - 100) > 0.01) {
@@ -133,6 +115,12 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
       const res = await saveOutputAllocationRule(projectTypeId, {
         employeePoolRate: rule.employeePoolRate,
         companyBaseRate: rule.companyBaseRate,
+        workRates: rule.workRates.map((item) => ({
+          workType: item.workType,
+          grossRate: item.grossRate,
+          projectRate: item.projectRate,
+          companyRate: Math.max(0, item.grossRate - item.projectRate),
+        })),
         stages: rule.stages.map((stage) => ({
           stageName: stage.stageName,
           stageOrder: stage.stageOrder,
@@ -196,14 +184,47 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
 
       {!loading && rule && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <NumberField label="名义员工池比例" value={rule.employeePoolRate} onChange={updatePoolRate} suffix="%" />
             <NumberField label="公司基础留存" value={rule.companyBaseRate} readOnly suffix="%" />
-            <NumberField label="管理工作项目上限" value={managementCap} onChange={(value) => updateCap(0, value)} suffix="%" />
-            <NumberField label="智励工作项目上限" value={wisdomCap} onChange={(value) => updateCap(2, value)} suffix="%" />
           </div>
 
           <div className="border border-slate-200 rounded-lg overflow-x-auto bg-white">
+            <div className="px-4 py-3 bg-slate-50 text-sm font-semibold text-slate-700">
+              固定汇总比例（用于产值分配计算）
+            </div>
+            <table className="w-full min-w-[560px] text-sm">
+              <thead className="text-xs text-slate-500">
+                <tr>
+                  <th className="text-left py-2 px-4 font-medium">工作类型</th>
+                  <th className="text-right py-2 px-4 font-medium">占总收入比例</th>
+                  <th className="text-right py-2 px-4 font-medium">项目人员分配比例</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rule.workRates.map((item) => (
+                  <tr key={item.workType} className="border-t border-slate-100">
+                    <td className="py-2 px-4 text-slate-700">{WORK_LABELS[item.workType]}</td>
+                    <td className="py-2 px-4">
+                      <RateInput
+                        value={item.grossRate}
+                        onChange={(value) => updateWorkRate(item.workType, "grossRate", value)}
+                      />
+                    </td>
+                    <td className="py-2 px-4">
+                      <RateInput
+                        value={item.projectRate}
+                        onChange={(value) => updateWorkRate(item.workType, "projectRate", value)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="border border-slate-200 rounded-lg overflow-x-auto bg-white">
+            <div className="px-4 py-3 bg-slate-50 text-sm font-semibold text-slate-700">阶段工作权重（表格依据）</div>
             <table className="w-full min-w-[760px] text-sm">
               <thead className="bg-slate-50 text-xs text-slate-500">
                 <tr>
@@ -248,31 +269,25 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
             </table>
           </div>
 
-          <div className="border border-slate-200 rounded-lg overflow-x-auto bg-white">
-            <div className="px-4 py-3 bg-slate-50 text-sm font-semibold text-slate-700">按当前阶段产值比例加权汇总</div>
-            <table className="w-full text-sm">
-              <thead className="text-xs text-slate-500">
-                <tr>
-                  <th className="text-left py-2 px-4 font-medium">工作类型</th>
-                  <th className="text-right py-2 px-4 font-medium">占总收入比例</th>
-                  <th className="text-right py-2 px-4 font-medium">项目人员分配</th>
-                  <th className="text-right py-2 px-4 font-medium">转公司</th>
-                </tr>
-              </thead>
-              <tbody>
-                {weightedSummary.map((item) => (
-                  <tr key={item.workType} className="border-t border-slate-100">
-                    <td className="py-2 px-4 text-slate-700">{WORK_LABELS[item.workType]}</td>
-                    <td className="py-2 px-4 text-right">{item.grossRate.toFixed(2)}%</td>
-                    <td className="py-2 px-4 text-right text-blue-700">{item.projectRate.toFixed(2)}%</td>
-                    <td className="py-2 px-4 text-right text-amber-700">{item.companyRate.toFixed(2)}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </>
       )}
+    </div>
+  );
+}
+
+function RateInput({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <div className="relative ml-auto w-32">
+      <input
+        type="number"
+        min={0}
+        max={100}
+        step={0.01}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full px-2 py-1.5 pr-7 border border-slate-200 rounded text-right"
+      />
+      <span className="absolute right-2 top-1.5 text-sm text-slate-400">%</span>
     </div>
   );
 }

@@ -70,10 +70,6 @@ public class OutputValueExcelData {
     @ColumnWidth(18)
     private BigDecimal companyBaseAmount;
 
-    @ExcelProperty("工作类型转公司(元)")
-    @ColumnWidth(20)
-    private BigDecimal workTransferAmount;
-
     @ExcelProperty("项目人员可分配(元)")
     @ColumnWidth(20)
     private BigDecimal projectPoolAmount;

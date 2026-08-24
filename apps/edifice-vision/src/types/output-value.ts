@@ -16,7 +16,7 @@ export interface DistributionItemVo {
   roleAllocRatio?: number | null;
   /** 兑现前计划金额 */
   plannedAmount?: number | null;
-  /** 兑现不足或离职转公司金额 */
+  /** 兑现不足或离职产生的内部差额 */
   companyDelta?: number | null;
   /** 0-员工正常/1-员工降档/2-领导兜底/3-公司留存/4-其他金额 */
   distType: number;

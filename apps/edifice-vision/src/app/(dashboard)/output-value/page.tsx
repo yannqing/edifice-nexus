@@ -358,6 +358,7 @@ export default function OutputValuePage() {
               {filtered.map((item) => {
                 const statusLabel = OUTPUT_VALUE_STATUS_MAP[item.status] ?? "未知";
                 const isExpanded = expandedId === item.outputValueId;
+                const usesWorkPools = item.allocationVersion?.startsWith("allocation_v") ?? false;
 
                 return (
                   <div key={item.outputValueId} className="glass-card rounded-2xl shadow-sm overflow-x-auto">
@@ -404,13 +405,13 @@ export default function OutputValuePage() {
                           <BreakdownBox label="当前阶段产值" value={item.currentStageAmount ?? item.stageCumulativeAmount ?? 0} tone="blue" />
                           <BreakdownBox label="历史补差合计" value={item.adjustmentAmount ?? item.previousCumulativeAmount ?? 0} tone="amber" />
                           <BreakdownBox
-                            label={item.allocationVersion === "allocation_v2" ? "项目人员可分配" : "员工池"}
-                            value={item.allocationVersion === "allocation_v2"
+                            label={usesWorkPools ? "项目人员可分配" : "员工池"}
+                            value={usesWorkPools
                               ? (item.projectPoolAmount ?? 0)
                               : Math.round((item.totalAmount ?? 0) * 0.4 * 100) / 100}
                             tone="slate"
                           />
-                          <BreakdownBox label="公司账（基础 + 转入）" value={item.companyReserve ?? 0} tone="rose" />
+                          <BreakdownBox label="公司留存" value={item.companyReserve ?? 0} tone="rose" />
                         </div>
                         {item.stageCumulativeAmount != null && (
                           <p className="text-xs text-slate-400 mt-2">
@@ -426,29 +427,25 @@ export default function OutputValuePage() {
                         {(item.workPools ?? []).length > 0 && (
                           <div className="mt-4 border border-slate-200 rounded-lg overflow-x-auto">
                             <div className="px-3 py-2 bg-slate-50 text-sm font-semibold text-slate-700">
-                              工作类型资金池
+                              项目人员分配资金池
                               <span className="ml-2 text-xs font-normal text-slate-400">
                                 {item.allocationVersion} · 规则 #{item.allocationRuleVersionId}
                               </span>
                             </div>
-                            <table className="w-full min-w-[700px] text-xs">
+                            <table className="w-full min-w-[460px] text-xs">
                               <thead className="text-slate-500">
                                 <tr>
                                   <th className="text-left py-2 px-3 font-medium">工作类型</th>
-                                  <th className="text-right py-2 px-3 font-medium">本期综合权重</th>
-                                  <th className="text-right py-2 px-3 font-medium">名义金额</th>
-                                  <th className="text-right py-2 px-3 font-medium">项目分配</th>
-                                  <th className="text-right py-2 px-3 font-medium">转公司</th>
+                                  <th className="text-right py-2 px-3 font-medium">项目人员分配比例</th>
+                                  <th className="text-right py-2 px-3 font-medium">项目人员可分配金额</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {(item.workPools ?? []).map((pool) => (
                                   <tr key={pool.workPoolId ?? pool.workType} className="border-t border-slate-100">
                                     <td className="py-2 px-3 text-slate-700">{pool.workTypeName}</td>
-                                    <td className="py-2 px-3 text-right">{pool.workWeight}%</td>
-                                    <td className="py-2 px-3 text-right">{pool.grossRate}% · {formatAmount(pool.grossAmount)}</td>
-                                    <td className="py-2 px-3 text-right text-blue-700">{pool.projectRate}% · {formatAmount(pool.projectAmount)}</td>
-                                    <td className="py-2 px-3 text-right text-amber-700">{pool.companyRate}% · {formatAmount(pool.companyAmount)}</td>
+                                    <td className="py-2 px-3 text-right text-blue-700">{pool.projectRate}%</td>
+                                    <td className="py-2 px-3 text-right text-blue-700">{formatAmount(pool.projectAmount)}</td>
                                   </tr>
                                 ))}
                               </tbody>

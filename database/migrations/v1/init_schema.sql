@@ -464,6 +464,21 @@ create table output_allocation_rule_item
     key idx_output_rule_item_version (rule_version_id, stage_order, work_type)
 ) comment '产值分配阶段工作权重';
 
+create table output_allocation_rule_pool_rate
+(
+    pool_rate_id         bigint auto_increment primary key,
+    rule_version_id      bigint                             not null,
+    work_type            tinyint                            not null,
+    gross_rate           decimal(10, 4)                     not null,
+    project_rate         decimal(10, 4)                     not null,
+    company_rate         decimal(10, 4)                     not null,
+    created_time         datetime default CURRENT_TIMESTAMP not null,
+    updated_time         datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP,
+    is_delete            tinyint  default 0                 not null,
+    unique key uk_output_rule_pool_rate (rule_version_id, work_type),
+    key idx_output_rule_pool_rate_version (rule_version_id, is_delete)
+) comment '产值分配固定汇总比例';
+
 create table output_value_work_pool
 (
     work_pool_id         bigint auto_increment primary key,

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.qsy.edifice.domain.dto.SaveOutputAllocationRuleDto;
 import com.qsy.edifice.domain.entity.OutputAllocationRuleItem;
+import com.qsy.edifice.domain.entity.OutputAllocationRulePoolRate;
 import com.qsy.edifice.domain.entity.OutputAllocationRuleVersion;
 import com.qsy.edifice.domain.entity.OutputValueWorkPool;
 import com.qsy.edifice.domain.entity.Project;
@@ -15,6 +16,7 @@ import com.qsy.edifice.domain.vo.OutputAllocationRuleVo;
 import com.qsy.edifice.enums.ErrorType;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.OutputAllocationRuleItemMapper;
+import com.qsy.edifice.mapper.OutputAllocationRulePoolRateMapper;
 import com.qsy.edifice.mapper.OutputAllocationRuleVersionMapper;
 import com.qsy.edifice.mapper.OutputValueWorkPoolMapper;
 import com.qsy.edifice.service.OutputAllocationRuleService;
@@ -53,6 +55,9 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
 
     @Resource
     private OutputAllocationRuleItemMapper ruleItemMapper;
+
+    @Resource
+    private OutputAllocationRulePoolRateMapper poolRateMapper;
 
     @Resource
     private OutputValueWorkPoolMapper workPoolMapper;
@@ -116,6 +121,16 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
                 .build();
         ruleVersionMapper.insert(version);
 
+        for (SaveOutputAllocationRuleDto.WorkRate workRate : dto.getWorkRates()) {
+            poolRateMapper.insert(OutputAllocationRulePoolRate.builder()
+                    .ruleVersionId(version.getRuleVersionId())
+                    .workType(workRate.getWorkType())
+                    .grossRate(workRate.getGrossRate())
+                    .projectRate(workRate.getProjectRate())
+                    .companyRate(workRate.getCompanyRate())
+                    .build());
+        }
+
         for (SaveOutputAllocationRuleDto.StageRule stage : dto.getStages()) {
             for (SaveOutputAllocationRuleDto.WorkRule workRule : stage.getWorkRules()) {
                 ruleItemMapper.insert(OutputAllocationRuleItem.builder()
@@ -145,38 +160,20 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
             throw new BusinessException(ErrorType.OPERATION_FAILED, "当前项目类型未配置产值分配规则，请联系管理员");
         }
 
-        LambdaQueryWrapper<OutputAllocationRuleItem> itemWrapper = new LambdaQueryWrapper<>();
-        itemWrapper.eq(OutputAllocationRuleItem::getRuleVersionId, version.getRuleVersionId())
-                .eq(OutputAllocationRuleItem::getStageName, stage.getStageName())
-                .orderByAsc(OutputAllocationRuleItem::getWorkType);
-        List<OutputAllocationRuleItem> items = ruleItemMapper.selectList(itemWrapper);
-        if (items.size() != WORK_TYPES.size()) {
-            List<ProjectStage> projectStages = projectStageService.getProjectStagesByProjectId(projectId);
-            int stageIndex = -1;
-            for (int i = 0; i < projectStages.size(); i++) {
-                if (projectStageId.equals(projectStages.get(i).getProjectStageId())) {
-                    stageIndex = i;
-                    break;
-                }
-            }
-            if (stageIndex >= 0) {
-                LambdaQueryWrapper<OutputAllocationRuleItem> orderFallback = new LambdaQueryWrapper<>();
-                orderFallback.eq(OutputAllocationRuleItem::getRuleVersionId, version.getRuleVersionId())
-                        .eq(OutputAllocationRuleItem::getStageOrder, stageIndex + 1)
-                        .orderByAsc(OutputAllocationRuleItem::getWorkType);
-                items = ruleItemMapper.selectList(orderFallback);
-            }
-        }
-        if (items.size() != WORK_TYPES.size()) {
+        LambdaQueryWrapper<OutputAllocationRulePoolRate> rateWrapper = new LambdaQueryWrapper<>();
+        rateWrapper.eq(OutputAllocationRulePoolRate::getRuleVersionId, version.getRuleVersionId())
+                .orderByAsc(OutputAllocationRulePoolRate::getWorkType);
+        List<OutputAllocationRulePoolRate> rates = poolRateMapper.selectList(rateWrapper);
+        if (rates.size() != WORK_TYPES.size()) {
             throw new BusinessException(ErrorType.OPERATION_FAILED,
-                    "阶段[" + stage.getStageName() + "]未配置完整的产值分配规则");
+                    "当前项目类型未配置完整的固定汇总比例，请联系管理员");
         }
 
-        List<OutputAllocationCalculator.WorkRule> rules = items.stream()
-                .map(item -> new OutputAllocationCalculator.WorkRule(
-                        item.getWorkType(), item.getWorkWeight(), item.getProjectCapRate()))
+        List<OutputAllocationCalculator.PoolRateRule> rules = rates.stream()
+                .map(rate -> new OutputAllocationCalculator.PoolRateRule(
+                        rate.getWorkType(), rate.getGrossRate(), rate.getProjectRate(), rate.getCompanyRate()))
                 .toList();
-        return OutputAllocationCalculator.calculate(
+        return OutputAllocationCalculator.calculateByRates(
                 totalAmount,
                 version.getRuleVersionId(),
                 version.getVersionNo(),
@@ -216,6 +213,7 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
                 .compareTo(RATE_TOLERANCE) > 0) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "员工池比例与公司基础比例合计必须为100%");
         }
+        validateWorkRates(dto);
         if (dto.getStages() == null || dto.getStages().isEmpty()) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "阶段分配规则不能为空");
         }
@@ -268,8 +266,37 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
         }
     }
 
+    private void validateWorkRates(SaveOutputAllocationRuleDto dto) {
+        if (dto.getWorkRates() == null || dto.getWorkRates().size() != WORK_TYPES.size()) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "必须配置管理、基础、智励三类固定汇总比例");
+        }
+        Set<Integer> submittedTypes = new HashSet<>();
+        BigDecimal grossTotal = BigDecimal.ZERO;
+        for (SaveOutputAllocationRuleDto.WorkRate rate : dto.getWorkRates()) {
+            if (rate == null || !WORK_TYPES.contains(rate.getWorkType())
+                    || !submittedTypes.add(rate.getWorkType())
+                    || rate.getGrossRate() == null || rate.getProjectRate() == null || rate.getCompanyRate() == null
+                    || rate.getGrossRate().signum() < 0 || rate.getProjectRate().signum() < 0
+                    || rate.getCompanyRate().signum() < 0) {
+                throw new BusinessException(ErrorType.ARGS_INVALID, "固定汇总比例配置无效");
+            }
+            if (rate.getProjectRate().add(rate.getCompanyRate()).subtract(rate.getGrossRate()).abs()
+                    .compareTo(RATE_TOLERANCE) > 0) {
+                throw new BusinessException(ErrorType.ARGS_INVALID,
+                        WORK_TYPE_NAMES.get(rate.getWorkType()) + "占总收入比例必须等于项目与公司比例之和");
+            }
+            grossTotal = grossTotal.add(rate.getGrossRate());
+        }
+        if (grossTotal.subtract(dto.getEmployeePoolRate()).abs().compareTo(RATE_TOLERANCE) > 0) {
+            throw new BusinessException(ErrorType.ARGS_INVALID,
+                    "三类工作占总收入比例合计必须等于名义员工池比例");
+        }
+    }
+
     private OutputAllocationRuleVo toVo(OutputAllocationRuleVersion version) {
         ProjectType projectType = projectTypeService.getProjectTypeById(version.getProjectTypeId());
+        List<OutputAllocationRuleVo.WorkRateVo> workRates = getWorkRateVos(
+                version.getRuleVersionId(), projectType == null ? null : projectType.getProjectTypeCode());
         LambdaQueryWrapper<OutputAllocationRuleItem> itemWrapper = new LambdaQueryWrapper<>();
         itemWrapper.eq(OutputAllocationRuleItem::getRuleVersionId, version.getRuleVersionId())
                 .orderByAsc(OutputAllocationRuleItem::getStageOrder)
@@ -315,6 +342,7 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
                 version.getEmployeePoolRate(),
                 version.getCompanyBaseRate(),
                 version.getEffectiveTime(),
+                workRates,
                 stages
         );
     }
@@ -337,6 +365,7 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
                 new BigDecimal("40"),
                 new BigDecimal("60"),
                 null,
+                defaultWorkRates(projectType.getProjectTypeCode()),
                 stages
         );
     }
@@ -347,5 +376,62 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
                 new OutputAllocationRuleVo.WorkRuleVo(1, WORK_TYPE_NAMES.get(1), new BigDecimal("100"), null),
                 new OutputAllocationRuleVo.WorkRuleVo(2, WORK_TYPE_NAMES.get(2), BigDecimal.ZERO, new BigDecimal("4"))
         );
+    }
+
+    private List<OutputAllocationRuleVo.WorkRateVo> getWorkRateVos(Long ruleVersionId, String projectTypeCode) {
+        LambdaQueryWrapper<OutputAllocationRulePoolRate> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(OutputAllocationRulePoolRate::getRuleVersionId, ruleVersionId)
+                .orderByAsc(OutputAllocationRulePoolRate::getWorkType);
+        List<OutputAllocationRulePoolRate> rates = poolRateMapper.selectList(wrapper);
+        if (rates.size() != WORK_TYPES.size()) {
+            return defaultWorkRates(projectTypeCode);
+        }
+        return rates.stream()
+                .map(rate -> new OutputAllocationRuleVo.WorkRateVo(
+                        rate.getWorkType(),
+                        WORK_TYPE_NAMES.get(rate.getWorkType()),
+                        rate.getGrossRate(),
+                        rate.getProjectRate(),
+                        rate.getCompanyRate()))
+                .toList();
+    }
+
+    private List<OutputAllocationRuleVo.WorkRateVo> defaultWorkRates(String projectTypeCode) {
+        return switch (projectTypeCode == null ? "" : projectTypeCode) {
+            case "A" -> workRates("8.06", "4", "4.06", "20.28", "20.28", "0", "11.66", "4", "7.66");
+            case "B" -> workRates("8.20", "4", "4.20", "20", "20", "0", "11.80", "4", "7.80");
+            case "C" -> workRates("8", "4", "4", "20.80", "20.80", "0", "11.20", "4", "7.20");
+            case "D" -> workRates("9.20", "4", "5.20", "18", "18", "0", "12.80", "4", "8.80");
+            case "E" -> workRates("7.60", "4", "3.60", "20.40", "20.40", "0", "12", "4", "8");
+            default -> workRates("0", "0", "0", "40", "40", "0", "0", "0", "0");
+        };
+    }
+
+    private List<OutputAllocationRuleVo.WorkRateVo> workRates(String managementGross,
+                                                               String managementProject,
+                                                               String managementCompany,
+                                                               String baseGross,
+                                                               String baseProject,
+                                                               String baseCompany,
+                                                               String wisdomGross,
+                                                               String wisdomProject,
+                                                               String wisdomCompany) {
+        return List.of(
+                workRate(0, managementGross, managementProject, managementCompany),
+                workRate(1, baseGross, baseProject, baseCompany),
+                workRate(2, wisdomGross, wisdomProject, wisdomCompany)
+        );
+    }
+
+    private OutputAllocationRuleVo.WorkRateVo workRate(Integer workType,
+                                                         String grossRate,
+                                                         String projectRate,
+                                                         String companyRate) {
+        return new OutputAllocationRuleVo.WorkRateVo(
+                workType,
+                WORK_TYPE_NAMES.get(workType),
+                new BigDecimal(grossRate),
+                new BigDecimal(projectRate),
+                new BigDecimal(companyRate));
     }
 }

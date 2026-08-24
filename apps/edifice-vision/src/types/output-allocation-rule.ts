@@ -12,6 +12,14 @@ export interface OutputAllocationStageRule {
   workRules: OutputAllocationWorkRule[];
 }
 
+export interface OutputAllocationWorkRate {
+  workType: number;
+  workTypeName: string;
+  grossRate: number;
+  projectRate: number;
+  companyRate: number;
+}
+
 export interface OutputAllocationRule {
   ruleVersionId: string | null;
   projectTypeId: string;
@@ -21,12 +29,19 @@ export interface OutputAllocationRule {
   employeePoolRate: number;
   companyBaseRate: number;
   effectiveTime?: string | null;
+  workRates: OutputAllocationWorkRate[];
   stages: OutputAllocationStageRule[];
 }
 
 export interface SaveOutputAllocationRuleParams {
   employeePoolRate: number;
   companyBaseRate: number;
+  workRates: Array<{
+    workType: number;
+    grossRate: number;
+    projectRate: number;
+    companyRate: number;
+  }>;
   stages: Array<{
     stageName: string;
     stageOrder: number;

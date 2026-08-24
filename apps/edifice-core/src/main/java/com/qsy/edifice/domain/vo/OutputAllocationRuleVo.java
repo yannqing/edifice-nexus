@@ -27,7 +27,19 @@ public class OutputAllocationRuleVo {
     private BigDecimal employeePoolRate;
     private BigDecimal companyBaseRate;
     private LocalDateTime effectiveTime;
+    private List<WorkRateVo> workRates;
     private List<StageRuleVo> stages;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class WorkRateVo {
+        private Integer workType;
+        private String workTypeName;
+        private BigDecimal grossRate;
+        private BigDecimal projectRate;
+        private BigDecimal companyRate;
+    }
 
     @Data
     @NoArgsConstructor

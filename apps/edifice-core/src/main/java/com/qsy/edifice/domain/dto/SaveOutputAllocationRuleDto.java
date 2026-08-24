@@ -14,7 +14,18 @@ public class SaveOutputAllocationRuleDto {
 
     private BigDecimal employeePoolRate;
     private BigDecimal companyBaseRate;
+    private List<WorkRate> workRates;
     private List<StageRule> stages;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class WorkRate {
+        private Integer workType;
+        private BigDecimal grossRate;
+        private BigDecimal projectRate;
+        private BigDecimal companyRate;
+    }
 
     @Data
     @NoArgsConstructor

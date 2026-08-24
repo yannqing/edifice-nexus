@@ -12,6 +12,36 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 class OutputAllocationCalculatorTests {
 
     @Test
+    void usesExactFullSettlementAggregateRatesWithoutStageCaps() {
+        OutputAllocationContext result = OutputAllocationCalculator.calculateByRates(
+                new BigDecimal("10920"),
+                2L,
+                2,
+                new BigDecimal("40"),
+                new BigDecimal("60"),
+                List.of(
+                        new OutputAllocationCalculator.PoolRateRule(0, new BigDecimal("8.06"), new BigDecimal("4"), new BigDecimal("4.06")),
+                        new OutputAllocationCalculator.PoolRateRule(1, new BigDecimal("20.28"), new BigDecimal("20.28"), BigDecimal.ZERO),
+                        new OutputAllocationCalculator.PoolRateRule(2, new BigDecimal("11.66"), new BigDecimal("4"), new BigDecimal("7.66"))
+                )
+        );
+
+        assertMoney("4368.00", result.getEmployeePoolAmount());
+        assertMoney("6552.00", result.getCompanyBaseAmount());
+        assertMoney("3088.18", result.getProjectPoolAmount());
+        assertMoney("1279.82", result.getWorkTransferAmount());
+
+        assertPool(result.getWorkPools().get(0), "880.15", "436.80", "443.35");
+        assertPool(result.getWorkPools().get(1), "2214.58", "2214.58", "0.00");
+        assertPool(result.getWorkPools().get(2), "1273.27", "436.80", "836.47");
+
+        BigDecimal invariant = result.getCompanyBaseAmount()
+                .add(result.getWorkTransferAmount())
+                .add(result.getProjectPoolAmount());
+        assertMoney("10920.00", invariant);
+    }
+
+    @Test
     void splitsFullSettlementSecondStageIntoIndependentWorkPools() {
         OutputAllocationContext result = OutputAllocationCalculator.calculate(
                 new BigDecimal("10920"),
