@@ -112,46 +112,50 @@ export function UserPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl p-0">
-        <DialogHeader className="border-b border-slate-100 px-5 pb-4 pt-5 sm:px-6">
+      <DialogContent className="flex h-[min(720px,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] max-w-xl flex-col overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b border-slate-100 px-5 pb-4 pt-5 pr-12 sm:px-6 sm:pr-12">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>仅显示在职且已启用的员工</DialogDescription>
         </DialogHeader>
 
-        <div className="px-5 pt-4 sm:px-6">
+        <div className="shrink-0 px-5 pt-4 sm:px-6">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
               placeholder="搜索姓名、用户名、工号或手机号"
-              className="form-input pl-9"
+              className="h-10 w-full rounded-md border border-slate-200 bg-white py-2 pl-10 pr-3 text-sm outline-none transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               autoFocus
             />
           </div>
         </div>
 
-        <div className="min-h-[352px] px-5 py-4 sm:px-6">
+        <div className="min-h-0 flex-1 px-5 py-4 sm:px-6">
           {loading ? (
-            <div className="flex min-h-[320px] items-center justify-center gap-2 text-sm text-slate-500">
+            <div className="flex h-full items-center justify-center gap-2 text-sm text-slate-500">
               <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
               正在加载员工列表...
             </div>
           ) : loadError ? (
-            <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-center">
+            <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
               <p className="text-sm text-slate-500">{loadError}</p>
               <Button variant="outline" size="sm" onClick={() => setReloadVersion((value) => value + 1)}>
                 重新加载
               </Button>
             </div>
           ) : users.length === 0 ? (
-            <div className="flex min-h-[320px] flex-col items-center justify-center text-center">
+            <div className="flex h-full flex-col items-center justify-center text-center">
               <Users className="mb-3 h-8 w-8 text-slate-300" />
               <p className="text-sm font-medium text-slate-700">没有找到员工</p>
               <p className="mt-1 text-xs text-slate-400">请调整搜索条件后重试</p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-md border border-slate-200" role="radiogroup" aria-label="审批人列表">
+            <div
+              className="h-full overflow-y-auto overscroll-contain rounded-md border border-slate-200"
+              role="radiogroup"
+              aria-label="审批人列表"
+            >
               {users.map((user) => {
                 const active = selectedId === String(user.userId);
                 return (
@@ -197,7 +201,7 @@ export function UserPickerDialog({
           )}
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="flex shrink-0 flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <span>共 {total} 人</span>
             <span>第 {currentPage} / {totalPages} 页</span>
