@@ -432,11 +432,12 @@ export default function OutputValuePage() {
                                 {item.allocationVersion} · 规则 #{item.allocationRuleVersionId}
                               </span>
                             </div>
-                            <table className="w-full min-w-[460px] text-xs">
+                            <table className="w-full min-w-[620px] text-xs">
                               <thead className="text-slate-500">
                                 <tr>
                                   <th className="text-left py-2 px-3 font-medium">工作类型</th>
-                                  <th className="text-right py-2 px-3 font-medium">项目人员分配比例</th>
+                                  <th className="text-right py-2 px-3 font-medium">阶段工作权重</th>
+                                  <th className="text-right py-2 px-3 font-medium">项目人员占本阶段</th>
                                   <th className="text-right py-2 px-3 font-medium">项目人员可分配金额</th>
                                 </tr>
                               </thead>
@@ -444,6 +445,7 @@ export default function OutputValuePage() {
                                 {(item.workPools ?? []).map((pool) => (
                                   <tr key={pool.workPoolId ?? pool.workType} className="border-t border-slate-100">
                                     <td className="py-2 px-3 text-slate-700">{pool.workTypeName}</td>
+                                    <td className="py-2 px-3 text-right">{pool.workWeight}%</td>
                                     <td className="py-2 px-3 text-right text-blue-700">{pool.projectRate}%</td>
                                     <td className="py-2 px-3 text-right text-blue-700">{formatAmount(pool.projectAmount)}</td>
                                   </tr>

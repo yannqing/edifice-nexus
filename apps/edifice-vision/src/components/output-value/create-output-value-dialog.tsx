@@ -760,8 +760,9 @@ export function CreateOutputValueDialog({
                 <section key={pool.workType} className="border border-slate-200 rounded-lg overflow-hidden">
                   <div className="flex flex-wrap items-center gap-3 bg-slate-50 px-3 py-2">
                     <span className="text-sm font-semibold text-slate-700">{pool.workTypeName}</span>
+                    <span className="text-xs text-slate-500">阶段工作权重 {pool.workWeight}%</span>
                     <span className="text-xs font-medium text-blue-700">
-                      项目分配 {pool.projectRate}% · ¥{pool.projectAmount.toLocaleString()}
+                      项目人员占本阶段 {pool.projectRate}% · ¥{pool.projectAmount.toLocaleString()}
                     </span>
                     <div className="flex-1" />
                     {!isZeroPool && (

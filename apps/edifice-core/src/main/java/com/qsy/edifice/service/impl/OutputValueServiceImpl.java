@@ -45,7 +45,8 @@ import java.util.stream.Collectors;
  *   基本+效益：本期 totalAmount = contract.base_amount × stage.stage_output / 100
  *                              + contract.benefit_amount × stage.benefit_inclusion_ratio / 100
  *
- *   allocation_v3 按项目类型固定汇总比例拆分管理/基础/智励工作资金池，
+ *   allocation_v4 先按系统阶段对应的工作权重拆分40%名义池，
+ *   再按表格汇总的项目比例/类型总比例拆分项目人员金额。
  *   再在每个工作类型资金池内按 roleAllocRatio 分配给人员。
  *   planned_i      = workPool.projectAmount × roleAllocRatio_i / 100
  *   actual_i       = planned_i × completionRatio_i / 100  （在职员工）
@@ -228,7 +229,7 @@ public class OutputValueServiceImpl implements OutputValueService {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "本次多退少补结果为负，请先在规则配置中允许负产值");
         }
 
-        // 2. allocation_v3：按项目类型固定汇总比例拆出三个工作类型资金池
+        // 2. allocation_v4：按系统阶段工作权重和表格汇总比例拆出三个工作类型资金池
         OutputAllocationContext allocation = calculateAllocation(
                 dto.getProjectId(), dto.getProjectStageId(), calculation);
         Map<Integer, OutputAllocationContext.WorkPool> poolByWorkType = allocation.getWorkPools().stream()
@@ -396,7 +397,7 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .baseAmountSnapshot(calculation.baseAmount)
                 .benefitAmountSnapshot(calculation.benefitAmount)
                 .calculationVersion("output_adjustment_v1")
-                .allocationVersion("allocation_v3")
+                .allocationVersion("allocation_v4")
                 .allocationRuleVersionId(allocation.getRuleVersionId())
                 .employeePoolAmount(allocation.getEmployeePoolAmount())
                 .companyBaseAmount(allocation.getCompanyBaseAmount())
@@ -440,7 +441,7 @@ public class OutputValueServiceImpl implements OutputValueService {
             distributionMapper.insert(d);
         }
 
-        log.info("[allocation_v3] 创建产值分配单 id={} 季度={} total={}（当前阶段{} + 补差{}；基本{} + 效益{}） 项目人员池={} 公司内部留存={} 公司账={} 员工实得={}",
+        log.info("[allocation_v4] 创建产值分配单 id={} 季度={} total={}（当前阶段{} + 补差{}；基本{} + 效益{}） 项目人员池={} 公司内部留存={} 公司账={} 员工实得={}",
                 ov.getOutputValueId(), ov.getQuarter(), total,
                 calculation.currentStageAmount, calculation.adjustmentAmount,
                 calculation.basePart, calculation.benefitPart,
@@ -696,7 +697,7 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setAlreadyAllocated(calculation.alreadyAllocated);
         vo.setIncrementalRatio(calculation.incrementalRatio);
         vo.setCoefficient(calculation.coefficient);
-        vo.setAllocationVersion("allocation_v3");
+        vo.setAllocationVersion("allocation_v4");
         vo.setAllocationRuleVersionId(allocation.getRuleVersionId());
         vo.setAllocationRuleVersionNo(allocation.getRuleVersionNo());
         vo.setEmployeePoolRate(allocation.getEmployeePoolRate());

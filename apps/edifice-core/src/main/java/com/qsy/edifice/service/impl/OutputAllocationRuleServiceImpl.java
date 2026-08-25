@@ -160,6 +160,33 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
             throw new BusinessException(ErrorType.OPERATION_FAILED, "当前项目类型未配置产值分配规则，请联系管理员");
         }
 
+        LambdaQueryWrapper<OutputAllocationRuleItem> itemWrapper = new LambdaQueryWrapper<>();
+        itemWrapper.eq(OutputAllocationRuleItem::getRuleVersionId, version.getRuleVersionId())
+                .eq(OutputAllocationRuleItem::getStageName, stage.getStageName())
+                .orderByAsc(OutputAllocationRuleItem::getWorkType);
+        List<OutputAllocationRuleItem> items = ruleItemMapper.selectList(itemWrapper);
+        if (items.size() != WORK_TYPES.size()) {
+            List<ProjectStage> projectStages = projectStageService.getProjectStagesByProjectId(projectId);
+            int stageIndex = -1;
+            for (int index = 0; index < projectStages.size(); index++) {
+                if (projectStageId.equals(projectStages.get(index).getProjectStageId())) {
+                    stageIndex = index;
+                    break;
+                }
+            }
+            if (stageIndex >= 0) {
+                LambdaQueryWrapper<OutputAllocationRuleItem> orderFallback = new LambdaQueryWrapper<>();
+                orderFallback.eq(OutputAllocationRuleItem::getRuleVersionId, version.getRuleVersionId())
+                        .eq(OutputAllocationRuleItem::getStageOrder, stageIndex + 1)
+                        .orderByAsc(OutputAllocationRuleItem::getWorkType);
+                items = ruleItemMapper.selectList(orderFallback);
+            }
+        }
+        if (items.size() != WORK_TYPES.size()) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED,
+                    "阶段[" + stage.getStageName() + "]未配置完整的工作类型权重");
+        }
+
         LambdaQueryWrapper<OutputAllocationRulePoolRate> rateWrapper = new LambdaQueryWrapper<>();
         rateWrapper.eq(OutputAllocationRulePoolRate::getRuleVersionId, version.getRuleVersionId())
                 .orderByAsc(OutputAllocationRulePoolRate::getWorkType);
@@ -169,17 +196,22 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
                     "当前项目类型未配置完整的固定汇总比例，请联系管理员");
         }
 
-        List<OutputAllocationCalculator.PoolRateRule> rules = rates.stream()
+        List<OutputAllocationCalculator.StageWeightRule> stageRules = items.stream()
+                .map(item -> new OutputAllocationCalculator.StageWeightRule(
+                        item.getWorkType(), item.getWorkWeight()))
+                .toList();
+        List<OutputAllocationCalculator.PoolRateRule> poolRateRules = rates.stream()
                 .map(rate -> new OutputAllocationCalculator.PoolRateRule(
                         rate.getWorkType(), rate.getGrossRate(), rate.getProjectRate(), rate.getCompanyRate()))
                 .toList();
-        return OutputAllocationCalculator.calculateByRates(
+        return OutputAllocationCalculator.calculate(
                 totalAmount,
                 version.getRuleVersionId(),
                 version.getVersionNo(),
                 version.getEmployeePoolRate(),
                 version.getCompanyBaseRate(),
-                rules
+                stageRules,
+                poolRateRules
         );
     }
 
