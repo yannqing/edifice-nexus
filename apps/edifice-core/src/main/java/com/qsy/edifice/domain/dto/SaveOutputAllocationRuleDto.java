@@ -33,6 +33,7 @@ public class SaveOutputAllocationRuleDto {
     public static class StageRule {
         private String stageName;
         private Integer stageOrder;
+        private BigDecimal stageOutput;
         private List<WorkRule> workRules;
     }
 

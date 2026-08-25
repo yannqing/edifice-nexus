@@ -45,6 +45,7 @@ export interface SaveOutputAllocationRuleParams {
   stages: Array<{
     stageName: string;
     stageOrder: number;
+    stageOutput: number;
     workRules: Array<{
       workType: number;
       workWeight: number;

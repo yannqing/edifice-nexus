@@ -51,4 +51,22 @@
         AND stage_status = #{stageStatus}
         AND is_delete = 0
     </select>
+
+    <update id="updateUnallocatedStageOutput">
+        UPDATE project_stage ps
+        INNER JOIN project p
+            ON p.project_id = ps.project_id
+            AND p.is_delete = 0
+        SET ps.stage_output = #{stageOutput},
+            ps.updated_time = CURRENT_TIMESTAMP
+        WHERE p.project_type = #{projectTypeId}
+          AND ps.stage_name = #{stageName}
+          AND ps.is_delete = 0
+          AND NOT EXISTS (
+              SELECT 1
+              FROM output_value ov
+              WHERE ov.project_stage_id = ps.project_stage_id
+                AND ov.is_delete = 0
+          )
+    </update>
 </mapper>

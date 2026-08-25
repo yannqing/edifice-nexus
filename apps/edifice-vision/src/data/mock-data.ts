@@ -309,6 +309,13 @@ export const navigationConfig: NavSection[] = [
         href: "/output-value",
         permissionCode: "menu:output-value",
       },
+      {
+        id: "performance-rules",
+        label: "绩效规则",
+        icon: "Percent",
+        href: "/performance-rules",
+        permissionCode: "menu:performance-rules",
+      },
     ],
   },
   {

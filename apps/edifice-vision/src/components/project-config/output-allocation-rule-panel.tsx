@@ -19,9 +19,15 @@ const WORK_LABELS: Record<number, string> = {
 
 interface OutputAllocationRulePanelProps {
   projectTypes: ProjectTypeVo[];
+  editableStageOutput?: boolean;
+  showAggregateRates?: boolean;
 }
 
-export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRulePanelProps) {
+export function OutputAllocationRulePanel({
+  projectTypes,
+  editableStageOutput = false,
+  showAggregateRates = true,
+}: OutputAllocationRulePanelProps) {
   const [projectTypeId, setProjectTypeId] = useState("");
   const [rule, setRule] = useState<OutputAllocationRule | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,17 +42,24 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
   useEffect(() => {
     if (!projectTypeId) return;
     const controller = new AbortController();
+    let active = true;
     setLoading(true);
     getOutputAllocationRule(projectTypeId, controller.signal)
       .then((res) => {
+        if (!active) return;
         if (res.code === ResponseCode.SUCCESS && res.data) setRule(res.data);
         else setRule(null);
       })
       .catch((error) => {
-        if (!isAbortError(error)) setRule(null);
+        if (active && !isAbortError(error)) setRule(null);
       })
-      .finally(() => setLoading(false));
-    return () => controller.abort();
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [projectTypeId]);
 
   const updatePoolRate = (employeePoolRate: number) => {
@@ -85,6 +98,16 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
     });
   };
 
+  const updateStageOutput = (stageName: string, value: number) => {
+    if (!rule) return;
+    setRule({
+      ...rule,
+      stages: rule.stages.map((stage) => stage.stageName === stageName
+        ? { ...stage, stageOutput: value }
+        : stage),
+    });
+  };
+
   const handleSave = async () => {
     if (!rule) return;
     if (rule.employeePoolRate < 0 || rule.employeePoolRate > 100) {
@@ -103,11 +126,23 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
       }
     }
     for (const stage of rule.stages) {
+      if (stage.stageOutput === null || stage.stageOutput < 0 || stage.stageOutput > 100) {
+        toast.error(`${stage.stageName}阶段产值比例应在0-100之间`);
+        return;
+      }
       const total = stage.workRules.reduce((sum, item) => sum + Number(item.workWeight || 0), 0);
       if (Math.abs(total - 100) > 0.01) {
         toast.error(`${stage.stageName}三类工作权重合计应为100%，当前为${total.toFixed(2)}%`);
         return;
       }
+    }
+    const stageOutputTotal = rule.stages.reduce(
+      (sum, stage) => sum + Number(stage.stageOutput || 0),
+      0,
+    );
+    if (Math.abs(stageOutputTotal - 100) > 0.01) {
+      toast.error(`各阶段产值比例合计应为100%，当前为${stageOutputTotal.toFixed(2)}%`);
+      return;
     }
 
     setSaving(true);
@@ -124,6 +159,7 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
         stages: rule.stages.map((stage) => ({
           stageName: stage.stageName,
           stageOrder: stage.stageOrder,
+          stageOutput: Number(stage.stageOutput || 0),
           workRules: stage.workRules.map((item) => ({
             workType: item.workType,
             workWeight: item.workWeight,
@@ -166,7 +202,7 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
           </span>
         )}
         <div className="flex-1" />
-        <Button onClick={handleSave} disabled={!rule || saving}>
+        <Button onClick={handleSave} disabled={!rule || loading || saving}>
           {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Save className="w-4 h-4 mr-1" />}
           保存为新版本
         </Button>
@@ -184,47 +220,51 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
 
       {!loading && rule && (
         <>
-          <div className="grid grid-cols-2 gap-3">
-            <NumberField label="名义员工池比例" value={rule.employeePoolRate} onChange={updatePoolRate} suffix="%" />
-            <NumberField label="公司基础留存" value={rule.companyBaseRate} readOnly suffix="%" />
-          </div>
+          {showAggregateRates && (
+            <>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <NumberField label="名义员工池比例" value={rule.employeePoolRate} onChange={updatePoolRate} suffix="%" />
+                <NumberField label="公司基础留存" value={rule.companyBaseRate} readOnly suffix="%" />
+              </div>
+
+              <div className="border border-slate-200 rounded-lg overflow-x-auto bg-white">
+                <div className="px-4 py-3 bg-slate-50 text-sm font-semibold text-slate-700">
+                  固定汇总比例（用于产值分配计算）
+                </div>
+                <table className="w-full min-w-[560px] text-sm">
+                  <thead className="text-xs text-slate-500">
+                    <tr>
+                      <th className="text-left py-2 px-4 font-medium">工作类型</th>
+                      <th className="text-right py-2 px-4 font-medium">占总收入比例</th>
+                      <th className="text-right py-2 px-4 font-medium">项目人员分配比例</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rule.workRates.map((item) => (
+                      <tr key={item.workType} className="border-t border-slate-100">
+                        <td className="py-2 px-4 text-slate-700">{WORK_LABELS[item.workType]}</td>
+                        <td className="py-2 px-4">
+                          <RateInput
+                            value={item.grossRate}
+                            onChange={(value) => updateWorkRate(item.workType, "grossRate", value)}
+                          />
+                        </td>
+                        <td className="py-2 px-4">
+                          <RateInput
+                            value={item.projectRate}
+                            onChange={(value) => updateWorkRate(item.workType, "projectRate", value)}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
 
           <div className="border border-slate-200 rounded-lg overflow-x-auto bg-white">
-            <div className="px-4 py-3 bg-slate-50 text-sm font-semibold text-slate-700">
-              固定汇总比例（用于产值分配计算）
-            </div>
-            <table className="w-full min-w-[560px] text-sm">
-              <thead className="text-xs text-slate-500">
-                <tr>
-                  <th className="text-left py-2 px-4 font-medium">工作类型</th>
-                  <th className="text-right py-2 px-4 font-medium">占总收入比例</th>
-                  <th className="text-right py-2 px-4 font-medium">项目人员分配比例</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rule.workRates.map((item) => (
-                  <tr key={item.workType} className="border-t border-slate-100">
-                    <td className="py-2 px-4 text-slate-700">{WORK_LABELS[item.workType]}</td>
-                    <td className="py-2 px-4">
-                      <RateInput
-                        value={item.grossRate}
-                        onChange={(value) => updateWorkRate(item.workType, "grossRate", value)}
-                      />
-                    </td>
-                    <td className="py-2 px-4">
-                      <RateInput
-                        value={item.projectRate}
-                        onChange={(value) => updateWorkRate(item.workType, "projectRate", value)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="border border-slate-200 rounded-lg overflow-x-auto bg-white">
-            <div className="px-4 py-3 bg-slate-50 text-sm font-semibold text-slate-700">阶段工作权重（表格依据）</div>
+            <div className="px-4 py-3 bg-slate-50 text-sm font-semibold text-slate-700">阶段与工作类型比例</div>
             <table className="w-full min-w-[760px] text-sm">
               <thead className="bg-slate-50 text-xs text-slate-500">
                 <tr>
@@ -233,7 +273,7 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
                   {WORK_TYPES.map((workType) => (
                     <th key={workType} className="text-center py-3 px-4 font-medium">{WORK_LABELS[workType]}权重</th>
                   ))}
-                  <th className="text-right py-3 px-4 font-medium">合计</th>
+                  <th className="text-right py-3 px-4 font-medium">工作权重合计</th>
                 </tr>
               </thead>
               <tbody>
@@ -242,19 +282,23 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
                   return (
                     <tr key={stage.stageName} className="border-t border-slate-100">
                       <td className="py-3 px-4 font-medium text-slate-700">{stage.stageOrder}. {stage.stageName}</td>
-                      <td className="py-3 px-4 text-right text-slate-500">{stage.stageOutput ?? 0}%</td>
+                      <td className="py-2 px-4">
+                        {editableStageOutput ? (
+                          <RateInput
+                            value={stage.stageOutput ?? 0}
+                            onChange={(value) => updateStageOutput(stage.stageName, value)}
+                          />
+                        ) : (
+                          <div className="text-right text-slate-500">{stage.stageOutput ?? 0}%</div>
+                        )}
+                      </td>
                       {WORK_TYPES.map((workType) => {
                         const item = stage.workRules.find((workRule) => workRule.workType === workType);
                         return (
                           <td key={workType} className="py-2 px-4">
-                            <input
-                              type="number"
-                              min={0}
-                              max={100}
-                              step={0.01}
+                            <RateInput
                               value={item?.workWeight ?? 0}
-                              onChange={(event) => updateWeight(stage.stageName, workType, Number(event.target.value))}
-                              className="w-full px-2 py-1.5 border border-slate-200 rounded text-center"
+                              onChange={(value) => updateWeight(stage.stageName, workType, value)}
                             />
                           </td>
                         );
@@ -266,6 +310,19 @@ export function OutputAllocationRulePanel({ projectTypes }: OutputAllocationRule
                   );
                 })}
               </tbody>
+              <tfoot className="border-t border-slate-200 bg-slate-50">
+                <tr>
+                  <td className="py-3 px-4 text-sm font-semibold text-slate-700">合计</td>
+                  <td className={`py-3 px-4 text-right font-semibold ${
+                    Math.abs(rule.stages.reduce((sum, stage) => sum + Number(stage.stageOutput || 0), 0) - 100) > 0.01
+                      ? "text-rose-600"
+                      : "text-emerald-600"
+                  }`}>
+                    {rule.stages.reduce((sum, stage) => sum + Number(stage.stageOutput || 0), 0).toFixed(2)}%
+                  </td>
+                  <td colSpan={4} />
+                </tr>
+              </tfoot>
             </table>
           </div>
 

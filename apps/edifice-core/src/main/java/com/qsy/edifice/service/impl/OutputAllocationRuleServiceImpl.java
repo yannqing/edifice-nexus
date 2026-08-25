@@ -19,6 +19,8 @@ import com.qsy.edifice.mapper.OutputAllocationRuleItemMapper;
 import com.qsy.edifice.mapper.OutputAllocationRulePoolRateMapper;
 import com.qsy.edifice.mapper.OutputAllocationRuleVersionMapper;
 import com.qsy.edifice.mapper.OutputValueWorkPoolMapper;
+import com.qsy.edifice.mapper.ProjectStageMapper;
+import com.qsy.edifice.mapper.ProjectStageTemplateMapper;
 import com.qsy.edifice.service.OutputAllocationRuleService;
 import com.qsy.edifice.service.ProjectService;
 import com.qsy.edifice.service.ProjectStageService;
@@ -74,6 +76,12 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
     @Resource
     private ProjectTypeService projectTypeService;
 
+    @Resource
+    private ProjectStageTemplateMapper stageTemplateMapper;
+
+    @Resource
+    private ProjectStageMapper projectStageMapper;
+
     @Override
     public OutputAllocationRuleVo getActiveRule(Long projectTypeId) {
         if (projectTypeId == null) {
@@ -95,7 +103,8 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
     public OutputAllocationRuleVo saveRule(Long projectTypeId,
                                            SaveOutputAllocationRuleDto dto,
                                            Long userId) {
-        validateRule(projectTypeId, dto);
+        List<ProjectStageTemplate> templates = validateRule(projectTypeId, dto);
+        syncStageOutputs(projectTypeId, dto, templates);
 
         LambdaQueryWrapper<OutputAllocationRuleVersion> versionWrapper = new LambdaQueryWrapper<>();
         versionWrapper.eq(OutputAllocationRuleVersion::getProjectTypeId, projectTypeId)
@@ -232,7 +241,7 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
         return ruleVersionMapper.selectOne(wrapper);
     }
 
-    private void validateRule(Long projectTypeId, SaveOutputAllocationRuleDto dto) {
+    private List<ProjectStageTemplate> validateRule(Long projectTypeId, SaveOutputAllocationRuleDto dto) {
         ProjectType projectType = projectTypeService.getProjectTypeById(projectTypeId);
         if (projectType == null) {
             throw new BusinessException(ErrorType.PROJECT_TYPE_NOT_FOUND);
@@ -257,6 +266,7 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
         }
         Set<String> submittedStages = new HashSet<>();
         Set<Integer> submittedOrders = new HashSet<>();
+        BigDecimal stageOutputSum = BigDecimal.ZERO;
 
         for (SaveOutputAllocationRuleDto.StageRule stage : dto.getStages()) {
             if (stage == null || !StringUtils.hasText(stage.getStageName()) || stage.getStageOrder() == null
@@ -267,6 +277,12 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
             if (!submittedStages.add(stageName)) {
                 throw new BusinessException(ErrorType.ARGS_INVALID, "阶段[" + stageName + "]重复配置");
             }
+            if (stage.getStageOutput() == null || stage.getStageOutput().signum() < 0
+                    || stage.getStageOutput().compareTo(BD_100) > 0) {
+                throw new BusinessException(ErrorType.ARGS_INVALID,
+                        "阶段[" + stageName + "]产值比例应在0-100之间");
+            }
+            stageOutputSum = stageOutputSum.add(stage.getStageOutput());
             if (stage.getWorkRules() == null || stage.getWorkRules().size() != WORK_TYPES.size()) {
                 throw new BusinessException(ErrorType.ARGS_INVALID,
                         "阶段[" + stageName + "]必须配置管理、基础、智励三类工作");
@@ -295,6 +311,30 @@ public class OutputAllocationRuleServiceImpl implements OutputAllocationRuleServ
         }
         if (!expectedStages.equals(submittedStages)) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "规则阶段必须与当前启用的阶段模板完全一致");
+        }
+        if (stageOutputSum.subtract(BD_100).abs().compareTo(RATE_TOLERANCE) > 0) {
+            throw new BusinessException(ErrorType.ARGS_INVALID,
+                    "各阶段产值比例合计必须为100%，当前为" + stageOutputSum + "%");
+        }
+        return templates;
+    }
+
+    private void syncStageOutputs(Long projectTypeId,
+                                  SaveOutputAllocationRuleDto dto,
+                                  List<ProjectStageTemplate> templates) {
+        Map<String, ProjectStageTemplate> templateByName = new HashMap<>();
+        for (ProjectStageTemplate template : templates) {
+            templateByName.put(template.getStageName(), template);
+        }
+        for (SaveOutputAllocationRuleDto.StageRule stage : dto.getStages()) {
+            String stageName = stage.getStageName().trim();
+            ProjectStageTemplate template = templateByName.get(stageName);
+            stageTemplateMapper.updateById(ProjectStageTemplate.builder()
+                    .stageId(template.getStageId())
+                    .stageOutput(stage.getStageOutput())
+                    .build());
+            projectStageMapper.updateUnallocatedStageOutput(
+                    projectTypeId, stageName, stage.getStageOutput());
         }
     }
 

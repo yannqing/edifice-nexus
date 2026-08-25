@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "产值分配规则")
 @RestController
 @RequestMapping("/output-allocation-rule")
-@PreAuthorize("hasAuthority('menu:project-config') or hasRole('SUPER_ADMIN')")
+@PreAuthorize("hasAnyAuthority('menu:project-config', 'menu:performance-rules') or hasRole('SUPER_ADMIN')")
 public class OutputAllocationRuleController {
 
     @Resource

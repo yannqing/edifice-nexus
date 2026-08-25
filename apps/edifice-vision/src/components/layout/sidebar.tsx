@@ -30,6 +30,7 @@ import {
   SlidersHorizontal,
   Archive,
   Settings2,
+  Percent,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -86,6 +87,7 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   SlidersHorizontal,
   Archive,
   Settings2,
+  Percent,
 };
 
 interface SidebarProps {

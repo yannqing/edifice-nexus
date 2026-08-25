@@ -5,6 +5,7 @@ import com.qsy.edifice.domain.entity.ProjectStage;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -30,4 +31,11 @@ public interface ProjectStageMapper extends BaseMapper<ProjectStage> {
      * @return 项目阶段列表
      */
     List<ProjectStage> selectByProjectIdAndStatus(@Param("projectId") Long projectId, @Param("stageStatus") Integer stageStatus);
+
+    /**
+     * 同步尚未生成产值单的项目阶段比例，已生成产值单的阶段保留历史口径。
+     */
+    int updateUnallocatedStageOutput(@Param("projectTypeId") Long projectTypeId,
+                                     @Param("stageName") String stageName,
+                                     @Param("stageOutput") BigDecimal stageOutput);
 }
