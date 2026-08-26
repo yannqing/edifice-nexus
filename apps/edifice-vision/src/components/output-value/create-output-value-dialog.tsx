@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Trash2, UserRoundSearch } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { UserPickerDialog } from "@/components/user/user-picker-dialog";
 import { cn } from "@/lib/utils";
 import { ResponseCode } from "@/types/api";
 import { getAllProjects, getProjectDetail, getUserList } from "@/services/project";
@@ -105,6 +106,8 @@ export function CreateOutputValueDialog({
   const [stageId, setStageId] = useState<string>("");
   const [quarter, setQuarter] = useState<string>(currentQuarter());
   const [confirmUserId, setConfirmUserId] = useState<string>("");
+  const [confirmUserName, setConfirmUserName] = useState<string>("");
+  const [confirmUserPickerOpen, setConfirmUserPickerOpen] = useState(false);
   const [subsidyAmount, setSubsidyAmount] = useState<string>("");
   const [coefficient, setCoefficient] = useState<string>("1");
   const [rows, setRows] = useState<DistRow[]>([]);
@@ -124,6 +127,8 @@ export function CreateOutputValueDialog({
     setStageId("");
     setQuarter(currentQuarter());
     setConfirmUserId("");
+    setConfirmUserName("");
+    setConfirmUserPickerOpen(false);
     setSubsidyAmount("");
     setCoefficient("1");
     setRows([]);
@@ -472,13 +477,14 @@ export function CreateOutputValueDialog({
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        if (!v) reset();
-        onOpenChange(v);
-      }}
-    >
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          if (!v) reset();
+          onOpenChange(v);
+        }}
+      >
       <DialogContent className="max-w-4xl max-h-[90vh] min-h-[460px] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>新建产值分配单</DialogTitle>
@@ -567,18 +573,18 @@ export function CreateOutputValueDialog({
               <label className="text-xs font-medium text-slate-600 mb-1 block">
                 确认人 <span className="text-rose-500">*</span>
               </label>
-              <select
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
-                value={confirmUserId}
-                onChange={(e) => setConfirmUserId(e.target.value)}
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                disabled={!projectId}
+                aria-haspopup="dialog"
+                onClick={() => setConfirmUserPickerOpen(true)}
               >
-                <option value="">请选择确认人</option>
-                {users.map((u) => (
-                  <option key={u.userId} value={u.userId}>
-                    {u.realName || u.username}
-                  </option>
-                ))}
-              </select>
+                <span className={confirmUserId ? "truncate text-slate-700" : "truncate text-slate-400"}>
+                  {!projectId ? "请先选择项目" : confirmUserName || "请选择确认人"}
+                </span>
+                <UserRoundSearch className="h-4 w-4 shrink-0 text-slate-400" />
+              </button>
             </div>
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">
@@ -943,8 +949,20 @@ export function CreateOutputValueDialog({
             {submitting && <Loader2 className="w-4 h-4 animate-spin mr-1" />} 创建
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <UserPickerDialog
+        open={confirmUserPickerOpen}
+        onOpenChange={setConfirmUserPickerOpen}
+        value={confirmUserId}
+        title="选择确认人"
+        onSelect={(user) => {
+          setConfirmUserId(String(user.userId));
+          setConfirmUserName(user.realName || user.username);
+        }}
+      />
+    </>
   );
 }
 
