@@ -237,6 +237,11 @@ export default function MyProjectsPage() {
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
+  const openProjectDetail = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    setDetailOpen(true);
+  };
+
   const filters: { key: FilterKey; label: string }[] = [
     { key: "all", label: "全部" },
     { key: "inProgress", label: "进行中" },
@@ -391,6 +396,7 @@ export default function MyProjectsPage() {
             return (
               <div
                 key={project.projectId}
+                onClick={() => openProjectDetail(project.projectId)}
                 className="glass-card rounded-2xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer group"
               >
                 {/* Header */}
@@ -501,9 +507,9 @@ export default function MyProjectsPage() {
                 {/* Actions */}
                 <div className="flex gap-2 mt-4 pt-4 border-t border-slate-100">
                   <button
-                    onClick={() => {
-                      setSelectedProjectId(project.projectId);
-                      setDetailOpen(true);
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openProjectDetail(project.projectId);
                     }}
                     className="flex-1 py-2 text-xs text-slate-600 font-medium bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center gap-1"
                   >
@@ -511,7 +517,8 @@ export default function MyProjectsPage() {
                   </button>
                   {isManager(project) && (
                     <button
-                      onClick={() => {
+                      onClick={(event) => {
+                        event.stopPropagation();
                         setEditProjectId(project.projectId);
                         setEditOpen(true);
                       }}
@@ -522,7 +529,8 @@ export default function MyProjectsPage() {
                   )}
                   {isManager(project) && project.projectStatus === 1 && (
                     <button
-                      onClick={() => {
+                      onClick={(event) => {
+                        event.stopPropagation();
                         setInspectionProject(project);
                         setInspectionOpen(true);
                       }}
@@ -580,7 +588,8 @@ export default function MyProjectsPage() {
                 return (
                   <tr
                     key={project.projectId}
-                    className="hover:bg-slate-50/50 transition-colors"
+                    onClick={() => openProjectDetail(project.projectId)}
+                    className="cursor-pointer hover:bg-slate-50/50 transition-colors"
                   >
                     <td className="py-4 px-4">
                       <p className="text-sm font-semibold text-slate-800">
@@ -690,9 +699,9 @@ export default function MyProjectsPage() {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
-                          onClick={() => {
-                            setSelectedProjectId(project.projectId);
-                            setDetailOpen(true);
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openProjectDetail(project.projectId);
                           }}
                           title="查看详情"
                           aria-label={`查看${project.projectName}详情`}
@@ -703,7 +712,8 @@ export default function MyProjectsPage() {
                         {manager && (
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={(event) => {
+                              event.stopPropagation();
                               setEditProjectId(project.projectId);
                               setEditOpen(true);
                             }}
@@ -717,7 +727,8 @@ export default function MyProjectsPage() {
                         {manager && project.projectStatus === 1 && (
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={(event) => {
+                              event.stopPropagation();
                               setInspectionProject(project);
                               setInspectionOpen(true);
                             }}
