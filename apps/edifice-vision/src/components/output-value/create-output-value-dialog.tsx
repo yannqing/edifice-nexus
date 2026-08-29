@@ -356,9 +356,14 @@ export function CreateOutputValueDialog({
     const amounts = new Map<string, { planned: number; actual: number }>();
     (preview.workPools ?? []).forEach((pool) => {
       const roleRows = rows.filter((row) => row.workType === pool.workType);
+      const roleRatioSum = roleRows.reduce(
+        (sum, row) => sum + (Number(row.roleAllocRatio) || 0),
+        0,
+      );
+      const canApplyRemainder = Math.abs(roleRatioSum - 100) <= 0.01;
       let groupPlanned = 0;
       roleRows.forEach((row, index) => {
-        const planned = index === roleRows.length - 1
+        const planned = canApplyRemainder && index === roleRows.length - 1
           ? money(pool.projectAmount - groupPlanned)
           : money(pool.projectAmount * ((Number(row.roleAllocRatio) || 0) / 100));
         groupPlanned = money(groupPlanned + planned);
@@ -438,8 +443,8 @@ export function CreateOutputValueDialog({
     const s = Number(subsidyAmount) || 0;
     const cmpMain = preview.companyBaseAmount ?? Math.round(t * 0.6 * 100) / 100;
     const empPool = preview.employeePoolAmount ?? Math.round(t * 0.4 * 100) / 100;
-    const actual = Array.from(normalRowAmounts.values())
-      .reduce((sum, item) => sum + item.actual, 0);
+    const actual = rows.filter((row) => row.userId)
+      .reduce((sum, row) => sum + (normalRowAmounts.get(row._key)?.actual ?? 0), 0);
     return {
       subsidyNum: s,
       companyMain: cmpMain,
@@ -447,7 +452,7 @@ export function CreateOutputValueDialog({
       projectPool: preview.projectPoolAmount ?? 0,
       sumActual: money(actual + benefitSettlement.personApplied),
     };
-  }, [preview, subsidyAmount, normalRowAmounts, benefitSettlement.personApplied]);
+  }, [preview, subsidyAmount, normalRowAmounts, rows, benefitSettlement.personApplied]);
 
   const personnelSummary = useMemo(() => {
     const userMap = new Map(memberOptions.map((user) => [user.userId, user]));
