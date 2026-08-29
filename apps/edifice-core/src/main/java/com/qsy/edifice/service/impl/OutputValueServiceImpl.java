@@ -19,7 +19,7 @@ import com.qsy.edifice.mapper.OutputValueMapper;
 import com.qsy.edifice.mapper.OutputValueWorkPoolMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
 import com.qsy.edifice.service.*;
-import com.qsy.edifice.service.support.OutputAllocationCalculator;
+import com.qsy.edifice.service.support.BenefitAdjustmentAllocator;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -73,6 +73,9 @@ public class OutputValueServiceImpl implements OutputValueService {
     private static final int DIST_TYPE_NORMAL = 0;
     private static final int DIST_TYPE_DOWNGRADE = 1;
     private static final int DIST_TYPE_OTHER = 4;
+    private static final int DIST_TYPE_BENEFIT_ADJUSTMENT = 5;
+    private static final int COMPONENT_NORMAL = 0;
+    private static final int COMPONENT_BENEFIT_ADJUSTMENT = 1;
     /** 可创建产值分配的阶段状态：1-进行中（部分完成）/ 3-已验收 / 6-已完成 */
     private static final Set<Integer> OUTPUT_VALUE_ALLOWED_STAGE_STATUSES = Set.of(1, 3, 6);
     private static final DateTimeFormatter EXPORT_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -83,7 +86,8 @@ public class OutputValueServiceImpl implements OutputValueService {
             0, "管理工作", 1, "基础工作", 2, "智励工作"
     );
     private static final Map<Integer, String> DIST_TYPE_LABELS = Map.of(
-            0, "员工正常", 1, "员工降档", 2, "领导兜底", 3, "公司留存", 4, "其他金额"
+            0, "员工正常", 1, "员工降档", 2, "领导兜底", 3, "公司留存",
+            4, "其他金额", 5, "效益补差/扣回"
     );
 
     @Resource
@@ -149,7 +153,11 @@ public class OutputValueServiceImpl implements OutputValueService {
         BigDecimal coeff = (stage != null && stage.getCoefficient() != null && stage.getCoefficient().signum() > 0)
                 ? stage.getCoefficient() : BigDecimal.ONE;
         OutputValueCalculationResult calculation = calcOutputValue(projectId, projectStageId, coeff);
-        return toPreviewVo(calculation, calculateAllocation(projectId, projectStageId, calculation));
+        OutputAllocationContext allocation = outputAllocationRuleService.calculate(
+                projectId, projectStageId, calculation.currentStageAmount);
+        BenefitAdjustmentPlan adjustmentPlan = calcBenefitAdjustmentPlan(
+                projectId, projectStageId, calculation.benefitAmount, Collections.emptyMap());
+        return toPreviewVo(calculation, allocation, adjustmentPlan);
     }
 
     @Override
@@ -161,7 +169,11 @@ public class OutputValueServiceImpl implements OutputValueService {
             coefficient = BigDecimal.ONE;
         }
         OutputValueCalculationResult calculation = calcOutputValue(projectId, projectStageId, coefficient);
-        return toPreviewVo(calculation, calculateAllocation(projectId, projectStageId, calculation));
+        OutputAllocationContext allocation = outputAllocationRuleService.calculate(
+                projectId, projectStageId, calculation.currentStageAmount);
+        BenefitAdjustmentPlan adjustmentPlan = calcBenefitAdjustmentPlan(
+                projectId, projectStageId, calculation.benefitAmount, Collections.emptyMap());
+        return toPreviewVo(calculation, allocation, adjustmentPlan);
     }
 
     // ==================== 创建（v0.4） ====================
@@ -185,6 +197,9 @@ public class OutputValueServiceImpl implements OutputValueService {
         if (dto.getConfirmUserId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择确认人");
         }
+        // Serialize all output-value settlements for this project so the same historical balance
+        // cannot be consumed by two concurrent stage submissions.
+        outputValueMapper.selectByProjectIdForUpdate(dto.getProjectId());
         List<OutputValue> stageOutputValues = outputValueMapper.selectByProjectStageIdForUpdate(dto.getProjectStageId());
         // 如果该阶段有待确认或待审核的分配单，不允许再创建
         boolean hasPending = stageOutputValues.stream()
@@ -210,7 +225,7 @@ public class OutputValueServiceImpl implements OutputValueService {
             }
         }
 
-        // 1. 系统自动算 totalAmount = 当前阶段产值 + 历史阶段补差
+        // 1. 先计算当前阶段纯产值；历史效益补差在人员正常分配完成后逐人结算。
         BigDecimal coefficient = dto.getCoefficient();
         if (coefficient == null || coefficient.signum() <= 0) {
             ProjectStage stage = projectStageService.getProjectStageById(dto.getProjectStageId());
@@ -218,20 +233,10 @@ public class OutputValueServiceImpl implements OutputValueService {
                     ? stage.getCoefficient() : BigDecimal.ONE;
         }
         OutputValueCalculationResult calculation = calcOutputValue(dto.getProjectId(), dto.getProjectStageId(), coefficient);
-        BigDecimal total = calculation.totalAmount.setScale(2, RoundingMode.HALF_UP);
 
-        if (total.signum() == 0) {
-            throw new BusinessException(ErrorType.OPERATION_FAILED, "本次产值为 0，请检查合同金额、阶段比例和历史补差");
-        }
-        boolean allowNegativeOutput = businessRuleConfigService.booleanValue(
-                ApprovalBizType.OUTPUT.getExt(), "allow_negative_output", false);
-        if (total.signum() < 0 && !allowNegativeOutput) {
-            throw new BusinessException(ErrorType.OPERATION_FAILED, "本次多退少补结果为负，请先在规则配置中允许负产值");
-        }
-
-        // 2. allocation_v4：按系统阶段工作权重和表格汇总比例拆出三个工作类型资金池
-        OutputAllocationContext allocation = calculateAllocation(
-                dto.getProjectId(), dto.getProjectStageId(), calculation);
+        // 2. allocation_v5：当前阶段资金池只包含当前阶段金额，不再混入历史补差。
+        OutputAllocationContext allocation = outputAllocationRuleService.calculate(
+                dto.getProjectId(), dto.getProjectStageId(), calculation.currentStageAmount);
         Map<Integer, OutputAllocationContext.WorkPool> poolByWorkType = allocation.getWorkPools().stream()
                 .collect(Collectors.toMap(OutputAllocationContext.WorkPool::getWorkType, item -> item));
         Map<Integer, List<CreateOutputValueDto.DistributionItem>> distributionsByWorkType =
@@ -336,6 +341,7 @@ public class OutputValueServiceImpl implements OutputValueService {
                         : planned.multiply(BD_100).divide(
                         allocation.getEmployeePoolAmount(), 4, RoundingMode.HALF_UP);
                 distEntities.add(OutputValueDistribution.builder()
+                        .componentType(COMPONENT_NORMAL)
                         .userId(item.getUserId())
                         .workType(pool.getWorkType())
                         .ratio(globalAllocRatio)
@@ -351,14 +357,63 @@ public class OutputValueServiceImpl implements OutputValueService {
             }
         }
 
-        // 4. 公司账 = 基础留存 + 工作类型超限转入 + 降档差额 + 离职兜底
+        // 4. 历史效益修正按原分配人员逐笔结算。负数最多扣到该人员本期实得为 0。
+        Map<Long, BigDecimal> normalAmountsByUser = distEntities.stream()
+                .collect(Collectors.groupingBy(
+                        OutputValueDistribution::getUserId,
+                        LinkedHashMap::new,
+                        Collectors.reducing(BigDecimal.ZERO, OutputValueDistribution::getAmount, BigDecimal::add)));
+        BenefitAdjustmentPlan adjustmentPlan = calcBenefitAdjustmentPlan(
+                dto.getProjectId(), dto.getProjectStageId(), calculation.benefitAmount, normalAmountsByUser);
+
+        for (BenefitAdjustmentAllocator.AppliedAdjustment applied : adjustmentPlan.personResult.adjustments()) {
+            BenefitAdjustmentAllocator.PendingAdjustment source = applied.source();
+            distEntities.add(OutputValueDistribution.builder()
+                    .componentType(COMPONENT_BENEFIT_ADJUSTMENT)
+                    .sourceDistributionId(source.sourceDistributionId())
+                    .sourceOutputValueId(source.sourceOutputValueId())
+                    .sourceProjectStageId(source.sourceProjectStageId())
+                    .userId(source.userId())
+                    .workType(source.workType())
+                    .ratio(BigDecimal.ZERO)
+                    .allocRatio(BigDecimal.ZERO)
+                    .roleAllocRatio(BigDecimal.ZERO)
+                    .plannedAmount(applied.appliedAmount())
+                    .companyDelta(BigDecimal.ZERO)
+                    .adjustmentTargetAmount(source.targetAmount())
+                    .previousAdjustedAmount(source.previousAdjustedAmount())
+                    .remainingAdjustmentAmount(applied.remainingAmount())
+                    .completionRatio(BD_100)
+                    .distType(DIST_TYPE_BENEFIT_ADJUSTMENT)
+                    .isActive(1)
+                    .amount(applied.appliedAmount())
+                    .build());
+        }
+
+        BigDecimal personAdjustmentAmount = adjustmentPlan.personResult.appliedTotal();
+        BigDecimal companyAdjustmentAmount = adjustmentPlan.companyAppliedAmount;
+        BigDecimal adjustmentAmount = personAdjustmentAmount.add(companyAdjustmentAmount)
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal total = calculation.currentStageAmount.add(adjustmentAmount)
+                .setScale(2, RoundingMode.HALF_UP);
+        if (total.signum() == 0) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "本次产值为 0，请检查合同金额、阶段比例和历史补差");
+        }
+        boolean allowNegativeOutput = businessRuleConfigService.booleanValue(
+                ApprovalBizType.OUTPUT.getExt(), "allow_negative_output", false);
+        if (total.signum() < 0 && !allowNegativeOutput) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "本次多退少补结果为负，请先在规则配置中允许负产值");
+        }
+
+        // 5. 公司账 = 当前阶段公司留存 + 本次公司效益补差/扣回。
         BigDecimal companyReserve = allocation.getCompanyBaseAmount()
                 .add(allocation.getWorkTransferAmount())
                 .add(downgradeDelta)
                 .add(otherAmount)
+                .add(companyAdjustmentAmount)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        // 6. 守恒校验：Σ actual + companyReserve ≈ total
+        // 6. 守恒校验：正常分配 + 人员补扣 + 公司账 = 本次总额。
         BigDecimal sumActual = distEntities.stream()
                 .map(OutputValueDistribution::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -368,7 +423,7 @@ public class OutputValueServiceImpl implements OutputValueService {
                     "金额守恒失败：公司账 " + companyReserve + "（基础留存 "
                             + allocation.getCompanyBaseAmount() + " + 工作类型转入 "
                             + allocation.getWorkTransferAmount() + " + 降档差额 " + downgradeDelta
-                            + " + 离职兜底 " + otherAmount
+                            + " + 离职兜底 " + otherAmount + " + 公司效益补扣 " + companyAdjustmentAmount
                             + "）+ 员工实得 " + sumActual + " = " + sum + "，应为 " + total);
         }
 
@@ -385,19 +440,24 @@ public class OutputValueServiceImpl implements OutputValueService {
                         ? dto.getSubsidyAmount().setScale(2, RoundingMode.HALF_UP)
                         : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
                 .stageCumulativeAmount(calculation.currentStageAmount)
-                .previousCumulativeAmount(calculation.adjustmentAmount)
+                .previousCumulativeAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
                 .baseAmountPart(calculation.basePart)
                 .benefitAmountPart(calculation.benefitPart)
                 .benefitSnapshot(calculation.benefitAmount)
                 .currentStageAmount(calculation.currentStageAmount)
-                .adjustmentAmount(calculation.adjustmentAmount)
+                .adjustmentAmount(adjustmentAmount)
+                .personAdjustmentAmount(personAdjustmentAmount)
+                .companyAdjustmentAmount(companyAdjustmentAmount)
+                .pendingPersonAdjustmentAmount(adjustmentPlan.personResult.remainingTotal())
                 .stageCompletionRatio(calculation.completionRatio)
                 .stageIncrementalRatio(calculation.incrementalRatio)
                 .coefficient(coefficient)
                 .baseAmountSnapshot(calculation.baseAmount)
                 .benefitAmountSnapshot(calculation.benefitAmount)
-                .calculationVersion("output_adjustment_v1")
-                .allocationVersion("allocation_v4")
+                .baseRatioSnapshot(calculation.baseRatio)
+                .benefitRatioSnapshot(calculation.benefitRatio)
+                .calculationVersion("person_benefit_adjustment_v2")
+                .allocationVersion("allocation_v5")
                 .allocationRuleVersionId(allocation.getRuleVersionId())
                 .employeePoolAmount(allocation.getEmployeePoolAmount())
                 .companyBaseAmount(allocation.getCompanyBaseAmount())
@@ -411,7 +471,7 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .build();
         outputValueMapper.insert(ov);
 
-        for (OutputValueAdjustmentDetail detail : calculation.adjustmentDetails) {
+        for (OutputValueAdjustmentDetail detail : buildAdjustmentDetails(adjustmentPlan, calculation)) {
             detail.setOutputValueId(ov.getOutputValueId());
             adjustmentDetailMapper.insert(detail);
         }
@@ -437,16 +497,18 @@ public class OutputValueServiceImpl implements OutputValueService {
 
         for (OutputValueDistribution d : distEntities) {
             d.setOutputValueId(ov.getOutputValueId());
-            d.setWorkPoolId(workPoolIds.get(d.getWorkType()));
+            if (Objects.equals(d.getComponentType(), COMPONENT_NORMAL)) {
+                d.setWorkPoolId(workPoolIds.get(d.getWorkType()));
+            }
             distributionMapper.insert(d);
         }
 
-        log.info("[allocation_v4] 创建产值分配单 id={} 季度={} total={}（当前阶段{} + 补差{}；基本{} + 效益{}） 项目人员池={} 公司内部留存={} 公司账={} 员工实得={}",
+        log.info("[allocation_v5] 创建产值分配单 id={} 季度={} total={}（当前阶段{} + 人员补扣{} + 公司补扣{}；基本{} + 效益{}） 项目人员池={} 公司内部留存={} 公司账={} 员工实得={} 待扣余额={}",
                 ov.getOutputValueId(), ov.getQuarter(), total,
-                calculation.currentStageAmount, calculation.adjustmentAmount,
+                calculation.currentStageAmount, personAdjustmentAmount, companyAdjustmentAmount,
                 calculation.basePart, calculation.benefitPart,
                 allocation.getProjectPoolAmount(), allocation.getWorkTransferAmount(),
-                companyReserve, sumActual);
+                companyReserve, sumActual, adjustmentPlan.personResult.remainingTotal());
 
         // 同步提交到统一审批流（供统一待办/消息中心消费）
         // L1 = 确认人（confirmUserId），后续 confirm→approve→pay 时分别流转
@@ -532,15 +594,6 @@ public class OutputValueServiceImpl implements OutputValueService {
         }
         currentStageAmount = currentStageAmount.multiply(coefficient).setScale(2, RoundingMode.HALF_UP);
 
-        List<OutputValueAdjustmentDetail> adjustmentDetails = calcAdjustmentDetails(
-                projectId, stageId, baseAmt, benefitAmt);
-        BigDecimal adjustmentAmount = adjustmentDetails.stream()
-                .map(OutputValueAdjustmentDetail::getAdjustmentAmount)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .setScale(2, RoundingMode.HALF_UP);
-        BigDecimal totalAmount = currentStageAmount.add(adjustmentAmount).setScale(2, RoundingMode.HALF_UP);
-
         return new OutputValueCalculationResult(
                 baseAmt.setScale(2, RoundingMode.HALF_UP),
                 benefitAmt.setScale(2, RoundingMode.HALF_UP),
@@ -549,9 +602,6 @@ public class OutputValueServiceImpl implements OutputValueService {
                 basePart,
                 benefitPart,
                 currentStageAmount,
-                adjustmentAmount,
-                totalAmount,
-                adjustmentDetails,
                 completionRatio,
                 alreadyAllocated,
                 incrementalRatio,
@@ -559,20 +609,23 @@ public class OutputValueServiceImpl implements OutputValueService {
         );
     }
 
-    private List<OutputValueAdjustmentDetail> calcAdjustmentDetails(Long projectId,
-                                                                    Long currentStageId,
-                                                                    BigDecimal baseAmt,
-                                                                    BigDecimal benefitAmt) {
+    private BenefitAdjustmentPlan calcBenefitAdjustmentPlan(Long projectId,
+                                                            Long currentStageId,
+                                                            BigDecimal currentBenefitAmount,
+                                                            Map<Long, BigDecimal> normalAmountsByUser) {
         LambdaQueryWrapper<OutputValue> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(OutputValue::getProjectId, projectId)
                 .ge(OutputValue::getStatus, 2)
-                .orderByAsc(OutputValue::getCreatedTime);
+                .orderByAsc(OutputValue::getCreatedTime)
+                .orderByAsc(OutputValue::getOutputValueId);
         List<OutputValue> historicalOutputs = outputValueMapper.selectList(wrapper);
         if (historicalOutputs == null || historicalOutputs.isEmpty()) {
-            return Collections.emptyList();
+            return BenefitAdjustmentPlan.empty();
         }
 
-        List<OutputValueAdjustmentDetail> details = new ArrayList<>();
+        BigDecimal newBenefit = money(currentBenefitAmount);
+        List<BenefitStageAdjustment> stages = new ArrayList<>();
+        List<BenefitAdjustmentAllocator.PendingAdjustment> personPending = new ArrayList<>();
         for (OutputValue historical : historicalOutputs) {
             if (Objects.equals(historical.getProjectStageId(), currentStageId)) {
                 continue;
@@ -582,59 +635,141 @@ public class OutputValueServiceImpl implements OutputValueService {
                 continue;
             }
 
-            BigDecimal baseRatio = sourceStage.getStageOutput() != null
-                    ? sourceStage.getStageOutput() : BigDecimal.ZERO;
-            BigDecimal benefitRatio = resolveBenefitRatio(sourceStage.getBenefitInclusionRatio(), baseRatio);
-            // 兼容旧数据：completionRatio 为 null 或 0 且 status=6 时按 100% 计算
-            BigDecimal sourceCompletion = sourceStage.getCompletionRatio();
-            if (sourceCompletion == null || sourceCompletion.signum() <= 0) {
-                sourceCompletion = (sourceStage.getStageStatus() != null && sourceStage.getStageStatus() == 6)
-                        ? new BigDecimal("100") : BigDecimal.ZERO;
-            }
-            BigDecimal newStageAmount = calculateStageAmount(baseAmt, benefitAmt, baseRatio, benefitRatio, sourceCompletion);
-            BigDecimal oldStageAmount = resolveOriginalStageAmount(historical);
-            BigDecimal alreadyAdjusted = adjustmentDetailMapper
-                    .sumApprovedAdjustmentBySource(historical.getOutputValueId());
-            if (alreadyAdjusted == null) alreadyAdjusted = BigDecimal.ZERO;
+            BigDecimal oldBenefit = money(resolveHistoricalBenefitSnapshot(historical));
+            BigDecimal sourceIncrementalRatio = positiveOrFallback(
+                    historical.getStageIncrementalRatio(),
+                    positiveOrFallback(historical.getStageCompletionRatio(), BD_100));
+            BigDecimal sourceBaseRatio = positiveOrFallback(
+                    historical.getBaseRatioSnapshot(),
+                    defaultIfNull(sourceStage.getStageOutput(), BigDecimal.ZERO));
+            BigDecimal sourceBenefitRatio = resolveHistoricalBenefitRatio(
+                    historical, sourceStage, oldBenefit, sourceIncrementalRatio, sourceBaseRatio);
+            BigDecimal sourceCoefficient = positiveOrFallback(historical.getCoefficient(), BigDecimal.ONE);
 
-            BigDecimal adjustment = newStageAmount
-                    .subtract(oldStageAmount)
-                    .subtract(alreadyAdjusted)
+            BigDecimal stageTarget = newBenefit.subtract(oldBenefit)
+                    .multiply(sourceBenefitRatio)
+                    .multiply(sourceIncrementalRatio)
+                    .divide(BD_10000, 8, RoundingMode.HALF_UP)
+                    .multiply(sourceCoefficient)
                     .setScale(2, RoundingMode.HALF_UP);
-            if (adjustment.compareTo(BigDecimal.ZERO) == 0) {
+            BigDecimal oldStageAmount = resolveOriginalStageAmount(historical);
+            BigDecimal newStageAmount = oldStageAmount.add(stageTarget).setScale(2, RoundingMode.HALF_UP);
+
+            Map<Integer, OutputValueWorkPool> pools = outputAllocationRuleService
+                    .getWorkPools(historical.getOutputValueId()).stream()
+                    .collect(Collectors.toMap(OutputValueWorkPool::getWorkType, item -> item, (left, right) -> left));
+            LambdaQueryWrapper<OutputValueDistribution> distWrapper = new LambdaQueryWrapper<>();
+            distWrapper.eq(OutputValueDistribution::getOutputValueId, historical.getOutputValueId())
+                    .and(w -> w.eq(OutputValueDistribution::getComponentType, COMPONENT_NORMAL)
+                            .or().isNull(OutputValueDistribution::getComponentType))
+                    .orderByAsc(OutputValueDistribution::getCreatedTime)
+                    .orderByAsc(OutputValueDistribution::getDistributionId);
+            List<OutputValueDistribution> sourceDistributions = distributionMapper.selectList(distWrapper);
+
+            BigDecimal personTargetTotal = BigDecimal.ZERO;
+            BigDecimal personPreviousTotal = BigDecimal.ZERO;
+            List<BenefitAdjustmentAllocator.PendingAdjustment> stagePersonPending = new ArrayList<>();
+            for (OutputValueDistribution sourceDistribution : sourceDistributions) {
+                if (sourceDistribution.getUserId() == null) {
+                    continue;
+                }
+                BigDecimal target = calculatePersonBenefitAdjustmentTarget(
+                        stageTarget, oldStageAmount, sourceDistribution,
+                        pools.get(sourceDistribution.getWorkType()));
+                BigDecimal previous = money(distributionMapper.sumAppliedBenefitAdjustment(
+                        sourceDistribution.getDistributionId()));
+                BigDecimal pending = target.subtract(previous).setScale(2, RoundingMode.HALF_UP);
+                personTargetTotal = personTargetTotal.add(target);
+                personPreviousTotal = personPreviousTotal.add(previous);
+                if (pending.signum() != 0) {
+                    stagePersonPending.add(new BenefitAdjustmentAllocator.PendingAdjustment(
+                            sourceDistribution.getDistributionId(),
+                            historical.getOutputValueId(),
+                            historical.getProjectStageId(),
+                            sourceStage.getStageName(),
+                            sourceDistribution.getUserId(),
+                            sourceDistribution.getWorkType(),
+                            target,
+                            previous,
+                            pending));
+                }
+            }
+
+            personTargetTotal = money(personTargetTotal);
+            personPreviousTotal = money(personPreviousTotal);
+            BigDecimal companyTarget = stageTarget.subtract(personTargetTotal).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal companyPrevious = money(adjustmentDetailMapper
+                    .sumAppliedCompanyBenefitAdjustment(historical.getOutputValueId()));
+            BigDecimal companyPending = companyTarget.subtract(companyPrevious)
+                    .setScale(2, RoundingMode.HALF_UP);
+            if (stagePersonPending.isEmpty() && companyPending.signum() == 0) {
                 continue;
             }
 
-            details.add(OutputValueAdjustmentDetail.builder()
-                    .sourceOutputValueId(historical.getOutputValueId())
-                    .sourceProjectStageId(historical.getProjectStageId())
-                    .sourceStageName(sourceStage.getStageName())
-                    .sourceBaseRatio(baseRatio)
-                    .sourceBenefitRatio(benefitRatio)
-                    .oldBaseAmountSnapshot(historical.getBaseAmountSnapshot())
-                    .oldBenefitAmountSnapshot(resolveHistoricalBenefitSnapshot(historical))
-                    .oldStageAmount(oldStageAmount)
-                    .newBaseAmountSnapshot(baseAmt.setScale(2, RoundingMode.HALF_UP))
-                    .newBenefitAmountSnapshot(benefitAmt.setScale(2, RoundingMode.HALF_UP))
-                    .newStageAmount(newStageAmount)
-                    .alreadyAdjustedAmount(alreadyAdjusted.setScale(2, RoundingMode.HALF_UP))
-                    .adjustmentAmount(adjustment)
-                    .build());
+            personPending.addAll(stagePersonPending);
+            stages.add(new BenefitStageAdjustment(
+                    historical,
+                    sourceStage.getStageName(),
+                    sourceBaseRatio,
+                    sourceBenefitRatio,
+                    oldBenefit,
+                    newBenefit,
+                    oldStageAmount,
+                    newStageAmount,
+                    stageTarget,
+                    personTargetTotal,
+                    personPreviousTotal,
+                    companyTarget,
+                    companyPrevious,
+                    companyPending));
         }
-        return details;
+
+        BenefitAdjustmentAllocator.Result personResult = BenefitAdjustmentAllocator.allocate(
+                personPending, normalAmountsByUser);
+        BigDecimal companyApplied = stages.stream()
+                .map(BenefitStageAdjustment::companyPendingAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+        return new BenefitAdjustmentPlan(List.copyOf(stages), personResult, companyApplied);
     }
 
-    private BigDecimal calculateStageAmount(BigDecimal baseAmt,
-                                            BigDecimal benefitAmt,
-                                            BigDecimal baseRatio,
-                                            BigDecimal benefitRatio,
-                                            BigDecimal completionRatio) {
-        if (completionRatio == null) completionRatio = new BigDecimal("100");
-        BigDecimal basePart = baseAmt.multiply(baseRatio).multiply(completionRatio)
-                .divide(BD_10000, 2, RoundingMode.HALF_UP);
-        BigDecimal benefitPart = benefitAmt.multiply(benefitRatio).multiply(completionRatio)
-                .divide(BD_10000, 2, RoundingMode.HALF_UP);
-        return basePart.add(benefitPart).setScale(2, RoundingMode.HALF_UP);
+    private BigDecimal calculatePersonBenefitAdjustmentTarget(BigDecimal stageTarget,
+                                                              BigDecimal oldStageAmount,
+                                                              OutputValueDistribution source,
+                                                              OutputValueWorkPool sourcePool) {
+        if (Objects.equals(source.getIsActive(), 0)) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        BigDecimal roleRatio = source.getRoleAllocRatio();
+        if (sourcePool != null && roleRatio != null) {
+            return BenefitAdjustmentAllocator.calculatePersonTarget(
+                    stageTarget,
+                    sourcePool.getProjectRate(),
+                    roleRatio,
+                    defaultIfNull(source.getCompletionRatio(), BD_100));
+        }
+        if (oldStageAmount.signum() == 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        return stageTarget.multiply(defaultIfNull(source.getAmount(), BigDecimal.ZERO))
+                .divide(oldStageAmount, 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveHistoricalBenefitRatio(OutputValue historical,
+                                                     ProjectStage sourceStage,
+                                                     BigDecimal oldBenefit,
+                                                     BigDecimal sourceIncrementalRatio,
+                                                     BigDecimal sourceBaseRatio) {
+        if (historical.getBenefitRatioSnapshot() != null) {
+            return historical.getBenefitRatioSnapshot();
+        }
+        if (historical.getBenefitAmountPart() != null
+                && oldBenefit.signum() != 0
+                && sourceIncrementalRatio.signum() != 0) {
+            return historical.getBenefitAmountPart().multiply(BD_10000)
+                    .divide(oldBenefit.multiply(sourceIncrementalRatio), 4, RoundingMode.HALF_UP);
+        }
+        return resolveBenefitRatio(sourceStage.getBenefitInclusionRatio(), sourceBaseRatio);
     }
 
     private BigDecimal resolveOriginalStageAmount(OutputValue output) {
@@ -665,25 +800,78 @@ public class OutputValueServiceImpl implements OutputValueService {
         return output.getBenefitSnapshot();
     }
 
-    private OutputAllocationContext calculateAllocation(Long projectId,
-                                                        Long currentStageId,
-                                                        OutputValueCalculationResult calculation) {
-        List<OutputAllocationContext> components = new ArrayList<>();
-        components.add(outputAllocationRuleService.calculate(
-                projectId, currentStageId, calculation.currentStageAmount));
-        for (OutputValueAdjustmentDetail detail : calculation.adjustmentDetails) {
-            if (detail.getSourceProjectStageId() == null || detail.getAdjustmentAmount() == null
-                    || detail.getAdjustmentAmount().signum() == 0) {
-                continue;
+    private List<OutputValueAdjustmentDetail> buildAdjustmentDetails(
+            BenefitAdjustmentPlan plan,
+            OutputValueCalculationResult calculation) {
+        Map<Long, BenefitAdjustmentAllocator.AppliedAdjustment> appliedBySource = plan.personResult.adjustments()
+                .stream().collect(Collectors.toMap(
+                        item -> item.source().sourceDistributionId(),
+                        item -> item,
+                        (left, right) -> left));
+        List<OutputValueAdjustmentDetail> details = new ArrayList<>();
+        for (BenefitStageAdjustment stage : plan.stages) {
+            BigDecimal personApplied = BigDecimal.ZERO;
+            BigDecimal personRemaining = BigDecimal.ZERO;
+            for (BenefitAdjustmentAllocator.AppliedAdjustment applied : appliedBySource.values()) {
+                if (Objects.equals(applied.source().sourceOutputValueId(),
+                        stage.sourceOutput().getOutputValueId())) {
+                    personApplied = personApplied.add(applied.appliedAmount());
+                    personRemaining = personRemaining.add(applied.remainingAmount());
+                }
             }
-            components.add(outputAllocationRuleService.calculate(
-                    projectId, detail.getSourceProjectStageId(), detail.getAdjustmentAmount()));
+            personApplied = money(personApplied);
+            personRemaining = money(personRemaining);
+            BigDecimal stageApplied = personApplied.add(stage.companyPendingAmount())
+                    .setScale(2, RoundingMode.HALF_UP);
+
+            details.add(OutputValueAdjustmentDetail.builder()
+                    .sourceOutputValueId(stage.sourceOutput().getOutputValueId())
+                    .sourceProjectStageId(stage.sourceOutput().getProjectStageId())
+                    .sourceStageName(stage.sourceStageName())
+                    .sourceBaseRatio(stage.sourceBaseRatio())
+                    .sourceBenefitRatio(stage.sourceBenefitRatio())
+                    .oldBaseAmountSnapshot(stage.sourceOutput().getBaseAmountSnapshot())
+                    .oldBenefitAmountSnapshot(stage.oldBenefitAmount())
+                    .oldStageAmount(stage.oldStageAmount())
+                    .newBaseAmountSnapshot(calculation.baseAmount)
+                    .newBenefitAmountSnapshot(stage.newBenefitAmount())
+                    .newStageAmount(stage.newStageAmount())
+                    .alreadyAdjustedAmount(stage.personPreviousAmount()
+                            .add(stage.companyPreviousAmount()).setScale(2, RoundingMode.HALF_UP))
+                    .adjustmentAmount(stageApplied)
+                    .personAdjustmentAmount(personApplied)
+                    .companyAdjustmentAmount(stage.companyPendingAmount())
+                    .remainingPersonAdjustmentAmount(personRemaining)
+                    .build());
         }
-        return OutputAllocationCalculator.merge(calculation.totalAmount, components);
+        return details;
+    }
+
+    private List<OutputValuePreviewVo.BenefitAdjustmentVo> toBenefitAdjustmentVos(
+            BenefitAdjustmentPlan plan) {
+        return plan.personResult.adjustments().stream().map(applied -> {
+            BenefitAdjustmentAllocator.PendingAdjustment source = applied.source();
+            return new OutputValuePreviewVo.BenefitAdjustmentVo(
+                    source.sourceDistributionId(),
+                    source.sourceOutputValueId(),
+                    source.sourceProjectStageId(),
+                    source.sourceStageName(),
+                    source.userId(),
+                    resolveUserName(source.userId()),
+                    source.workType(),
+                    plan.oldBenefitAmount(source.sourceOutputValueId()),
+                    plan.newBenefitAmount(source.sourceOutputValueId()),
+                    source.targetAmount(),
+                    source.previousAdjustedAmount(),
+                    source.pendingAmount(),
+                    applied.appliedAmount(),
+                    applied.remainingAmount());
+        }).collect(Collectors.toList());
     }
 
     private OutputValuePreviewVo toPreviewVo(OutputValueCalculationResult calculation,
-                                             OutputAllocationContext allocation) {
+                                             OutputAllocationContext allocation,
+                                             BenefitAdjustmentPlan adjustmentPlan) {
         OutputValuePreviewVo vo = new OutputValuePreviewVo();
         vo.setBaseAmount(calculation.baseAmount);
         vo.setBenefitAmount(calculation.benefitAmount);
@@ -692,12 +880,18 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setBasePart(calculation.basePart);
         vo.setBenefitPart(calculation.benefitPart);
         vo.setCurrentStageAmount(calculation.currentStageAmount);
-        vo.setAdjustmentAmount(calculation.adjustmentAmount);
-        vo.setThisPeriodTotal(calculation.totalAmount);
+        vo.setPersonAdjustmentAmount(adjustmentPlan.personResult.appliedTotal());
+        vo.setCompanyAdjustmentAmount(adjustmentPlan.companyAppliedAmount);
+        vo.setPendingPersonAdjustmentAmount(adjustmentPlan.personResult.remainingTotal());
+        BigDecimal adjustmentAmount = adjustmentPlan.personResult.appliedTotal()
+                .add(adjustmentPlan.companyAppliedAmount).setScale(2, RoundingMode.HALF_UP);
+        vo.setAdjustmentAmount(adjustmentAmount);
+        vo.setThisPeriodTotal(calculation.currentStageAmount.add(adjustmentAmount)
+                .setScale(2, RoundingMode.HALF_UP));
         vo.setAlreadyAllocated(calculation.alreadyAllocated);
         vo.setIncrementalRatio(calculation.incrementalRatio);
         vo.setCoefficient(calculation.coefficient);
-        vo.setAllocationVersion("allocation_v4");
+        vo.setAllocationVersion("allocation_v5");
         vo.setAllocationRuleVersionId(allocation.getRuleVersionId());
         vo.setAllocationRuleVersionNo(allocation.getRuleVersionNo());
         vo.setEmployeePoolRate(allocation.getEmployeePoolRate());
@@ -709,9 +903,10 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setWorkPools(allocation.getWorkPools().stream()
                 .map(this::toWorkPoolVo)
                 .collect(Collectors.toList()));
-        vo.setAdjustmentDetails(calculation.adjustmentDetails.stream()
+        vo.setAdjustmentDetails(buildAdjustmentDetails(adjustmentPlan, calculation).stream()
                 .map(this::toAdjustmentDetailVo)
                 .collect(Collectors.toList()));
+        vo.setBenefitAdjustments(toBenefitAdjustmentVos(adjustmentPlan));
         return vo;
     }
 
@@ -765,6 +960,14 @@ public class OutputValueServiceImpl implements OutputValueService {
         return benefitRatio != null && benefitRatio.signum() > 0 ? benefitRatio : baseRatio;
     }
 
+    private BigDecimal positiveOrFallback(BigDecimal value, BigDecimal fallback) {
+        return value != null && value.signum() > 0 ? value : fallback;
+    }
+
+    private BigDecimal money(BigDecimal value) {
+        return (value == null ? BigDecimal.ZERO : value).setScale(2, RoundingMode.HALF_UP);
+    }
+
     private record OutputValueCalculationResult(
             BigDecimal baseAmount,
             BigDecimal benefitAmount,
@@ -773,14 +976,55 @@ public class OutputValueServiceImpl implements OutputValueService {
             BigDecimal basePart,
             BigDecimal benefitPart,
             BigDecimal currentStageAmount,
-            BigDecimal adjustmentAmount,
-            BigDecimal totalAmount,
-            List<OutputValueAdjustmentDetail> adjustmentDetails,
             BigDecimal completionRatio,
             BigDecimal alreadyAllocated,
             BigDecimal incrementalRatio,
             BigDecimal coefficient
     ) {}
+
+    private record BenefitStageAdjustment(
+            OutputValue sourceOutput,
+            String sourceStageName,
+            BigDecimal sourceBaseRatio,
+            BigDecimal sourceBenefitRatio,
+            BigDecimal oldBenefitAmount,
+            BigDecimal newBenefitAmount,
+            BigDecimal oldStageAmount,
+            BigDecimal newStageAmount,
+            BigDecimal stageTargetAmount,
+            BigDecimal personTargetAmount,
+            BigDecimal personPreviousAmount,
+            BigDecimal companyTargetAmount,
+            BigDecimal companyPreviousAmount,
+            BigDecimal companyPendingAmount
+    ) {}
+
+    private record BenefitAdjustmentPlan(
+            List<BenefitStageAdjustment> stages,
+            BenefitAdjustmentAllocator.Result personResult,
+            BigDecimal companyAppliedAmount
+    ) {
+        private static BenefitAdjustmentPlan empty() {
+            return new BenefitAdjustmentPlan(
+                    Collections.emptyList(),
+                    BenefitAdjustmentAllocator.allocate(Collections.emptyList(), Collections.emptyMap()),
+                    BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+        }
+
+        private BigDecimal oldBenefitAmount(Long sourceOutputValueId) {
+            return stages.stream()
+                    .filter(stage -> Objects.equals(stage.sourceOutput().getOutputValueId(), sourceOutputValueId))
+                    .map(BenefitStageAdjustment::oldBenefitAmount)
+                    .findFirst().orElse(null);
+        }
+
+        private BigDecimal newBenefitAmount(Long sourceOutputValueId) {
+            return stages.stream()
+                    .filter(stage -> Objects.equals(stage.sourceOutput().getOutputValueId(), sourceOutputValueId))
+                    .map(BenefitStageAdjustment::newBenefitAmount)
+                    .findFirst().orElse(null);
+        }
+    }
 
     /** 在职状态：优先 DTO 传入，其次查 sys_user.employment_status，默认 1（在职） */
     private int resolveIsActive(Long userId, Integer override) {
@@ -1069,11 +1313,16 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setBenefitSnapshot(ov.getBenefitSnapshot());
         vo.setCurrentStageAmount(ov.getCurrentStageAmount());
         vo.setAdjustmentAmount(ov.getAdjustmentAmount());
+        vo.setPersonAdjustmentAmount(ov.getPersonAdjustmentAmount());
+        vo.setCompanyAdjustmentAmount(ov.getCompanyAdjustmentAmount());
+        vo.setPendingPersonAdjustmentAmount(ov.getPendingPersonAdjustmentAmount());
         vo.setStageCompletionRatio(ov.getStageCompletionRatio());
         vo.setStageIncrementalRatio(ov.getStageIncrementalRatio());
         vo.setCoefficient(ov.getCoefficient());
         vo.setBaseAmountSnapshot(ov.getBaseAmountSnapshot());
         vo.setBenefitAmountSnapshot(ov.getBenefitAmountSnapshot());
+        vo.setBaseRatioSnapshot(ov.getBaseRatioSnapshot());
+        vo.setBenefitRatioSnapshot(ov.getBenefitRatioSnapshot());
         vo.setCalculationVersion(ov.getCalculationVersion());
         vo.setAllocationVersion(ov.getAllocationVersion());
         vo.setAllocationRuleVersionId(ov.getAllocationRuleVersionId());
@@ -1136,6 +1385,10 @@ public class OutputValueServiceImpl implements OutputValueService {
         List<OutputValueVo.DistributionItemVo> distVos = dists.stream().map(d -> {
             OutputValueVo.DistributionItemVo item = new OutputValueVo.DistributionItemVo();
             item.setDistributionId(d.getDistributionId());
+            item.setComponentType(d.getComponentType());
+            item.setSourceDistributionId(d.getSourceDistributionId());
+            item.setSourceOutputValueId(d.getSourceOutputValueId());
+            item.setSourceProjectStageId(d.getSourceProjectStageId());
             item.setUserId(d.getUserId());
             item.setWorkType(d.getWorkType());
             item.setRatio(d.getRatio());
@@ -1145,6 +1398,9 @@ public class OutputValueServiceImpl implements OutputValueService {
             item.setRoleAllocRatio(d.getRoleAllocRatio());
             item.setPlannedAmount(d.getPlannedAmount());
             item.setCompanyDelta(d.getCompanyDelta());
+            item.setAdjustmentTargetAmount(d.getAdjustmentTargetAmount());
+            item.setPreviousAdjustedAmount(d.getPreviousAdjustedAmount());
+            item.setRemainingAdjustmentAmount(d.getRemainingAdjustmentAmount());
             item.setDistType(d.getDistType());
             item.setIsActive(d.getIsActive());
             item.setAmount(d.getAmount());
@@ -1159,6 +1415,10 @@ public class OutputValueServiceImpl implements OutputValueService {
         }).collect(Collectors.toList());
 
         vo.setDistributions(distVos);
+        vo.setBenefitAdjustments(dists.stream()
+                .filter(d -> Objects.equals(d.getComponentType(), COMPONENT_BENEFIT_ADJUSTMENT))
+                .map(this::toStoredBenefitAdjustmentVo)
+                .collect(Collectors.toList()));
         vo.setWorkPools(outputAllocationRuleService.getWorkPools(ov.getOutputValueId()).stream()
                 .map(this::toWorkPoolVo)
                 .collect(Collectors.toList()));
@@ -1189,7 +1449,37 @@ public class OutputValueServiceImpl implements OutputValueService {
         vo.setNewStageAmount(detail.getNewStageAmount());
         vo.setAlreadyAdjustedAmount(detail.getAlreadyAdjustedAmount());
         vo.setAdjustmentAmount(detail.getAdjustmentAmount());
+        vo.setPersonAdjustmentAmount(detail.getPersonAdjustmentAmount());
+        vo.setCompanyAdjustmentAmount(detail.getCompanyAdjustmentAmount());
+        vo.setRemainingPersonAdjustmentAmount(detail.getRemainingPersonAdjustmentAmount());
         return vo;
+    }
+
+    private OutputValuePreviewVo.BenefitAdjustmentVo toStoredBenefitAdjustmentVo(
+            OutputValueDistribution distribution) {
+        OutputValue sourceOutput = distribution.getSourceOutputValueId() == null
+                ? null : outputValueMapper.selectById(distribution.getSourceOutputValueId());
+        OutputValue settlementOutput = distribution.getOutputValueId() == null
+                ? null : outputValueMapper.selectById(distribution.getOutputValueId());
+        ProjectStage sourceStage = distribution.getSourceProjectStageId() == null
+                ? null : projectStageService.getProjectStageById(distribution.getSourceProjectStageId());
+        BigDecimal target = money(distribution.getAdjustmentTargetAmount());
+        BigDecimal previous = money(distribution.getPreviousAdjustedAmount());
+        return new OutputValuePreviewVo.BenefitAdjustmentVo(
+                distribution.getSourceDistributionId(),
+                distribution.getSourceOutputValueId(),
+                distribution.getSourceProjectStageId(),
+                sourceStage == null ? null : sourceStage.getStageName(),
+                distribution.getUserId(),
+                resolveUserName(distribution.getUserId()),
+                distribution.getWorkType(),
+                sourceOutput == null ? null : resolveHistoricalBenefitSnapshot(sourceOutput),
+                settlementOutput == null ? null : settlementOutput.getBenefitAmountSnapshot(),
+                target,
+                previous,
+                target.subtract(previous).setScale(2, RoundingMode.HALF_UP),
+                money(distribution.getAmount()),
+                money(distribution.getRemainingAdjustmentAmount()));
     }
 
     private String resolveUserName(Long userId) {

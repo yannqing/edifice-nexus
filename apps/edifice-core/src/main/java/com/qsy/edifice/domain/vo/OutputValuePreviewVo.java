@@ -27,6 +27,9 @@ public class OutputValuePreviewVo implements Serializable {
     private BigDecimal benefitPart;
     private BigDecimal currentStageAmount;
     private BigDecimal adjustmentAmount;
+    private BigDecimal personAdjustmentAmount;
+    private BigDecimal companyAdjustmentAmount;
+    private BigDecimal pendingPersonAdjustmentAmount;
     private BigDecimal thisPeriodTotal;
     /** 当前阶段已确认的产值分配总额 */
     private BigDecimal alreadyAllocated;
@@ -47,6 +50,7 @@ public class OutputValuePreviewVo implements Serializable {
     private BigDecimal projectPoolAmount;
     private List<WorkPoolVo> workPools;
     private List<AdjustmentDetailVo> adjustmentDetails;
+    private List<BenefitAdjustmentVo> benefitAdjustments;
 
     @Data
     @AllArgsConstructor
@@ -95,5 +99,40 @@ public class OutputValuePreviewVo implements Serializable {
         private BigDecimal newStageAmount;
         private BigDecimal alreadyAdjustedAmount;
         private BigDecimal adjustmentAmount;
+        private BigDecimal personAdjustmentAmount;
+        private BigDecimal companyAdjustmentAmount;
+        private BigDecimal remainingPersonAdjustmentAmount;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    public static class BenefitAdjustmentVo implements Serializable {
+        @Serial
+        private static final long serialVersionUID = 1L;
+
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long sourceDistributionId;
+
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long sourceOutputValueId;
+
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long sourceProjectStageId;
+
+        private String sourceStageName;
+
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long userId;
+
+        private String userName;
+        private Integer workType;
+        private BigDecimal oldBenefitAmountSnapshot;
+        private BigDecimal newBenefitAmountSnapshot;
+        private BigDecimal targetAmount;
+        private BigDecimal previousAdjustedAmount;
+        private BigDecimal pendingAmount;
+        private BigDecimal appliedAmount;
+        private BigDecimal remainingAmount;
     }
 }

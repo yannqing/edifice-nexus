@@ -66,6 +66,15 @@ public class OutputValueAdjustmentDetail implements Serializable {
     @TableField("adjustment_amount")
     private BigDecimal adjustmentAmount;
 
+    @TableField("person_adjustment_amount")
+    private BigDecimal personAdjustmentAmount;
+
+    @TableField("company_adjustment_amount")
+    private BigDecimal companyAdjustmentAmount;
+
+    @TableField("remaining_person_adjustment_amount")
+    private BigDecimal remainingPersonAdjustmentAmount;
+
     @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;
 

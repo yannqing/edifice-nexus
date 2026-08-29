@@ -27,6 +27,19 @@ public class OutputValueDistribution implements Serializable {
     @TableField("output_value_id")
     private Long outputValueId;
 
+    /** 0-当前阶段正常分配/1-历史效益补差扣回 */
+    @TableField("component_type")
+    private Integer componentType;
+
+    @TableField("source_distribution_id")
+    private Long sourceDistributionId;
+
+    @TableField("source_output_value_id")
+    private Long sourceOutputValueId;
+
+    @TableField("source_project_stage_id")
+    private Long sourceProjectStageId;
+
     @TableField("user_id")
     private Long userId;
 
@@ -62,7 +75,16 @@ public class OutputValueDistribution implements Serializable {
     @TableField("company_delta")
     private BigDecimal companyDelta;
 
-    /** 类型：0-员工正常/1-员工降档/2-领导兜底/3-公司留存/4-其他金额 */
+    @TableField("adjustment_target_amount")
+    private BigDecimal adjustmentTargetAmount;
+
+    @TableField("previous_adjusted_amount")
+    private BigDecimal previousAdjustedAmount;
+
+    @TableField("remaining_adjustment_amount")
+    private BigDecimal remainingAdjustmentAmount;
+
+    /** 类型：0-员工正常/1-员工降档/2-领导兜底/3-公司留存/4-其他金额/5-效益补差扣回 */
     @TableField("dist_type")
     private Integer distType;
 

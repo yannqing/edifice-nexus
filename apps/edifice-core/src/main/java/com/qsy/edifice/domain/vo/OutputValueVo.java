@@ -79,6 +79,10 @@ public class OutputValueVo implements Serializable {
     /** 历史阶段补差合计，可正可负 */
     private BigDecimal adjustmentAmount;
 
+    private BigDecimal personAdjustmentAmount;
+    private BigDecimal companyAdjustmentAmount;
+    private BigDecimal pendingPersonAdjustmentAmount;
+
     /** 创建时阶段的完成比例（%，0-100） */
     private BigDecimal stageCompletionRatio;
 
@@ -93,6 +97,9 @@ public class OutputValueVo implements Serializable {
 
     /** 快照：本单创建时合同的效益金额 */
     private BigDecimal benefitAmountSnapshot;
+
+    private BigDecimal baseRatioSnapshot;
+    private BigDecimal benefitRatioSnapshot;
 
     /** 计算版本 */
     private String calculationVersion;
@@ -141,6 +148,8 @@ public class OutputValueVo implements Serializable {
 
     private List<OutputValuePreviewVo.AdjustmentDetailVo> adjustmentDetails;
 
+    private List<OutputValuePreviewVo.BenefitAdjustmentVo> benefitAdjustments;
+
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
@@ -150,6 +159,18 @@ public class OutputValueVo implements Serializable {
 
         @JsonSerialize(using = ToStringSerializer.class)
         private Long distributionId;
+
+        /** 0-当前阶段正常分配/1-历史效益补差扣回 */
+        private Integer componentType;
+
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long sourceDistributionId;
+
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long sourceOutputValueId;
+
+        @JsonSerialize(using = ToStringSerializer.class)
+        private Long sourceProjectStageId;
 
         @JsonSerialize(using = ToStringSerializer.class)
         private Long userId;
@@ -181,7 +202,11 @@ public class OutputValueVo implements Serializable {
         /** 兑现不足或离职转公司金额 */
         private BigDecimal companyDelta;
 
-        /** 0-员工正常/1-员工降档/2-领导兜底/3-公司留存/4-其他金额 */
+        private BigDecimal adjustmentTargetAmount;
+        private BigDecimal previousAdjustedAmount;
+        private BigDecimal remainingAdjustmentAmount;
+
+        /** 0-员工正常/1-员工降档/2-领导兜底/3-公司留存/4-其他金额/5-效益补差扣回 */
         private Integer distType;
 
         /** 下单时成员是否在职：0-离职/1-在职 */

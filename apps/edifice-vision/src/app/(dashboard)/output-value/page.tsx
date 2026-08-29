@@ -403,7 +403,13 @@ export default function OutputValuePage() {
                         {/* 产值与人员分配金额快照 */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-xs">
                           <BreakdownBox label="当前阶段产值" value={item.currentStageAmount ?? item.stageCumulativeAmount ?? 0} tone="blue" />
-                          <BreakdownBox label="历史补差合计" value={item.adjustmentAmount ?? item.previousCumulativeAmount ?? 0} tone="amber" />
+                          <BreakdownBox
+                            label={item.allocationVersion === "allocation_v5" ? "人员效益补/扣" : "历史补差合计"}
+                            value={item.allocationVersion === "allocation_v5"
+                              ? (item.personAdjustmentAmount ?? 0)
+                              : (item.adjustmentAmount ?? item.previousCumulativeAmount ?? 0)}
+                            tone="amber"
+                          />
                           <BreakdownBox
                             label={usesWorkPools ? "项目人员可分配" : "员工池"}
                             value={usesWorkPools
@@ -458,7 +464,7 @@ export default function OutputValuePage() {
                         {(item.adjustmentDetails ?? []).length > 0 && (
                           <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50/40 overflow-x-auto">
                             <div className="px-3 py-2 text-sm font-semibold text-slate-700">
-                              历史补差明细
+                              历史效益调整明细
                             </div>
                             <table className="w-full text-xs bg-white">
                               <thead className="bg-amber-50 text-slate-500">
@@ -467,7 +473,8 @@ export default function OutputValuePage() {
                                   <th className="text-right py-2 px-3 font-medium">原阶段金额</th>
                                   <th className="text-right py-2 px-3 font-medium">重算金额</th>
                                   <th className="text-right py-2 px-3 font-medium">已补/扣</th>
-                                  <th className="text-right py-2 px-3 font-medium">本次补/扣</th>
+                                  <th className="text-right py-2 px-3 font-medium">人员补/扣</th>
+                                  <th className="text-right py-2 px-3 font-medium">剩余待扣</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -491,10 +498,56 @@ export default function OutputValuePage() {
                                     <td
                                       className={cn(
                                         "py-2 px-3 text-right font-semibold",
-                                        detail.adjustmentAmount < 0 ? "text-rose-600" : "text-emerald-700",
+                                        (detail.personAdjustmentAmount ?? detail.adjustmentAmount) < 0 ? "text-rose-600" : "text-emerald-700",
                                       )}
                                     >
-                                      {formatAmount(detail.adjustmentAmount)}
+                                      {formatAmount(detail.personAdjustmentAmount ?? detail.adjustmentAmount)}
+                                    </td>
+                                    <td className="py-2 px-3 text-right font-semibold text-rose-600">
+                                      {formatAmount(detail.remainingPersonAdjustmentAmount ?? 0)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+
+                        {(item.benefitAdjustments ?? []).length > 0 && (
+                          <div className="mt-4 border border-amber-100 rounded-lg overflow-x-auto">
+                            <div className="px-3 py-2 bg-amber-50 text-sm font-semibold text-slate-700">
+                              历史效益个人补差/扣回
+                            </div>
+                            <table className="w-full min-w-[720px] text-xs">
+                              <thead className="text-slate-500">
+                                <tr>
+                                  <th className="text-left py-2 px-3 font-medium">人员</th>
+                                  <th className="text-left py-2 px-3 font-medium">来源阶段</th>
+                                  <th className="text-left py-2 px-3 font-medium">工作类型</th>
+                                  <th className="text-right py-2 px-3 font-medium">累计应补/扣</th>
+                                  <th className="text-right py-2 px-3 font-medium">此前已补/扣</th>
+                                  <th className="text-right py-2 px-3 font-medium">本次补/扣</th>
+                                  <th className="text-right py-2 px-3 font-medium">剩余待扣</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(item.benefitAdjustments ?? []).map((adjustment) => (
+                                  <tr key={`${adjustment.sourceDistributionId}-${adjustment.appliedAmount}`} className="border-t border-amber-50">
+                                    <td className="py-2 px-3 text-slate-700">{adjustment.userName || "-"}</td>
+                                    <td className="py-2 px-3 text-slate-600">{adjustment.sourceStageName || "-"}</td>
+                                    <td className="py-2 px-3 text-slate-600">
+                                      {WORK_TYPE_LABELS[adjustment.workType] ?? "-"}
+                                    </td>
+                                    <td className="py-2 px-3 text-right text-slate-600">{formatAmount(adjustment.targetAmount)}</td>
+                                    <td className="py-2 px-3 text-right text-slate-600">{formatAmount(adjustment.previousAdjustedAmount)}</td>
+                                    <td className={cn(
+                                      "py-2 px-3 text-right font-semibold",
+                                      adjustment.appliedAmount < 0 ? "text-rose-600" : "text-emerald-700",
+                                    )}>
+                                      {formatAmount(adjustment.appliedAmount)}
+                                    </td>
+                                    <td className="py-2 px-3 text-right font-semibold text-rose-600">
+                                      {formatAmount(adjustment.remainingAmount)}
                                     </td>
                                   </tr>
                                 ))}
@@ -517,7 +570,7 @@ export default function OutputValuePage() {
                             </tr>
                           </thead>
                           <tbody className="text-sm">
-                            {item.distributions.map((d) => (
+                            {item.distributions.filter((d) => d.componentType !== 1).map((d) => (
                               <tr key={d.distributionId} className="border-t border-slate-50">
                                 <td className="py-3">
                                   <div className="flex items-center gap-2">

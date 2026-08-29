@@ -155,7 +155,7 @@ public class PerformanceRestoreServiceImpl implements PerformanceRestoreService 
 
         for (OutputValueDistribution d : dists) {
             BigDecimal amt = d.getAmount();
-            if (amt == null || amt.signum() <= 0) continue;
+            if (amt == null || amt.signum() == 0) continue;
             Long uid = d.getUserId();
             if (uid == null) continue;
             Long pid = ovToProject.get(d.getOutputValueId());
@@ -165,6 +165,12 @@ public class PerformanceRestoreServiceImpl implements PerformanceRestoreService 
         }
 
         for (Map.Entry<String, BigDecimal> e : amountByKey.entrySet()) {
+            // Signed benefit deductions must reduce the person's quarter total. A non-positive
+            // final total has no payable performance restore record.
+            if (e.getValue().signum() <= 0) {
+                skipped++;
+                continue;
+            }
             if (existedKeys.contains(e.getKey())) {
                 skipped++;
                 continue;

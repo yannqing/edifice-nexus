@@ -351,8 +351,13 @@ create table output_value
     benefit_snapshot           decimal(20, 2) null comment '快照：本单创建时合同的预计效益值',
     current_stage_amount       decimal(20, 2) null comment '当前阶段纯产值，不含历史补差',
     adjustment_amount          decimal(20, 2) null comment '历史阶段补差合计，可正可负',
+    person_adjustment_amount   decimal(20, 2) default 0.00 not null comment '本单人员效益补差/扣回',
+    company_adjustment_amount  decimal(20, 2) default 0.00 not null comment '本单公司效益补差/扣回',
+    pending_person_adjustment_amount decimal(20, 2) default 0.00 not null comment '本单后仍待扣回的人员金额',
     base_amount_snapshot       decimal(20, 2) null comment '创建时合同基本金额快照',
     benefit_amount_snapshot    decimal(20, 2) null comment '创建时合同效益金额快照',
+    base_ratio_snapshot        decimal(10, 4) null comment '创建时阶段基本比例快照',
+    benefit_ratio_snapshot     decimal(10, 4) null comment '创建时阶段效益比例快照',
     calculation_version        varchar(64) null comment '产值计算版本',
     stage_completion_ratio     decimal(5, 2) default 100.00 not null comment '创建时阶段累计完成比例',
     stage_incremental_ratio    decimal(5, 2) default 100.00 not null comment '本次增量完成比例',
@@ -394,6 +399,9 @@ create table output_value_adjustment_detail
     new_stage_amount            decimal(20, 2) default 0.00        not null comment '按本单金额重算后的历史阶段金额',
     already_adjusted_amount     decimal(20, 2) default 0.00        not null comment '之前已对该历史阶段补差/扣回金额',
     adjustment_amount           decimal(20, 2) default 0.00        not null comment '本次补差/扣回金额',
+    person_adjustment_amount    decimal(20, 2) default 0.00        not null comment '本次人员补差/扣回金额',
+    company_adjustment_amount   decimal(20, 2) default 0.00        not null comment '本次公司补差/扣回金额',
+    remaining_person_adjustment_amount decimal(20, 2) default 0.00 not null comment '本次后仍待扣回的人员金额',
     created_time                datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     updated_time                datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
     is_delete                   tinyint  default 0                 not null comment '逻辑删除',
@@ -410,6 +418,10 @@ create table output_value_distribution
     distribution_id   bigint                             not null comment '分配明细id'
         primary key,
     output_value_id   bigint                             not null comment '产值分配单id',
+    component_type    tinyint  default 0                 not null comment '组成类型：0-当前阶段正常分配/1-历史效益补差扣回',
+    source_distribution_id bigint                         null comment '补差来源历史人员分配行id',
+    source_output_value_id bigint                         null comment '补差来源历史产值分配单id',
+    source_project_stage_id bigint                        null comment '补差来源历史阶段id',
     user_id           bigint                             not null comment '分配用户id',
     work_type         tinyint                            not null comment '工作类型：0-管理工作/1-基础工作/2-智励工作',
     ratio             decimal(10, 2) default 0.00        not null comment '分配比例（%，旧字段，保留以兼容历史数据）',
@@ -419,6 +431,9 @@ create table output_value_distribution
     role_alloc_ratio  decimal(10, 4)                     null comment '工作类型资金池内分配比例（%）',
     planned_amount    decimal(20, 2)                     null comment '人员计划分配金额',
     company_delta     decimal(20, 2)                     null comment '兑现不足或离职转公司金额',
+    adjustment_target_amount decimal(20, 2)               null comment '截至本单该来源人员累计应补扣金额',
+    previous_adjusted_amount decimal(20, 2)               null comment '本单前该来源人员累计已补扣金额',
+    remaining_adjustment_amount decimal(20, 2)            null comment '本单后该来源人员剩余待补扣金额',
     dist_type         tinyint        default 0           not null comment '类型：0-员工正常/1-员工降档/2-（v0.4 废弃）/3-公司留存（不生成行）/4-离职兜底',
     is_active         tinyint        default 1           not null comment '下单时成员是否在职（0-离职/1-在职）',
     amount            decimal(20, 2) default 0.00        not null comment '分配金额（元）',
@@ -428,6 +443,8 @@ create table output_value_distribution
     key idx_dist_output_value (output_value_id),
     key idx_dist_user (user_id),
     key idx_dist_type (dist_type)
+    ,key idx_dist_source_component (source_distribution_id, component_type, is_delete)
+    ,key idx_dist_source_output (source_output_value_id, component_type, is_delete)
 )
     comment '产值分配明细表';
 

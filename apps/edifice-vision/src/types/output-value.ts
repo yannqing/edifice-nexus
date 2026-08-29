@@ -1,5 +1,10 @@
 export interface DistributionItemVo {
   distributionId: string;
+  /** 0-当前阶段正常分配/1-历史效益补差扣回 */
+  componentType?: number;
+  sourceDistributionId?: string | null;
+  sourceOutputValueId?: string | null;
+  sourceProjectStageId?: string | null;
   userId: string;
   userName: string;
   userRole: string;
@@ -18,7 +23,10 @@ export interface DistributionItemVo {
   plannedAmount?: number | null;
   /** 兑现不足或离职产生的内部差额 */
   companyDelta?: number | null;
-  /** 0-员工正常/1-员工降档/2-领导兜底/3-公司留存/4-其他金额 */
+  adjustmentTargetAmount?: number | null;
+  previousAdjustedAmount?: number | null;
+  remainingAdjustmentAmount?: number | null;
+  /** 0-员工正常/1-员工降档/2-领导兜底/3-公司留存/4-其他金额/5-效益补差扣回 */
   distType: number;
   /** 下单时成员是否在职：0-离职/1-在职 */
   isActive: number;
@@ -41,6 +49,26 @@ export interface OutputValueAdjustmentDetailVo {
   newStageAmount: number;
   alreadyAdjustedAmount: number;
   adjustmentAmount: number;
+  personAdjustmentAmount?: number;
+  companyAdjustmentAmount?: number;
+  remainingPersonAdjustmentAmount?: number;
+}
+
+export interface BenefitAdjustmentVo {
+  sourceDistributionId: string;
+  sourceOutputValueId: string;
+  sourceProjectStageId: string;
+  sourceStageName: string;
+  userId: string;
+  userName: string;
+  workType: number;
+  oldBenefitAmountSnapshot: number | null;
+  newBenefitAmountSnapshot: number | null;
+  targetAmount: number;
+  previousAdjustedAmount: number;
+  pendingAmount: number;
+  appliedAmount: number;
+  remainingAmount: number;
 }
 
 export interface OutputValueVo {
@@ -79,6 +107,9 @@ export interface OutputValueVo {
   currentStageAmount: number | null;
   /** 历史阶段补差合计，可正可负 */
   adjustmentAmount: number | null;
+  personAdjustmentAmount?: number | null;
+  companyAdjustmentAmount?: number | null;
+  pendingPersonAdjustmentAmount?: number | null;
   /** 创建时阶段的完成比例（%，0-100） */
   stageCompletionRatio?: number | null;
   /** 本次增量完成比例（%，0-100） */
@@ -89,6 +120,8 @@ export interface OutputValueVo {
   baseAmountSnapshot: number | null;
   /** 快照：本单创建时合同的效益金额 */
   benefitAmountSnapshot: number | null;
+  baseRatioSnapshot?: number | null;
+  benefitRatioSnapshot?: number | null;
   /** 计算版本 */
   calculationVersion: string | null;
   allocationVersion?: string | null;
@@ -116,6 +149,7 @@ export interface OutputValueVo {
   createdTime: string;
   distributions: DistributionItemVo[];
   adjustmentDetails: OutputValueAdjustmentDetailVo[];
+  benefitAdjustments?: BenefitAdjustmentVo[];
 }
 
 export interface CreateDistributionItem {
@@ -159,6 +193,9 @@ export interface OutputValuePreview {
   benefitPart: number;
   currentStageAmount: number;
   adjustmentAmount: number;
+  personAdjustmentAmount?: number;
+  companyAdjustmentAmount?: number;
+  pendingPersonAdjustmentAmount?: number;
   thisPeriodTotal: number;
   /** 当前阶段已确认的产值分配总额 */
   alreadyAllocated?: number;
@@ -177,6 +214,7 @@ export interface OutputValuePreview {
   projectPoolAmount?: number;
   workPools: OutputValueWorkPool[];
   adjustmentDetails: OutputValueAdjustmentDetailVo[];
+  benefitAdjustments?: BenefitAdjustmentVo[];
 }
 
 export interface OutputValueWorkPool {
@@ -222,6 +260,7 @@ export const DIST_TYPE_LABELS: Record<number, string> = {
   2: "领导兜底",
   3: "公司留存",
   4: "其他金额",
+  5: "效益补差/扣回",
 };
 
 /**

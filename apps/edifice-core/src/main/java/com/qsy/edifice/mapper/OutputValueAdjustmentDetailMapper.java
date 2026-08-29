@@ -21,4 +21,15 @@ public interface OutputValueAdjustmentDetailMapper extends BaseMapper<OutputValu
               AND ov.status >= 2
             """)
     BigDecimal sumApprovedAdjustmentBySource(@Param("sourceOutputValueId") Long sourceOutputValueId);
+
+    @Select("""
+            SELECT COALESCE(SUM(d.company_adjustment_amount), 0)
+            FROM output_value_adjustment_detail d
+            INNER JOIN output_value ov ON ov.output_value_id = d.output_value_id
+            WHERE d.source_output_value_id = #{sourceOutputValueId}
+              AND d.is_delete = 0
+              AND ov.is_delete = 0
+            """)
+    BigDecimal sumAppliedCompanyBenefitAdjustment(
+            @Param("sourceOutputValueId") Long sourceOutputValueId);
 }

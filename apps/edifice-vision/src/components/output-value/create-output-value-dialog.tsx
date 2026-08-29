@@ -31,6 +31,7 @@ import {
   currentQuarter,
   generateQuarterOptions,
   WORK_TYPE_LABELS,
+  type BenefitAdjustmentVo,
   type CreateDistributionItem,
   type OutputValuePreview,
   type OutputValueVo,
@@ -88,7 +89,15 @@ const EMPTY_PREVIEW: OutputValuePreview = {
   incrementalRatio: 0,
   workPools: [],
   adjustmentDetails: [],
+  benefitAdjustments: [],
 };
+
+const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+
+interface SettledBenefitAdjustment extends BenefitAdjustmentVo {
+  appliedAmount: number;
+  remainingAmount: number;
+}
 
 export function CreateOutputValueDialog({
   open,
@@ -343,44 +352,108 @@ export function CreateOutputValueDialog({
   const previewCoefficient = preview.coefficient ?? 1;
   const hasCoefficient = previewCoefficient !== 1;
 
+  const normalRowAmounts = useMemo(() => {
+    const amounts = new Map<string, { planned: number; actual: number }>();
+    (preview.workPools ?? []).forEach((pool) => {
+      const roleRows = rows.filter((row) => row.workType === pool.workType);
+      let groupPlanned = 0;
+      roleRows.forEach((row, index) => {
+        const planned = index === roleRows.length - 1
+          ? money(pool.projectAmount - groupPlanned)
+          : money(pool.projectAmount * ((Number(row.roleAllocRatio) || 0) / 100));
+        groupPlanned = money(groupPlanned + planned);
+        const actual = row.isActive === 0
+          ? 0
+          : money(planned * ((Number(row.completionRatio) || 0) / 100));
+        amounts.set(row._key, { planned, actual });
+      });
+    });
+    return amounts;
+  }, [preview.workPools, rows]);
+
+  const normalAmountsByUser = useMemo(() => {
+    const amounts = new Map<string, number>();
+    rows.filter((row) => row.userId).forEach((row) => {
+      const actual = normalRowAmounts.get(row._key)?.actual ?? 0;
+      amounts.set(row.userId, money((amounts.get(row.userId) ?? 0) + actual));
+    });
+    return amounts;
+  }, [normalRowAmounts, rows]);
+
+  const benefitSettlement = useMemo(() => {
+    const available = new Map(normalAmountsByUser);
+    const source = preview.benefitAdjustments ?? [];
+    const ordered = [
+      ...source.filter((item) => item.pendingAmount > 0),
+      ...source.filter((item) => item.pendingAmount < 0),
+    ];
+    const adjustments: SettledBenefitAdjustment[] = ordered.map((item) => {
+      const pending = money(item.pendingAmount);
+      const currentAvailable = available.get(item.userId) ?? 0;
+      const applied = pending > 0
+        ? pending
+        : Math.max(pending, -currentAvailable);
+      const remaining = money(pending - applied);
+      available.set(item.userId, money(currentAvailable + applied));
+      return { ...item, appliedAmount: money(applied), remainingAmount: remaining };
+    });
+    const personApplied = money(adjustments.reduce((sum, item) => sum + item.appliedAmount, 0));
+    const personRemaining = money(adjustments.reduce((sum, item) => sum + item.remainingAmount, 0));
+    const companyApplied = money(preview.companyAdjustmentAmount ?? 0);
+    return {
+      adjustments,
+      personApplied,
+      personRemaining,
+      companyApplied,
+      adjustmentTotal: money(personApplied + companyApplied),
+      total: money(preview.currentStageAmount + personApplied + companyApplied),
+    };
+  }, [normalAmountsByUser, preview.benefitAdjustments, preview.companyAdjustmentAmount, preview.currentStageAmount]);
+
+  const stageAdjustmentDetails = useMemo(() => (
+    (preview.adjustmentDetails ?? []).map((detail) => {
+      const personRows = benefitSettlement.adjustments.filter(
+        (item) => item.sourceOutputValueId === detail.sourceOutputValueId,
+      );
+      const personAdjustmentAmount = money(
+        personRows.reduce((sum, item) => sum + item.appliedAmount, 0),
+      );
+      const remainingPersonAdjustmentAmount = money(
+        personRows.reduce((sum, item) => sum + item.remainingAmount, 0),
+      );
+      return {
+        ...detail,
+        personAdjustmentAmount,
+        remainingPersonAdjustmentAmount,
+        adjustmentAmount: money(
+          personAdjustmentAmount + (detail.companyAdjustmentAmount ?? 0),
+        ),
+      };
+    })
+  ), [preview.adjustmentDetails, benefitSettlement.adjustments]);
+
   // 每个工作类型独立分配，人员可跨工作类型出现。
   const { subsidyNum, companyMain, employeePool, projectPool, sumActual } = useMemo(() => {
-    const t = preview.thisPeriodTotal;
+    const t = preview.currentStageAmount;
     const s = Number(subsidyAmount) || 0;
     const cmpMain = preview.companyBaseAmount ?? Math.round(t * 0.6 * 100) / 100;
     const empPool = preview.employeePoolAmount ?? Math.round(t * 0.4 * 100) / 100;
-    const poolMap = new Map((preview.workPools ?? []).map((pool) => [pool.workType, pool]));
-
-    let actual = 0;
-    rows.forEach((r) => {
-      const roleAlloc = Number(r.roleAllocRatio) || 0;
-      const comp = Number(r.completionRatio) || 0;
-      const isActive = r.isActive !== 0;
-      const rolePool = poolMap.get(r.workType)?.projectAmount ?? 0;
-      const planned = Math.round(rolePool * (roleAlloc / 100) * 100) / 100;
-      if (isActive) {
-        actual += Math.round(planned * (comp / 100) * 100) / 100;
-      }
-    });
+    const actual = Array.from(normalRowAmounts.values())
+      .reduce((sum, item) => sum + item.actual, 0);
     return {
       subsidyNum: s,
       companyMain: cmpMain,
       employeePool: empPool,
       projectPool: preview.projectPoolAmount ?? 0,
-      sumActual: Math.round(actual * 100) / 100,
+      sumActual: money(actual + benefitSettlement.personApplied),
     };
-  }, [preview, subsidyAmount, rows]);
+  }, [preview, subsidyAmount, normalRowAmounts, benefitSettlement.personApplied]);
 
   const personnelSummary = useMemo(() => {
-    const poolMap = new Map((preview.workPools ?? []).map((pool) => [pool.workType, pool]));
     const userMap = new Map(memberOptions.map((user) => [user.userId, user]));
     const summary = new Map<string, { userName: string; amounts: Record<number, number>; total: number }>();
     rows.filter((row) => row.userId).forEach((row) => {
-      const poolAmount = poolMap.get(row.workType)?.projectAmount ?? 0;
-      const planned = poolAmount * ((Number(row.roleAllocRatio) || 0) / 100);
-      const actual = row.isActive === 0
-        ? 0
-        : planned * ((Number(row.completionRatio) || 0) / 100);
+      const actual = normalRowAmounts.get(row._key)?.actual ?? 0;
       const user = userMap.get(row.userId);
       const item = summary.get(row.userId) ?? {
         userName: user?.realName || user?.username || row.userId,
@@ -391,8 +464,22 @@ export function CreateOutputValueDialog({
       item.total = Math.round((item.total + actual) * 100) / 100;
       summary.set(row.userId, item);
     });
+    benefitSettlement.adjustments
+      .filter((adjustment) => adjustment.appliedAmount !== 0)
+      .forEach((adjustment) => {
+        const item = summary.get(adjustment.userId) ?? {
+          userName: adjustment.userName || adjustment.userId,
+          amounts: {},
+          total: 0,
+        };
+        item.amounts[adjustment.workType] = money(
+          (item.amounts[adjustment.workType] ?? 0) + adjustment.appliedAmount,
+        );
+        item.total = money(item.total + adjustment.appliedAmount);
+        summary.set(adjustment.userId, item);
+      });
     return Array.from(summary.entries()).map(([userId, item]) => ({ userId, ...item }));
-  }, [memberOptions, preview.workPools, rows]);
+  }, [memberOptions, normalRowAmounts, rows, benefitSettlement.adjustments]);
 
   const updateRow = (key: string, patch: Partial<DistRow>) => {
     setRows((prev) => prev.map((r) => (r._key === key ? { ...r, ...patch } : r)));
@@ -414,7 +501,7 @@ export function CreateOutputValueDialog({
     if (!quarter) return setError("请选择季度");
     if (!confirmUserId) return setError("请选择确认人");
     if (previewLoading) return setError("产值预览正在计算，请稍后再提交");
-    if (preview.thisPeriodTotal === 0) {
+    if (benefitSettlement.total === 0) {
       return setError(
         "本次产值为 0：请先检查合同金额、预计效益金额、阶段产值比例或历史补差",
       );
@@ -681,16 +768,16 @@ export function CreateOutputValueDialog({
               <span
                 className={cn(
                   "text-base font-bold ml-2",
-                  preview.adjustmentAmount < 0 ? "text-rose-600" : "text-emerald-700",
+                  benefitSettlement.adjustmentTotal < 0 ? "text-rose-600" : "text-emerald-700",
                 )}
               >
-                ¥{preview.adjustmentAmount.toLocaleString()}
+                ¥{benefitSettlement.adjustmentTotal.toLocaleString()}
               </span>
               <span className="text-slate-400 ml-2">
                 （补差为正，扣回为负）
               </span>
             </div>
-            {preview.adjustmentDetails.length > 0 && (
+            {stageAdjustmentDetails.length > 0 && (
               <div className="overflow-x-auto border border-blue-100 rounded-lg bg-white">
                 <table className="w-full text-xs">
                   <thead className="bg-blue-50 text-slate-500">
@@ -699,11 +786,12 @@ export function CreateOutputValueDialog({
                       <th className="text-right py-2 px-3 font-medium">原阶段金额</th>
                       <th className="text-right py-2 px-3 font-medium">重算金额</th>
                       <th className="text-right py-2 px-3 font-medium">已补/扣</th>
-                      <th className="text-right py-2 px-3 font-medium">本次补/扣</th>
+                      <th className="text-right py-2 px-3 font-medium">人员补/扣</th>
+                      <th className="text-right py-2 px-3 font-medium">剩余待扣</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.adjustmentDetails.map((detail) => (
+                    {stageAdjustmentDetails.map((detail) => (
                       <tr key={detail.sourceOutputValueId} className="border-t border-blue-50">
                         <td className="py-2 px-3 text-slate-700">
                           {detail.sourceStageName || "-"}
@@ -723,10 +811,55 @@ export function CreateOutputValueDialog({
                         <td
                           className={cn(
                             "py-2 px-3 text-right font-semibold",
-                            detail.adjustmentAmount < 0 ? "text-rose-600" : "text-emerald-700",
+                            (detail.personAdjustmentAmount ?? 0) < 0 ? "text-rose-600" : "text-emerald-700",
                           )}
                         >
-                          ¥{detail.adjustmentAmount.toLocaleString()}
+                          ¥{(detail.personAdjustmentAmount ?? 0).toLocaleString()}
+                        </td>
+                        <td className="py-2 px-3 text-right font-semibold text-rose-600">
+                          ¥{(detail.remainingPersonAdjustmentAmount ?? 0).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {benefitSettlement.adjustments.length > 0 && (
+              <div className="overflow-x-auto border border-blue-100 rounded-lg bg-white">
+                <div className="px-3 py-2 bg-blue-50 text-sm font-semibold text-slate-700">
+                  历史效益个人补差/扣回
+                </div>
+                <table className="w-full min-w-[760px] text-xs">
+                  <thead className="text-slate-500">
+                    <tr>
+                      <th className="text-left py-2 px-3 font-medium">人员</th>
+                      <th className="text-left py-2 px-3 font-medium">来源阶段</th>
+                      <th className="text-left py-2 px-3 font-medium">工作类型</th>
+                      <th className="text-right py-2 px-3 font-medium">待补/扣</th>
+                      <th className="text-right py-2 px-3 font-medium">本次补/扣</th>
+                      <th className="text-right py-2 px-3 font-medium">剩余待扣</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {benefitSettlement.adjustments.map((adjustment) => (
+                      <tr key={adjustment.sourceDistributionId} className="border-t border-slate-100">
+                        <td className="py-2 px-3 text-slate-700">{adjustment.userName || "-"}</td>
+                        <td className="py-2 px-3 text-slate-600">{adjustment.sourceStageName || "-"}</td>
+                        <td className="py-2 px-3 text-slate-600">
+                          {WORK_TYPE_LABELS[adjustment.workType] ?? "-"}
+                        </td>
+                        <td className="py-2 px-3 text-right text-slate-600">
+                          ¥{adjustment.pendingAmount.toLocaleString()}
+                        </td>
+                        <td className={cn(
+                          "py-2 px-3 text-right font-semibold",
+                          adjustment.appliedAmount < 0 ? "text-rose-600" : "text-emerald-700",
+                        )}>
+                          ¥{adjustment.appliedAmount.toLocaleString()}
+                        </td>
+                        <td className="py-2 px-3 text-right font-semibold text-rose-600">
+                          ¥{adjustment.remainingAmount.toLocaleString()}
                         </td>
                       </tr>
                     ))}
@@ -737,7 +870,7 @@ export function CreateOutputValueDialog({
             <div className="pt-2 border-t border-blue-100 text-slate-700">
               本次计入分配总额：
               <span className="text-lg font-bold text-blue-700 ml-2">
-                ¥{preview.thisPeriodTotal.toLocaleString()}
+                ¥{benefitSettlement.total.toLocaleString()}
               </span>
             </div>
           </div>
@@ -795,13 +928,8 @@ export function CreateOutputValueDialog({
                         </thead>
                         <tbody>
                           {roleRows.map((row) => {
-                            const roleAlloc = Number(row.roleAllocRatio) || 0;
-                            const completion = Number(row.completionRatio) || 0;
-                            const planned = Math.round(pool.projectAmount * (roleAlloc / 100) * 100) / 100;
-                            const isActive = row.isActive !== 0;
-                            const actual = isActive
-                              ? Math.round(planned * (completion / 100) * 100) / 100
-                              : 0;
+                            const { planned, actual } = normalRowAmounts.get(row._key)
+                              ?? { planned: 0, actual: 0 };
                             return (
                               <tr key={row._key} className="border-t border-slate-100">
                                 <td className="py-2 px-3">
@@ -848,7 +976,7 @@ export function CreateOutputValueDialog({
                                 <td className="py-2 px-3 text-center">
                                   <input
                                     type="checkbox"
-                                    checked={isActive}
+                                    checked={row.isActive !== 0}
                                     onChange={(event) => updateRow(row._key, {
                                       isActive: event.target.checked ? 1 : 0,
                                     })}
@@ -923,8 +1051,13 @@ export function CreateOutputValueDialog({
           )}
 
           <div className="p-3 bg-slate-50 rounded-lg text-xs text-slate-600 leading-relaxed">
-            人员分配预览：计划分配 ¥{projectPool.toLocaleString()}，当前预计实得 ¥
-            {sumActual.toLocaleString()}。
+            人员分配预览：当前阶段计划分配 ¥{projectPool.toLocaleString()}，历史人员补/扣 ¥
+            {benefitSettlement.personApplied.toLocaleString()}，本次人员预计实得 ¥{sumActual.toLocaleString()}。
+            {benefitSettlement.personRemaining < 0 && (
+              <span className="ml-1 text-rose-600">
+                仍有 ¥{Math.abs(benefitSettlement.personRemaining).toLocaleString()} 待后续阶段扣回。
+              </span>
+            )}
           </div>
 
           {error && (

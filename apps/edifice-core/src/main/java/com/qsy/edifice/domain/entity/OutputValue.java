@@ -109,6 +109,18 @@ public class OutputValue implements Serializable {
     @TableField("adjustment_amount")
     private BigDecimal adjustmentAmount;
 
+    /** 本单实际计入人员的效益补差/扣回 */
+    @TableField("person_adjustment_amount")
+    private BigDecimal personAdjustmentAmount;
+
+    /** 本单实际计入公司的效益补差/扣回 */
+    @TableField("company_adjustment_amount")
+    private BigDecimal companyAdjustmentAmount;
+
+    /** 本单处理后仍因人员当期金额不足而待扣回的金额 */
+    @TableField("pending_person_adjustment_amount")
+    private BigDecimal pendingPersonAdjustmentAmount;
+
     /** 创建时阶段的完成比例（%，0-100） */
     @TableField("stage_completion_ratio")
     private BigDecimal stageCompletionRatio;
@@ -128,6 +140,12 @@ public class OutputValue implements Serializable {
     /** 快照：本单创建时合同的效益金额 */
     @TableField("benefit_amount_snapshot")
     private BigDecimal benefitAmountSnapshot;
+
+    @TableField("base_ratio_snapshot")
+    private BigDecimal baseRatioSnapshot;
+
+    @TableField("benefit_ratio_snapshot")
+    private BigDecimal benefitRatioSnapshot;
 
     /** 计算版本 */
     @TableField("calculation_version")
