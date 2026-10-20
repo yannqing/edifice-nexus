@@ -8,8 +8,6 @@ import secrets
 import subprocess
 import time
 import urllib.request
-import boto3
-from botocore.config import Config
 
 
 def write_private(path, values):
@@ -73,13 +71,8 @@ def main():
     run("admin", "policy", "create", "edifice", "edifice-files", str(policy))
     run("admin", "user", "add", "edifice", app["MINIO_ACCESS_KEY"], app["MINIO_SECRET_KEY"])
     run("admin", "policy", "attach", "edifice", "edifice-files", "--user", app["MINIO_ACCESS_KEY"])
-    admin = boto3.client("s3", endpoint_url="http://127.0.0.1:9000",
-                         aws_access_key_id=root["MINIO_ROOT_USER"], aws_secret_access_key=root["MINIO_ROOT_PASSWORD"],
-                         region_name="us-east-1", config=Config(s3={"addressing_style": "path"}))
-    admin.put_bucket_lifecycle_configuration(Bucket="edifice-prod", LifecycleConfiguration={"Rules": [{
-        "ID": "abort-expired-multipart", "Status": "Enabled", "Filter": {"Prefix": ""},
-        "AbortIncompleteMultipartUpload": {"DaysAfterInitiation": 7},
-    }]})
+    # This community release uses native API cleanup, not S3 AbortIncompleteMultipartUpload lifecycle rules.
+    run("admin", "config", "set", "edifice", "api", "stale_uploads_expiry=168h", "stale_uploads_cleanup_interval=1h")
     print("Private bucket, versioning, application policy and multipart expiry ready")
 
 
