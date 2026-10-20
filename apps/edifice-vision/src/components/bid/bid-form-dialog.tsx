@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { FileText, Loader2, Paperclip } from "lucide-react";
+import { Loader2, Paperclip } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,6 @@ import { createBid, updateBid } from "@/services/bid";
 import type { UserListItem, FilesVo } from "@/types/project";
 import type { BidFileVo, BidVo } from "@/types/bid";
 import { BID_FILE_CATEGORIES } from "@/types/bid";
-import { AttachmentFileActions } from "@/components/file/attachment-file-list";
 
 import { FileUploadField } from "@/components/file/file-upload-field";
 
@@ -272,6 +271,15 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
 
             </div>
             <FileUploadField purpose="bid" disabled={submitting} onBusyChange={setUploading}
+              renderExtra={(file) => <label className="my-2 flex items-center justify-end gap-2 text-xs text-slate-500">
+                文件分类
+                <select disabled={submitting} className="rounded border border-slate-200 bg-white px-2 py-1"
+                  value={attachments.find((a) => a.fileId === file.fileId)?.fileCategory ?? BID_FILE_CATEGORIES[1]}
+                  onChange={(event) => setAttachments((previous) => previous.map((item) =>
+                    item.fileId === file.fileId ? { ...item, fileCategory: event.target.value } : item))}>
+                  {BID_FILE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+                </select>
+              </label>}
               value={attachments.filter((a) => a.fileId).map((a): FilesVo => ({
                 fileId: a.fileId!, displayName: a.fileName, fileSize: a.fileSize ?? "0",
                 fileType: "", fileExtension: "", fileUrl: "", status: 1,
@@ -281,46 +289,7 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
                   fileId: f.fileId, fileName: f.displayName, fileSize: f.fileSize,
                 })))}
             />
-            {attachments.length === 0 ? (
-              <div className="text-xs text-slate-400 p-4 text-center border border-dashed border-slate-200 rounded-lg">
-                尚无附件
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {attachments.map((a) => (
-                  <div
-                    key={a._key}
-                    className="flex items-center gap-2 p-2 bg-slate-50 rounded-lg"
-                  >
-                    <FileText className="w-4 h-4 text-blue-500 shrink-0" />
-                    <span className="flex-1 text-sm truncate">
-                      {a.fileName || "(待上传)"}
-                      {a.uploading && (
-                        <span className="ml-2 text-xs text-amber-500">上传中...</span>
-                      )}
-                    </span>
-                    <select
-                      className="text-xs px-2 py-1 rounded border border-slate-200 bg-white"
-                      value={a.fileCategory}
-                      onChange={(e) =>
-                        setAttachments((prev) =>
-                          prev.map((x) =>
-                            x._key === a._key ? { ...x, fileCategory: e.target.value } : x,
-                          ),
-                        )
-                      }
-                    >
-                      {BID_FILE_CATEGORIES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                    </select>
-                    <AttachmentFileActions fileId={a.fileId!} fileName={a.fileName} />
-                  </div>
-                ))}
-              </div>
-            )}
+
             <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
               <Paperclip className="w-3 h-3" /> 支持 pdf / doc / xls / ppt 等文档格式
             </p>
@@ -334,7 +303,7 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
         </div>
 
         <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-slate-100">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting || uploading}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             取消
           </Button>
           <Button

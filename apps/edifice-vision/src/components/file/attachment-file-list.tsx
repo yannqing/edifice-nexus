@@ -97,6 +97,8 @@ export function EditableAttachmentFileList({
 export function AttachmentFileActions({
   fileId,
   fileName,
+  fileSize,
+  disabled,
   onDisplayNameChange,
   action,
   onActionChange,
@@ -104,6 +106,8 @@ export function AttachmentFileActions({
 }: {
   fileId: string;
   fileName?: string | null;
+  fileSize?: string;
+  disabled?: boolean;
   onDisplayNameChange?: (fileName: string) => void;
   action?: "preview" | "download" | null;
   onActionChange?: (action: "preview" | "download" | null) => void;
@@ -113,6 +117,8 @@ export function AttachmentFileActions({
     <AttachmentFileRow
       fileId={fileId}
       fallbackName={fileName || "附件"}
+      fileSize={fileSize}
+      disabled={disabled}
       onRemove={onRemove}
     />
   );
@@ -123,11 +129,15 @@ export function AttachmentFileActions({
 function AttachmentFileRow({
   fileId,
   fallbackName,
+  fileSize,
+  disabled,
   onRemove,
   thumbnailUrl,
 }: {
   fileId: string;
   fallbackName: string;
+  fileSize?: string;
+  disabled?: boolean;
   onRemove?: () => void;
   thumbnailUrl?: string;
 }) {
@@ -178,6 +188,7 @@ function AttachmentFileRow({
       <FileText className="w-4 h-4 text-blue-500 shrink-0" />
       <div className="flex-1 min-w-0 text-left">
         <p className="text-sm text-slate-700 font-medium truncate">{displayName}</p>
+        {fileSize && <p className="text-xs text-slate-400">{(Number(fileSize) / 1024 / 1024).toFixed(1)} MB</p>}
 
       </div>
       <Button
@@ -187,7 +198,7 @@ function AttachmentFileRow({
         className="h-7 w-7 text-slate-400 hover:text-blue-600"
         title="预览文件"
         onClick={handlePreview}
-        disabled={action !== null}
+        disabled={disabled || action !== null}
       >
         {action === "preview" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
       </Button>
@@ -198,7 +209,7 @@ function AttachmentFileRow({
         className="h-7 w-7 text-slate-400 hover:text-blue-600"
         title="下载文件"
         onClick={handleDownload}
-        disabled={action !== null}
+        disabled={disabled || action !== null}
       >
         {action === "download" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
       </Button>
@@ -210,7 +221,7 @@ function AttachmentFileRow({
           className="h-7 w-7 text-slate-400 hover:text-red-500"
           title="移除"
           onClick={onRemove}
-          disabled={action !== null}
+          disabled={disabled || action !== null}
         >
           <X className="w-4 h-4" />
         </Button>

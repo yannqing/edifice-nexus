@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { Check, Loader2, RotateCcw, Upload, X } from "lucide-react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Loader2, RotateCcw, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { ATTACHMENT_ACCEPT, cancelUpload, MAX_BATCH_FILES, MAX_FILE_SIZE, uploadFile, type UploadPurpose } from "@/lib/file-upload";
 import type { FilesVo } from "@/types/project";
+import { AttachmentFileActions } from "@/components/file/attachment-file-list";
 
 interface Task {
   id: string; file: File; progress: number; status: "waiting" | "uploading" | "error" | "cancelled";
@@ -19,10 +20,11 @@ interface Props {
   label?: string;
   disabled?: boolean;
   onBusyChange?: (busy: boolean) => void;
+  renderExtra?: (file: FilesVo) => ReactNode;
 }
 
 export function FileUploadField({ value, onChange, purpose, maxFiles = MAX_BATCH_FILES,
-  accept = ATTACHMENT_ACCEPT, label = "选择文件", disabled, onBusyChange }: Props) {
+  accept = ATTACHMENT_ACCEPT, label = "选择文件", disabled, onBusyChange, renderExtra }: Props) {
   const inputId = useId();
   const [tasks, setTasks] = useState<Task[]>([]);
   const refs = useRef({ value, onChange, onBusyChange });
@@ -88,12 +90,10 @@ export function FileUploadField({ value, onChange, purpose, maxFiles = MAX_BATCH
 
   return <div className="space-y-2">
     <div className="max-h-64 overflow-y-auto overscroll-contain">
-    {value.map((file) => <div key={file.fileId} className="flex min-w-0 items-center gap-2 border-b border-slate-100 py-2 text-sm">
-      <Check className="h-4 w-4 shrink-0 text-emerald-600" />
-      <span className="min-w-0 flex-1 truncate text-slate-700" title={file.displayName ?? "附件"}>{file.displayName ?? "附件"}</span>
-      <span className="shrink-0 text-xs text-slate-400">{(Number(file.fileSize) / 1024 / 1024).toFixed(1)} MB</span>
-      <button type="button" title="移除附件" aria-label="移除附件" disabled={disabled} onClick={() => onChange(value.filter((f) => f.fileId !== file.fileId))}
-        className="rounded p-1 text-slate-400 hover:text-rose-600 disabled:opacity-40"><X className="h-4 w-4" /></button>
+    {value.map((file) => <div key={file.fileId}>
+      <AttachmentFileActions fileId={file.fileId} fileName={file.displayName} fileSize={file.fileSize} disabled={disabled}
+        onRemove={() => onChange(value.filter((f) => f.fileId !== file.fileId))} />
+      {renderExtra?.(file)}
     </div>)}
     {tasks.map((task) => <div key={task.id} className="border-b border-slate-100 py-2 text-xs">
       <div className="flex min-w-0 items-center gap-2">
