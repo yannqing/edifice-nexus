@@ -146,9 +146,10 @@ function AttachmentFileRow({
 
 
   const checkDownload = async (mode?: "preview") => {
-    const base = getProjectFileDownloadUrl(fileId, getAccessToken());
+    const base = getProjectFileDownloadUrl(fileId);
     const url = base + (mode ? `${base.includes("?") ? "&" : "?"}mode=preview` : "");
-    const response = await fetch(url, { method: "HEAD", cache: "no-store" });
+    const token = getAccessToken();
+    const response = await fetch(url, { method: "HEAD", cache: "no-store", headers: token ? { token } : {} });
     if (!response.ok || response.headers.get("content-type")?.includes("application/json"))
       throw new Error("文件不存在、登录已过期或没有访问权限");
     const fileName = resolveDisposition(response.headers.get("content-disposition"));

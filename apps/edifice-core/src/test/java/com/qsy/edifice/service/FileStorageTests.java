@@ -53,7 +53,7 @@ class FileStorageTests {
         ReflectionTestUtils.setField(downloads, "storage", storage);
         ReflectionTestUtils.setField(downloads, "filesMapper", mock(FilesMapper.class));
         Files file = new Files(); file.setFileId(1L); file.setFileSize(6L);
-        file.setDisplayName("test.pdf"); file.setFileExtension("pdf"); file.setMimeType("application/pdf");
+        file.setDisplayName("test.pdf"); file.setFileExtension("pdf"); file.setMimeType("text/html");
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/file/download/1");
         request.addHeader("Range", "bytes=2-4"); request.setParameter("mode", "preview");
         when(storage.open(file, 2L, 3L)).thenReturn(new ByteArrayInputStream("cdef".getBytes()));
@@ -62,6 +62,8 @@ class FileStorageTests {
         assertEquals("bytes 2-4/6", response.getHeaders().getFirst("Content-Range"));
         assertEquals("private, no-store", response.getHeaders().getCacheControl());
         assertTrue(response.getHeaders().getContentDisposition().isInline());
+        assertEquals("application/pdf", response.getHeaders().getContentType().toString());
+        assertEquals("frame-ancestors 'self'", response.getHeaders().getFirst("Content-Security-Policy"));
         ByteArrayOutputStream out = new ByteArrayOutputStream(); response.getBody().writeTo(out);
         assertEquals("cde", out.toString());
         request.removeHeader("Range"); request.addHeader("Range", "bytes=99-");

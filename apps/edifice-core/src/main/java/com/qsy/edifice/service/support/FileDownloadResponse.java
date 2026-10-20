@@ -41,20 +41,27 @@ public class FileDownloadResponse {
             throw new BusinessException("文件不存在或存储暂不可用，请稍后重试或联系管理员");
         }
         long start = offset; long length = count;
-        boolean inline = "preview".equals(request.getParameter("mode"))
-                && Set.of("pdf", "png", "jpg", "jpeg", "gif", "webp", "txt", "md", "csv", "mp3", "wav")
-                .contains(String.valueOf(file.getFileExtension()).toLowerCase(java.util.Locale.ROOT));
+        String previewMime = switch (String.valueOf(file.getFileExtension()).toLowerCase(java.util.Locale.ROOT)) {
+            case "pdf" -> "application/pdf"; case "png" -> "image/png";
+            case "jpg", "jpeg" -> "image/jpeg"; case "gif" -> "image/gif";
+            case "webp" -> "image/webp"; case "bmp" -> "image/bmp";
+            case "txt", "md", "csv" -> "text/plain; charset=UTF-8";
+            case "mp3" -> "audio/mpeg"; case "wav" -> "audio/wav";
+            default -> null;
+        };
+        boolean inline = "preview".equals(request.getParameter("mode")) && previewMime != null;
         String name = file.getDisplayName() == null ? file.getFileName() : file.getDisplayName();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentLength(count);
         try { headers.setContentType(MediaType.parseMediaType(file.getMimeType())); }
         catch (Exception e) { headers.setContentType(MediaType.APPLICATION_OCTET_STREAM); }
+        if (inline) headers.setContentType(MediaType.parseMediaType(previewMime));
         headers.setContentDisposition((inline ? ContentDisposition.inline() : ContentDisposition.attachment())
                 .filename(name, StandardCharsets.UTF_8).build());
         headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
         headers.setCacheControl("private, no-store");
         headers.set("X-Content-Type-Options", "nosniff");
-        headers.set("Content-Security-Policy", "sandbox");
+        headers.set("Content-Security-Policy", inline ? "frame-ancestors 'self'" : "sandbox");
         if (ranged) headers.set(HttpHeaders.CONTENT_RANGE, "bytes " + offset + "-" + (offset + count - 1) + "/" + size);
         StreamingResponseBody body = out -> {
             if ("HEAD".equalsIgnoreCase(request.getMethod()) || length == 0) return;
