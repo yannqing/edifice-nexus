@@ -81,4 +81,29 @@ class FileStorageTests {
         response.getBody().writeTo(new ByteArrayOutputStream());
         verifyNoInteractions(storage);
     }
+
+    @Test void legacyEmptyFileDoesNotRequestInvalidObjectRange() throws Exception {
+        FileObjectStorage storage = mock(FileObjectStorage.class);
+        FileDownloadResponse downloads = new FileDownloadResponse();
+        ReflectionTestUtils.setField(downloads, "storage", storage);
+        Files file = new Files(); file.setFileSize(0L); file.setDisplayName("empty.txt");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/file/download/1");
+        var response = downloads.response(file, request);
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals(0L, response.getHeaders().getContentLength());
+        response.getBody().writeTo(new ByteArrayOutputStream());
+        verifyNoInteractions(storage);
+    }
+
+    @Test void cookieFallbackIsRestrictedToFileReads() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/upload/documents/a.pdf");
+        request.setCookies(new jakarta.servlet.http.Cookie("access_token", "cookie-token"));
+        assertEquals("cookie-token", com.qsy.edifice.utils.JwtUtils.requestToken(request));
+        request.setMethod("POST");
+        assertNull(com.qsy.edifice.utils.JwtUtils.requestToken(request));
+        request.setMethod("GET"); request.setRequestURI("/project/list");
+        assertNull(com.qsy.edifice.utils.JwtUtils.requestToken(request));
+        request.addHeader("token", "header-token");
+        assertEquals("header-token", com.qsy.edifice.utils.JwtUtils.requestToken(request));
+    }
 }

@@ -27,13 +27,13 @@ def main():
     parser.add_argument("phase", choices=["credentials", "bucket"])
     args = parser.parse_args()
     root = write_private(Path("/etc/minio-edifice.env"), {
-        "MINIO_ROOT_USER": "edifice-root-" + secrets.token_hex(6),
+        "MINIO_ROOT_USER": "edifice-root-" + secrets.token_hex(3),
         "MINIO_ROOT_PASSWORD": secrets.token_hex(32),
         "MINIO_API_REQUESTS_MAX": "8", "GOMEMLIMIT": "384MiB", "GOGC": "50",
         "MINIO_BROWSER": "off", "MINIO_UPDATE": "off",
     })
     app = write_private(Path("/etc/edifice/storage.env"), {
-        "MINIO_ACCESS_KEY": "edifice-app-" + secrets.token_hex(6),
+        "MINIO_ACCESS_KEY": "edifice-app-" + secrets.token_hex(3),
         "MINIO_SECRET_KEY": secrets.token_hex(32),
         "MINIO_ENDPOINT": "http://127.0.0.1:9000", "MINIO_BUCKET": "edifice-prod",
         "FILE_STORAGE_TYPE": "minio",

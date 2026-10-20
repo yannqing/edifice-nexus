@@ -129,9 +129,7 @@ public class FileServiceImpl extends ServiceImpl<FilesMapper, Files> implements 
 
     private Long currentUserIdFromRequest(HttpServletRequest request) {
         try {
-            String token = request.getHeader("token");
-            if (token == null || token.isBlank()) token = request.getParameter("token");
-            return jwtUtils.getUserIdFromToken(token);
+            return jwtUtils.getUserIdFromToken(JwtUtils.requestToken(request));
         } catch (Exception e) {
             log.warn("解析下载用户 token 失败: {}", e.getMessage());
             return null;

@@ -22,6 +22,19 @@ import java.util.List;
 @Component
 public class JwtUtils {
 
+    public static String requestToken(jakarta.servlet.http.HttpServletRequest request) {
+        String token = request.getHeader("token");
+        if (token == null || token.isBlank()) token = request.getParameter("token");
+        String path = request.getRequestURI();
+        boolean fileRead = ("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod()))
+                && (path.startsWith("/upload/") || path.startsWith("/file/download/"));
+        if ((token == null || token.isBlank()) && fileRead && request.getCookies() != null) {
+            for (jakarta.servlet.http.Cookie cookie : request.getCookies())
+                if ("access_token".equals(cookie.getName())) return cookie.getValue();
+        }
+        return token;
+    }
+
     @Value("${jwt.secret}")
     private String secret;
 

@@ -108,10 +108,12 @@ def main():
         success(api("/file/uploads/" + cancelled["uploadId"], method="DELETE"))
         assert success(api("/file/uploads/" + cancelled["uploadId"]))["status"] == "cancelled"
         legacy = json.loads(sql("SELECT JSON_OBJECT('fileId',CAST(file_id AS CHAR),'path',file_path) FROM files "
-                               "WHERE is_deleted=0 AND display_name NOT LIKE '__storage_verification_%' ORDER BY file_size LIMIT 1"))
+                               "WHERE is_deleted=0 AND file_size>=10 AND display_name NOT LIKE '__storage_verification_%' ORDER BY file_size LIMIT 1"))
         for path in ("/file/download/" + legacy["fileId"], legacy["path"]):
             with call(path, headers={"Range": "bytes=0-9"}) as response:
                 assert response.status == 206 and len(response.read()) == 10
+        with call(legacy["path"], headers={"token": "", "Cookie": "access_token=" + tokens[0], "Range": "bytes=0-9"}) as response:
+            assert response.status == 206 and len(response.read()) == 10
         print(json.dumps({"status": "passed", "port": args.port, "checks": ["500MiB limit", "cross-user ownership",
               "part size", "part hash", "resume", "idempotent part", "idempotent completion", "cancel", "HEAD", "range", "download hash", "legacy paths"],
               "verificationFileIds": test_files, "verificationUploadIds": sessions}))

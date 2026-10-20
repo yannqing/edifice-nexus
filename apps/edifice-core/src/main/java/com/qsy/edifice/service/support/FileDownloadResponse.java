@@ -51,7 +51,7 @@ public class FileDownloadResponse {
         headers.set("Content-Security-Policy", "sandbox");
         if (ranged) headers.set(HttpHeaders.CONTENT_RANGE, "bytes " + offset + "-" + (offset + count - 1) + "/" + size);
         StreamingResponseBody body = out -> {
-            if ("HEAD".equalsIgnoreCase(request.getMethod())) return;
+            if ("HEAD".equalsIgnoreCase(request.getMethod()) || length == 0) return;
             try (InputStream input = storage.open(file, start, length)) {
                 byte[] buffer = new byte[64 * 1024]; long left = length;
                 while (left > 0) {

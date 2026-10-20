@@ -50,10 +50,7 @@ public class JwtAuthenticationTokenFilter extends OncePerRequestFilter {
         }
 
         // 优先从请求头获取 token，其次从 query 参数获取（用于文件下载等场景）
-        String token = request.getHeader("token");
-        if (token == null || token.isEmpty()) {
-            token = request.getParameter("token");
-        }
+        String token = JwtUtils.requestToken(request);
         //验证token的合法性，不报错即合法
 
         // Token 未携带

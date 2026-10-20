@@ -46,6 +46,9 @@ increase internet bandwidth or provide disaster recovery by itself.
    Business tables, file IDs and legacy URLs are not changed.
 7. Add `/etc/edifice/storage.env` as a systemd EnvironmentFile for the backend,
    start it and deploy the matching frontend. Remove the maintenance marker.
+   Include nginx-upload-location.conf in the existing HTTPS server block so old
+   /upload paths reach the authenticated controller. GET/HEAD file reads alone
+   may use the existing access_token cookie; state-changing APIs cannot.
 8. Run `verify`, authenticated old/new preview/download/range and archive tests,
    upload/resume/cancel tests, and compare business counts. Check service memory
    and logs. Keep manifests outside git. Do not consider an HTTP 200 alone a pass.
