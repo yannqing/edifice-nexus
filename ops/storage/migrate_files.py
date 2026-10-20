@@ -75,7 +75,12 @@ def main():
                 raise ValueError("Unexpected storage backend: " + str(file_id))
             if row.get("storage_type") == "minio" and not ledger:
                 # New uploads are not part of the migration or its rollback.
-                result = s3.get_object(Bucket=row["storage_bucket"], Key=row["object_key"])
+                if s3 is None:
+                    raise ValueError("Use verify, not pre-migration audit, for MinIO files")
+                params = {"Bucket": row["storage_bucket"], "Key": row["object_key"]}
+                if row.get("object_version"):
+                    params["VersionId"] = row["object_version"]
+                result = s3.get_object(**params)
                 with result["Body"] as stream:
                     actual = digest(stream)
                 assert actual == (row["file_hash"], row["file_md5"], row["file_size"]), file_id
@@ -87,13 +92,18 @@ def main():
             if (sha, md5, size) != (row["file_hash"], row["file_md5"], row["file_size"]):
                 raise ValueError("Source hash/size mismatch: " + str(file_id))
             key = ledger["target_key"] if ledger else f"legacy/{file_id}/{sha}/{local.name}"
-            if args.mode == "copy":
+            if ledger and (ledger["sha256"], ledger["size"], ledger["target_bucket"]) != (sha, size, bucket):
+                raise ValueError("Previously migrated source or target changed: " + str(file_id))
+            if args.mode == "copy" and not ledger:
                 s3.upload_file(str(local), bucket, key, ExtraArgs={"Metadata": {"sha256": sha, "file-id": str(file_id)}},
                                Config=TransferConfig(multipart_threshold=5 * 1024**2,
                                                      multipart_chunksize=5 * 1024**2, max_concurrency=1))
             version = None
             if args.mode != "audit":
-                result = s3.get_object(Bucket=bucket, Key=key)
+                params = {"Bucket": bucket, "Key": key}
+                if ledger and ledger.get("object_version"):
+                    params["VersionId"] = ledger["object_version"]
+                result = s3.get_object(**params)
                 version = result.get("VersionId")
                 with result["Body"] as stream:
                     actual = digest(stream)
