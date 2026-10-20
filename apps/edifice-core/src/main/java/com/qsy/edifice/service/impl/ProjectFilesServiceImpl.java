@@ -119,8 +119,12 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
         if (Objects.equals(project.getArchiveStatus(), 1)) {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "项目已归档，不能上传项目文件");
         }
-        if (filesMapper.selectById(dto.getFileId()) == null) {
+        Files attachment = filesMapper.selectById(dto.getFileId());
+        if (attachment == null) {
             throw new BusinessException(ErrorType.FILE_NOT_FOUND);
+        }
+        if (!Objects.equals(attachment.getUploadUserId(), uploadUserId)) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只能提交本人上传的文件");
         }
         if (!hasProjectFileManageAuthority()
                 && projectMemberService.getProjectMemberByProjectIdAndUserId(dto.getProjectId(), uploadUserId) == null) {

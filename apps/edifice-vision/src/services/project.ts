@@ -187,105 +187,23 @@ export async function getUserList(params?: {
   return getUserCandidates(query) as unknown as Promise<BaseResponse<PageResult<UserListItem>>>;
 }
 
-/**
- * 上传合同文档
- */
-export async function uploadDocument(
-  file: File
-): Promise<BaseResponse<FilesVo>> {
-  const formData = new FormData();
-  formData.append("document", file);
+/** Compatibility wrappers; every upload now uses the same verified multipart API. */
+export const MAX_ATTACHMENT_FILE_SIZE = 500 * 1024 * 1024;
 
-  return post<FilesVo>("/file/upload/document", {
-    body: formData,
-    // 让浏览器自动设置 multipart/form-data boundary
-    headers: {},
-  });
+export async function uploadDocument(file: File): Promise<BaseResponse<FilesVo>> {
+  const { uploadFile } = await import("@/lib/file-upload");
+  return { code: 200, msg: "上传成功", data: await uploadFile(file, "project") };
+}
+export const uploadImage = uploadDocument;
+export const uploadAudio = uploadDocument;
+
+export async function uploadProjectAttachment(file: File, onProgress?: (percent: number) => void): Promise<BaseResponse<FilesVo>> {
+  const { uploadFile } = await import("@/lib/file-upload");
+  return { code: 200, msg: "上传成功", data: await uploadFile(file, "project", { onProgress }) };
 }
 
-export async function uploadImage(file: File): Promise<BaseResponse<FilesVo>> {
-  const formData = new FormData();
-  formData.append("image", file);
-
-  return post<FilesVo>("/file/upload/images", {
-    body: formData,
-    headers: {},
-  });
-}
-
-export async function uploadAudio(file: File): Promise<BaseResponse<FilesVo>> {
-  const formData = new FormData();
-  formData.append("audio", file);
-
-  return post<FilesVo>("/file/upload/audio", {
-    body: formData,
-    headers: {},
-  });
-}
-
-const imageExtensions = new Set([
-  "jpg",
-  "jpeg",
-  "png",
-  "gif",
-  "bmp",
-  "webp",
-  "svg",
-  "ico",
-  "tiff",
-  "tif",
-]);
-
-const audioExtensions = new Set([
-  "mp3",
-  "wav",
-  "flac",
-  "aac",
-  "ogg",
-  "wma",
-  "m4a",
-  "opus",
-]);
-
-function getFileExtension(file: File): string {
-  const name = file.name.toLowerCase();
-  const dotIndex = name.lastIndexOf(".");
-  return dotIndex >= 0 ? name.slice(dotIndex + 1) : "";
-}
-
-export const MAX_ATTACHMENT_FILE_SIZE = 500 * 1024 * 1024; // 500MB
-const MAX_DIRECT_IMAGE_SIZE = 5 * 1024 * 1024; // Matches the image upload endpoint.
-
-/**
- * 上传项目文件附件。根据文件类型选择后端对应上传接口。
- * 文档/音频超过10MB、图片超过5MB时自动走分片上传。
- */
-export async function uploadProjectAttachment(
-  file: File,
-  onProgress?: (percent: number) => void
-): Promise<BaseResponse<FilesVo>> {
-  const extension = getFileExtension(file);
-  const { isSmallFile, uploadFileInChunks } = await import("@/lib/chunk-upload");
-  const isImage = file.type.startsWith("image/") || imageExtensions.has(extension);
-  const isAudio = file.type.startsWith("audio/") || audioExtensions.has(extension);
-
-  // 小文件走原有直传
-  if (isSmallFile(file, isImage ? MAX_DIRECT_IMAGE_SIZE : undefined)) {
-    if (isImage) {
-      return uploadImage(file);
-    }
-    if (isAudio) {
-      return uploadAudio(file);
-    }
-    return uploadDocument(file);
-  }
-
-  // 大文件走分片上传
-  let fileType = "document";
-  if (isImage) fileType = "image";
-  if (isAudio) fileType = "audio";
-
-  return uploadFileInChunks(file, { onProgress, fileType });
+export function importProjectsByFileId(fileId: string) {
+  return post<string>("/project/import-file", { body: { fileId } });
 }
 
 // ==================== 导入导出 ====================

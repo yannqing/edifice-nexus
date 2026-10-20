@@ -40,8 +40,7 @@ public class ChunkUploadController {
             @RequestParam int totalChunks,
             @RequestParam long totalSize,
             @RequestParam(defaultValue = "document") String fileType) {
-        chunkUploadService.initUpload(uploadId, fileName, totalChunks, totalSize, fileType);
-        return ResultUtils.success(Code.SUCCESS, true, "初始化成功");
+        throw new com.qsy.edifice.exception.BusinessException("上传接口已升级，请刷新页面后重试");
     }
 
     @PostMapping("/upload")
@@ -50,8 +49,7 @@ public class ChunkUploadController {
             @RequestParam String uploadId,
             @RequestParam int chunkIndex,
             @RequestParam("chunk") MultipartFile chunk) {
-        chunkUploadService.uploadChunk(uploadId, chunkIndex, chunk);
-        return ResultUtils.success(Code.SUCCESS, true, "分片上传成功");
+        throw new com.qsy.edifice.exception.BusinessException("上传接口已升级，请刷新页面后重试");
     }
 
     @PostMapping("/merge")
@@ -61,9 +59,6 @@ public class ChunkUploadController {
             @RequestParam String fileName,
             @RequestParam(defaultValue = "document") String fileType,
             HttpServletRequest request) throws JsonProcessingException {
-        String token = request.getHeader("token");
-        SysUser user = jwtUtils.getUserFromToken(token);
-        FilesVo result = chunkUploadService.mergeChunks(uploadId, fileName, fileType, user.getUserId());
-        return ResultUtils.success(Code.SUCCESS, result, "合并成功");
+        throw new com.qsy.edifice.exception.BusinessException("上传接口已升级，请刷新页面后重试");
     }
 }

@@ -54,6 +54,8 @@ public class ProjectController {
     private ProjectStageTemplateService projectStageTemplateService;
     @Resource
     private ProjectExcelService projectExcelService;
+
+    @Resource private com.qsy.edifice.service.StoredProjectImportService storedProjectImport;
     @Resource
     private ProjectStageService projectStageService;
     @Autowired
@@ -236,6 +238,14 @@ public class ProjectController {
         SysUser loginUser = jwtUtils.getUserFromToken(token);
         String result = projectExcelService.importProjects(file, loginUser.getUserId());
         return ResultUtils.success(Code.SUCCESS, result);
+    }
+
+    @PostMapping("/import-file")
+    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
+    public BaseResponse<String> importStoredProject(@RequestBody java.util.Map<String, Long> body,
+                                                   HttpServletRequest request) throws Exception {
+        Long userId = jwtUtils.getUserFromToken(request.getHeader("token")).getUserId();
+        return ResultUtils.success(Code.SUCCESS, storedProjectImport.importFile(body.get("fileId"), userId, request));
     }
 
     private boolean canViewAllLifecycle() {

@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.qsy.edifice.domain.entity.Files;
 import com.qsy.edifice.domain.vo.FilesVo;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.core.io.FileSystemResource;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -17,7 +17,9 @@ public interface FileService extends IService<Files> {
      * @param fileId 文件id
      * @return 返回图片
      */
-    ResponseEntity<FileSystemResource> downloadFile(Long fileId, HttpServletRequest request);
+    ResponseEntity<StreamingResponseBody> downloadFile(Long fileId, HttpServletRequest request);
+
+    Files authorizedFile(Long fileId, HttpServletRequest request);
 
     /**
      * 上传图片并返回FilesVo

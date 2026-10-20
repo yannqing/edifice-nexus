@@ -30,8 +30,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addResourceLocations("classpath:/META-INF/resources/webjars/");
                 
         // 添加文件上传资源映射 - 统一使用项目根目录下的upload文件夹
-        registry.addResourceHandler(uploadPrefixPath + "/**")
-                .addResourceLocations("file:" + uploadCommonPath + uploadPrefixPath + "/");
+        // Legacy /upload paths are resolved by LegacyFileController with normal file authorization.
                 
         // 添加默认产品图片映射
         registry.addResourceHandler("/default/**")

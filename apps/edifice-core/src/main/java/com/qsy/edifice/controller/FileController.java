@@ -10,7 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.FileSystemResource;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -27,10 +27,10 @@ public class FileController {
     private FileService fileService;
 
     /** 图片/音频类小文件上限 */
-    private static final long MAX_MEDIA_FILE_SIZE_BYTES = 5L * 1024 * 1024; // 5MB
+    private static final long MAX_MEDIA_FILE_SIZE_BYTES = 500L * 1024 * 1024;
 
     /** 文档类（含项目文件）上限 */
-    private static final long MAX_DOCUMENT_FILE_SIZE_BYTES = 20L * 1024 * 1024; // 20MB
+    private static final long MAX_DOCUMENT_FILE_SIZE_BYTES = 500L * 1024 * 1024;
 
     /**
      * 上传图片接口
@@ -43,7 +43,7 @@ public class FileController {
     @PostMapping("/upload/images")
     public BaseResponse<FilesVo> uploadImage(@RequestParam("image") MultipartFile image, HttpServletRequest request) throws IOException {
         if (image != null && image.getSize() > MAX_MEDIA_FILE_SIZE_BYTES) {
-            return ResultUtils.failure("图片大小不能超过5MB");
+            return ResultUtils.failure("单个文件不能超过500MB");
         }
         FilesVo filesVo = fileService.uploadImageAndReturnVo(image, request);
 
@@ -78,7 +78,7 @@ public class FileController {
     public BaseResponse<FilesVo> uploadDocument(@RequestParam("document") MultipartFile document,
                                                 HttpServletRequest request) throws IOException {
         if (document != null && document.getSize() > MAX_DOCUMENT_FILE_SIZE_BYTES) {
-            return ResultUtils.failure("文件大小不能超过20MB");
+            return ResultUtils.failure("单个文件不能超过500MB");
         }
         FilesVo filesVo = fileService.uploadDocumentAndReturnVo(document, request);
 
@@ -93,7 +93,7 @@ public class FileController {
      */
     @Operation(summary = "下载文件")
     @GetMapping("/download/{fileId}")
-    public ResponseEntity<FileSystemResource> downloadImage(@PathVariable("fileId") Long fileId, HttpServletRequest request) {
+    public ResponseEntity<StreamingResponseBody> downloadImage(@PathVariable("fileId") Long fileId, HttpServletRequest request) {
 
         return fileService.downloadFile(fileId, request);
     }

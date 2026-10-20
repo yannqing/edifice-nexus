@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCw, Upload, UserRoundSearch } from "lucide-react";
+import { Loader2, RefreshCw, UserRoundSearch } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,16 +15,14 @@ import { applyInspection } from "@/services/inspection";
 import {
   getMyProjects,
   getProjectDetail,
-  MAX_ATTACHMENT_FILE_SIZE,
-  uploadProjectAttachment,
 } from "@/services/project";
 import { ResponseCode } from "@/types/api";
 import type { FilesVo, ProjectListVo, ProjectStageVo } from "@/types/project";
 import type { InspectionFormDetailVo } from "@/types/inspection";
 import {
-  EditableAttachmentFileList,
   parseFileIdList,
 } from "@/components/file/attachment-file-list";
+import { FileUploadField } from "@/components/file/file-upload-field";
 import { UserPickerDialog } from "@/components/user/user-picker-dialog";
 import { notifySidebarCountsUpdated } from "@/lib/sidebar-counts";
 
@@ -110,7 +108,6 @@ export function CreateInspectionDialog({
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<FilesVo[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [completionRatio, setCompletionRatio] = useState("100");
   const [dataReady, setDataReady] = useState(false);
@@ -135,7 +132,6 @@ export function CreateInspectionDialog({
       setSelectedStageId("");
       setDescription("");
       setFiles([]);
-      setUploadProgress(0);
       setStages([]);
       setFirstApproverId("");
       setFirstApproverName("");
@@ -270,30 +266,8 @@ export function CreateInspectionDialog({
     });
   }, [selectedStage, remainingInspectionRatio]);
 
-  const handleFileUpload = async (file: File) => {
-    if (file.size > MAX_ATTACHMENT_FILE_SIZE) {
-      toast.error(`文件大小不能超过 500MB，当前文件 ${(file.size / 1024 / 1024).toFixed(1)}MB`);
-      return;
-    }
-
-    setUploading(true);
-    setUploadProgress(0);
-    try {
-      const res = await uploadProjectAttachment(file, setUploadProgress);
-      if (res.code === ResponseCode.SUCCESS && res.data) {
-        setUploadProgress(100);
-        setFiles((prev) => [...prev, res.data]);
-      } else {
-        toast.error(res.msg || "文件上传失败");
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "文件上传失败，请稍后重试");
-    } finally {
-      setUploading(false);
-    }
-  };
-
   const handleSubmit = async () => {
+    if (uploading) return;
     if (!selectedProjectId) {
       toast.error("请选择项目");
       return;
@@ -504,45 +478,8 @@ export function CreateInspectionDialog({
             <label className="text-sm font-medium text-slate-700 mb-1.5 block">
               验收材料 <span className="text-rose-500">*</span>
             </label>
-            {files.length > 0 && (
-              <div className="mb-2">
-                <EditableAttachmentFileList
-                  files={files}
-                  onRemove={(fileId) => setFiles((prev) => prev.filter((item) => item.fileId !== fileId))}
-                />
-              </div>
-            )}
-            <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
-              {uploading ? (
-                <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-              ) : (
-                <Upload className="w-4 h-4 text-slate-400" />
-              )}
-              <span className="text-sm text-slate-500">{uploading ? "上传中..." : "点击上传验收材料"}</span>
-              <input
-                type="file"
-                className="hidden"
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.rtf,.odt,.ods,.odp,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.tiff,.tif,.zip,.rar,.7z,.mp3,.wav"
-                disabled={uploading}
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) handleFileUpload(file);
-                  event.target.value = "";
-                }}
-              />
-            </label>
-            <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
-              <span>单个文件最大 500MB</span>
-              {uploading && <span>{uploadProgress}%</span>}
-            </div>
-            {uploading && (
-              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-blue-500 transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-            )}
+            <FileUploadField purpose="inspection" value={files} onChange={setFiles}
+              onBusyChange={setUploading} disabled={submitting} />
           </div>
         </div>
 

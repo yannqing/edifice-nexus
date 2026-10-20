@@ -63,6 +63,18 @@ public class Files implements Serializable {
     @TableField(value = "storage_type")
     private String storageType;
 
+    @TableField("storage_bucket")
+    private String storageBucket;
+
+    @TableField("object_key")
+    private String objectKey;
+
+    @TableField("object_version")
+    private String objectVersion;
+
+    @TableField("storage_verified_time")
+    private LocalDateTime storageVerifiedTime;
+
     /**
      * 可访问文件路径
      */

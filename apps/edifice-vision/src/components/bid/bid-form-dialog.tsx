@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { FileText, Loader2, Paperclip, Plus, Trash2 } from "lucide-react";
+import { FileText, Loader2, Paperclip } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,12 +12,14 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ResponseCode } from "@/types/api";
-import { getUserList, uploadDocument } from "@/services/project";
+import { getUserList } from "@/services/project";
 import { createBid, updateBid } from "@/services/bid";
 import type { UserListItem, FilesVo } from "@/types/project";
 import type { BidFileVo, BidVo } from "@/types/bid";
 import { BID_FILE_CATEGORIES } from "@/types/bid";
 import { AttachmentFileActions } from "@/components/file/attachment-file-list";
+
+import { FileUploadField } from "@/components/file/file-upload-field";
 
 interface Props {
   open: boolean;
@@ -58,8 +60,7 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [pendingAddKey, setPendingAddKey] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const reset = useCallback(() => {
     if (bid) {
@@ -106,56 +107,11 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
     })();
   }, [open, reset]);
 
-  const handleAddAttachment = () => {
-    const draft = newAttachment();
-    setAttachments((prev) => [...prev, draft]);
-    setPendingAddKey(draft._key);
-    fileInputRef.current?.click();
-  };
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    const key = pendingAddKey;
-    e.target.value = "";
-    if (!file || !key) return;
-
-    setAttachments((prev) =>
-      prev.map((a) => (a._key === key ? { ...a, uploading: true, fileName: file.name } : a)),
-    );
-    try {
-      const res = await uploadDocument(file);
-      if (res.code === ResponseCode.SUCCESS && res.data) {
-        const vo: FilesVo = res.data;
-        setAttachments((prev) =>
-          prev.map((a) =>
-            a._key === key
-              ? {
-                  ...a,
-                  fileId: vo.fileId,
-                  fileName: vo.displayName ?? file.name,
-                  fileSize: String(vo.fileSize),
-                  uploading: false,
-                }
-              : a,
-          ),
-        );
-      } else {
-        toast.error(res.msg || "上传失败");
-        setAttachments((prev) => prev.filter((a) => a._key !== key));
-      }
-    } catch {
-      toast.error("上传异常");
-      setAttachments((prev) => prev.filter((a) => a._key !== key));
-    } finally {
-      setPendingAddKey(null);
-    }
-  };
-
   const handleSubmit = async () => {
     setError("");
     if (!bidName.trim()) return setError("请填写投标项目名称");
     if (!ownerUserId) return setError("请选择负责人");
-    if (attachments.some((a) => a.uploading || !a.fileId)) {
+    if (uploading || attachments.some((a) => !a.fileId)) {
       return setError("请等待附件上传完成");
     }
 
@@ -313,17 +269,18 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-slate-600">附件</span>
-              <Button variant="outline" size="sm" onClick={handleAddAttachment}>
-                <Plus className="w-4 h-4 mr-1" /> 添加附件
-              </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.rtf"
-                onChange={handleFileSelect}
-              />
+
             </div>
+            <FileUploadField purpose="bid" disabled={submitting} onBusyChange={setUploading}
+              value={attachments.filter((a) => a.fileId).map((a): FilesVo => ({
+                fileId: a.fileId!, displayName: a.fileName, fileSize: a.fileSize ?? "0",
+                fileType: "", fileExtension: "", fileUrl: "", status: 1,
+              }))}
+              onChange={(files) => setAttachments((previous) => files.map((f) =>
+                previous.find((a) => a.fileId === f.fileId) ?? newAttachment({
+                  fileId: f.fileId, fileName: f.displayName, fileSize: f.fileSize,
+                })))}
+            />
             {attachments.length === 0 ? (
               <div className="text-xs text-slate-400 p-4 text-center border border-dashed border-slate-200 rounded-lg">
                 尚无附件
@@ -359,25 +316,7 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
                         </option>
                       ))}
                     </select>
-                    {a.fileId && !a.uploading ? (
-                      <AttachmentFileActions
-                        fileId={a.fileId}
-                        fileName={a.fileName}
-                        onRemove={() =>
-                          setAttachments((prev) => prev.filter((x) => x._key !== a._key))
-                        }
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setAttachments((prev) => prev.filter((x) => x._key !== a._key))
-                        }
-                        className="text-slate-400 hover:text-rose-500"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    <AttachmentFileActions fileId={a.fileId!} fileName={a.fileName} />
                   </div>
                 ))}
               </div>
@@ -395,13 +334,13 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
         </div>
 
         <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-slate-100">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting || uploading}>
             取消
           </Button>
           <Button
             className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={handleSubmit}
-            disabled={submitting}
+            disabled={submitting || uploading}
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin mr-1" />}
             {editing ? "保存" : "创建"}

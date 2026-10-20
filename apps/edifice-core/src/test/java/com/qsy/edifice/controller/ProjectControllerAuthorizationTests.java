@@ -49,6 +49,9 @@ class ProjectControllerAuthorizationTests {
     @MockBean
     private JwtUtils jwtUtils;
 
+    @MockBean
+    private com.qsy.edifice.service.StoredProjectImportService storedProjectImportService;
+
     @BeforeEach
     void resetMocks() {
         reset(projectService, jwtUtils);

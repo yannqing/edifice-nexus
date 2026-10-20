@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,6 @@ import {
   getProjectTypes,
   getStageTemplates,
   getUserList,
-  uploadDocument,
 } from "@/services/project";
 import { ResponseCode } from "@/types/api";
 import type {
@@ -26,7 +25,7 @@ import type {
   UserListItem,
   FilesVo,
 } from "@/types/project";
-import { EditableAttachmentFileList } from "@/components/file/attachment-file-list";
+import { FileUploadField } from "@/components/file/file-upload-field";
 import { AmountInput } from "@/components/ui/amount-input";
 
 interface CreateProjectDialogProps {
@@ -70,7 +69,9 @@ export function CreateProjectDialog({
   const [step, setStep] = useState(1); // 1=基本信息, 2=合同信息, 3=成员分配
   const [contractMainFile, setContractMainFile] = useState<FilesVo | null>(null);
   const [contractAttachments, setContractAttachments] = useState<FilesVo[]>([]);
-  const [uploading, setUploading] = useState(false);
+  const [uploadingMain, setUploadingMain] = useState(false);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const uploading = uploadingMain || uploadingAttachments;
 
   // 加载下拉数据
   const fetchOptions = useCallback(async () => {
@@ -141,43 +142,6 @@ export function CreateProjectDialog({
     });
   };
 
-  const handleFileUpload = async (
-    file: File,
-    type: "main" | "attachment"
-  ) => {
-    setUploading(true);
-    setError("");
-    try {
-      const res = await uploadDocument(file);
-      if (res.code === ResponseCode.SUCCESS && res.data) {
-        if (type === "main") {
-          setContractMainFile(res.data);
-          updateField("contractFile", res.data.fileId);
-        } else {
-          setContractAttachments((prev) => [...prev, res.data]);
-          updateField("contractOtherFiles", [
-            ...(form.contractOtherFiles ?? []),
-            res.data.fileId,
-          ]);
-        }
-      } else {
-        setError(res.msg || "文件上传失败");
-      }
-    } catch {
-      setError("文件上传失败，请重试");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const removeAttachment = (fileId: string) => {
-    setContractAttachments((prev) => prev.filter((f) => f.fileId !== fileId));
-    updateField(
-      "contractOtherFiles",
-      (form.contractOtherFiles ?? []).filter((id) => id !== fileId)
-    );
-  };
-
   const validate = (): string => {
     if (!form.projectName.trim()) return "请输入项目名称";
     if (!form.projectType) return "请选择项目类型";
@@ -188,6 +152,7 @@ export function CreateProjectDialog({
   };
 
   const handleSubmit = async () => {
+    if (uploading) return;
     const msg = validate();
     if (msg) {
       toast.error(msg);
@@ -402,70 +367,17 @@ export function CreateProjectDialog({
 
             {/* 合同主文件 */}
             <FormField label="合同文件" required>
-              {contractMainFile ? (
-                <EditableAttachmentFileList
-                  files={[contractMainFile]}
-                  onRemove={() => {
-                      setContractMainFile(null);
-                      updateField("contractFile", undefined);
-                  }}
-                />
-              ) : (
-                <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
-                  {uploading ? (
-                    <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                  ) : (
-                    <Upload className="w-4 h-4 text-slate-400" />
-                  )}
-                  <span className="text-sm text-slate-500">
-                    {uploading ? "上传中..." : "点击上传合同主文件"}
-                  </span>
-                  <input
-                    type="file"
-                    className="hidden"
-                    accept=".pdf,.doc,.docx,.xls,.xlsx"
-                    disabled={uploading}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFileUpload(file, "main");
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-              )}
+              <FileUploadField purpose="contract" maxFiles={1} value={contractMainFile ? [contractMainFile] : []}
+                disabled={submitting} onBusyChange={setUploadingMain}
+                onChange={(files) => { setContractMainFile(files[0] ?? null); updateField("contractFile", files[0]?.fileId); }} />
             </FormField>
 
             {/* 合同附件 */}
             <FormField label="其他附件">
-              {contractAttachments.length > 0 && (
-                <div className="mb-2">
-                  <EditableAttachmentFileList
-                    files={contractAttachments}
-                    onRemove={removeAttachment}
-                  />
-                </div>
-              )}
-              <label className="flex items-center justify-center gap-2 p-3 border border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
-                {uploading ? (
-                  <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
-                ) : (
-                  <Upload className="w-3.5 h-3.5 text-slate-400" />
-                )}
-                <span className="text-xs text-slate-500">
-                  {uploading ? "上传中..." : "添加附件"}
-                </span>
-                <input
-                  type="file"
-                  className="hidden"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
-                  disabled={uploading}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleFileUpload(file, "attachment");
-                    e.target.value = "";
-                  }}
-                />
-              </label>
+              <FileUploadField purpose="contract" value={contractAttachments} disabled={submitting}
+                onBusyChange={setUploadingAttachments} onChange={(files) => {
+                  setContractAttachments(files); updateField("contractOtherFiles", files.map((file) => file.fileId));
+                }} />
             </FormField>
           </div>
         )}
@@ -505,6 +417,7 @@ export function CreateProjectDialog({
             {step > 1 && (
               <Button
                 variant="outline"
+                disabled={uploading || submitting}
                 onClick={() => setStep(step - 1)}
               >
                 上一步
@@ -518,6 +431,7 @@ export function CreateProjectDialog({
             {step < 3 ? (
               <Button
                 className="bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={uploading || submitting}
                 onClick={() => setStep(step + 1)}
               >
                 下一步
@@ -525,7 +439,7 @@ export function CreateProjectDialog({
             ) : (
               <Button
                 className="bg-blue-600 hover:bg-blue-700 text-white"
-                disabled={submitting}
+                disabled={submitting || uploading}
                 onClick={handleSubmit}
               >
                 {submitting ? (

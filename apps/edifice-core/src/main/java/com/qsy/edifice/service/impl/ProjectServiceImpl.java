@@ -21,6 +21,7 @@ import com.qsy.edifice.mapper.ProjectFilesMapper;
 import com.qsy.edifice.mapper.ProjectMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
 import com.qsy.edifice.service.*;
+import com.qsy.edifice.service.support.FileObjectStorage;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -85,6 +86,8 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Resource
     private FilesMapper filesMapper;
+
+    @Resource private FileObjectStorage fileObjectStorage;
 
     @Resource
     private ProjectFilesService projectFilesService;
@@ -991,11 +994,6 @@ public class ProjectServiceImpl implements ProjectService {
         if (file == null || !StringUtils.hasText(file.getFilePath())) {
             return;
         }
-        Path physicalPath = resolvePhysicalFilePath(file);
-        if (physicalPath == null || !java.nio.file.Files.exists(physicalPath) || !java.nio.file.Files.isRegularFile(physicalPath)) {
-            log.warn("归档打包跳过缺失文件 fileId={} path={}", fileId, physicalPath);
-            return;
-        }
         String displayName = StringUtils.hasText(file.getDisplayName()) ? file.getDisplayName() : file.getFileName();
         String extension = StringUtils.hasText(file.getFileExtension()) ? "." + file.getFileExtension() : "";
         String entryName = sanitizeZipPath(baseEntryName);
@@ -1009,7 +1007,7 @@ public class ProjectServiceImpl implements ProjectService {
         }
         entryName = nextZipEntryName(usedEntryNames, entryName);
         zip.putNextEntry(new ZipEntry(entryName));
-        java.nio.file.Files.copy(physicalPath, zip);
+        try (java.io.InputStream input = fileObjectStorage.open(file)) { input.transferTo(zip); }
         zip.closeEntry();
     }
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { Upload, FileText, X, Loader2, Download } from "lucide-react";
+import { Loader2, Download } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,9 +12,12 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { importProjects, getTemplateUrl } from "@/services/project";
+import { importProjectsByFileId, getTemplateUrl } from "@/services/project";
 import { ResponseCode } from "@/types/api";
 import { getAccessToken } from "@/lib/token";
+
+import { FileUploadField } from "@/components/file/file-upload-field";
+import type { FilesVo } from "@/types/project";
 
 interface ImportProjectDialogProps {
   open: boolean;
@@ -27,11 +30,11 @@ export function ImportProjectDialog({
   onOpenChange,
   onSuccess,
 }: ImportProjectDialogProps) {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = useState<FilesVo | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState("");
   const [isError, setIsError] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [fileBusy, setFileBusy] = useState(false);
 
   const handleReset = () => {
     setFile(null);
@@ -39,25 +42,15 @@ export function ImportProjectDialog({
     setIsError(false);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (selected) {
-      setFile(selected);
-      setResult("");
-      setIsError(false);
-    }
-    e.target.value = "";
-  };
-
   const handleImport = async () => {
-    if (!file) return;
+    if (!file || fileBusy) return;
 
     setUploading(true);
     setResult("");
     setIsError(false);
 
     try {
-      const res = await importProjects(file);
+      const res = await importProjectsByFileId(file.fileId);
       if (res.code === ResponseCode.SUCCESS) {
         toast.success(res.data || "导入成功");
         setResult(res.data || "导入成功");
@@ -121,45 +114,8 @@ export function ImportProjectDialog({
             </Button>
           </div>
 
-          {/* 文件选择 */}
-          {!file ? (
-            <label className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
-              <Upload className="w-8 h-8 text-slate-300" />
-              <div className="text-center">
-                <p className="text-sm text-slate-600 font-medium">
-                  点击选择 Excel 文件
-                </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  支持 .xlsx、.xls 格式
-                </p>
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                accept=".xlsx,.xls"
-                onChange={handleFileChange}
-              />
-            </label>
-          ) : (
-            <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl">
-              <FileText className="w-8 h-8 text-emerald-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-700 truncate">
-                  {file.name}
-                </p>
-                <p className="text-xs text-slate-400">
-                  {(file.size / 1024).toFixed(1)} KB
-                </p>
-              </div>
-              <button
-                onClick={handleReset}
-                className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+          <FileUploadField purpose="import" maxFiles={1} accept=".xlsx,.xls" value={file ? [file] : []}
+            disabled={uploading} onBusyChange={setFileBusy} onChange={(files) => { setFile(files[0] ?? null); setResult(""); }} />
 
           {/* 导入结果 */}
           {result && (
@@ -183,7 +139,7 @@ export function ImportProjectDialog({
           </Button>
           <Button
             className="bg-blue-600 hover:bg-blue-700 text-white"
-            disabled={!file || uploading}
+            disabled={!file || uploading || fileBusy}
             onClick={handleImport}
           >
             {uploading ? (

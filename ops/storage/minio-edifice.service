@@ -1,0 +1,28 @@
+[Unit]
+Description=Edifice private MinIO community storage
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/home/minio-edifice
+
+[Service]
+User=minio-edifice
+Group=minio-edifice
+EnvironmentFile=/etc/minio-edifice.env
+ExecStart=/usr/local/lib/edifice-storage/minio server /home/minio-edifice/data --address 127.0.0.1:9000 --console-address 127.0.0.1:9001
+Restart=on-failure
+RestartSec=10
+LimitNOFILE=65536
+MemoryAccounting=true
+MemoryHigh=512M
+MemoryMax=768M
+TasksMax=512
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/minio-edifice
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

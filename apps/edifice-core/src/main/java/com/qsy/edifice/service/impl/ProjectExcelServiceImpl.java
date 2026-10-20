@@ -3,6 +3,10 @@ package com.qsy.edifice.service.impl;
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.ExcelWriter;
 import com.alibaba.excel.write.metadata.WriteSheet;
+import com.alibaba.excel.context.AnalysisContext;
+import com.alibaba.excel.event.AnalysisEventListener;
+import com.qsy.edifice.exception.BusinessException;
+import com.qsy.edifice.service.support.FileUploadPolicy;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.qsy.edifice.domain.dto.CreateProjectDto;
 import com.qsy.edifice.domain.entity.*;
@@ -180,19 +184,9 @@ public class ProjectExcelServiceImpl implements ProjectExcelService {
 
     @Override
     public String importProjects(MultipartFile file, Long userId) throws IOException {
-        InputStream inputStream = file.getInputStream();
-
-        // 读取 Sheet1: 项目信息
-        List<ProjectExcelData> projectDataList = EasyExcel.read(file.getInputStream())
-                .head(ProjectExcelData.class)
-                .sheet(0)
-                .doReadSync();
-
-        // 读取 Sheet2: 项目成员
-        List<ProjectMemberExcelData> memberDataList = EasyExcel.read(file.getInputStream())
-                .head(ProjectMemberExcelData.class)
-                .sheet(1)
-                .doReadSync();
+        FileUploadPolicy.validate(file.getOriginalFilename(), file.getSize(), "import");
+        List<ProjectExcelData> projectDataList = readBounded(file, ProjectExcelData.class, 0, 5000);
+        List<ProjectMemberExcelData> memberDataList = readBounded(file, ProjectMemberExcelData.class, 1, 20000);
 
         if (projectDataList == null || projectDataList.isEmpty()) {
             return "Excel 项目信息为空";
@@ -313,6 +307,23 @@ public class ProjectExcelServiceImpl implements ProjectExcelService {
             }
         }
         return result.toString();
+    }
+
+    private <T> List<T> readBounded(MultipartFile file, Class<T> model, int sheet, int limit) throws IOException {
+        List<T> rows = new ArrayList<>();
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MINUTES.toNanos(2);
+        try (InputStream input = file.getInputStream()) {
+            EasyExcel.read(input, model, new AnalysisEventListener<T>() {
+                @Override public void invoke(T row, AnalysisContext context) {
+                    if (rows.size() >= limit || System.nanoTime() > deadline) {
+                        throw new BusinessException("Excel行数或解析时间超过限制，请拆分文件后导入");
+                    }
+                    rows.add(row);
+                }
+                @Override public void doAfterAllAnalysed(AnalysisContext context) {}
+            }).sheet(sheet).doRead();
+        }
+        return rows;
     }
 
     // ==================== 用户匹配 ====================

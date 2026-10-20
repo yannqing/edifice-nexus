@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Eye, FileText, Loader2, Upload, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,10 +16,8 @@ import {
   getAllProjects,
   getProjectDetail,
   getUserList,
-  MAX_ATTACHMENT_FILE_SIZE,
-  uploadProjectAttachment,
 } from "@/services/project";
-import { createProjectFile } from "@/services/project-file";
+import { createProjectFilesBatch } from "@/services/project-file";
 import type {
   ProjectListVo,
   ProjectDetailVo,
@@ -28,45 +26,7 @@ import type {
   FilesVo,
 } from "@/types/project";
 import { FILE_CATEGORY_OPTIONS } from "@/types/project-file";
-import {
-  isFileNameBrowserPreviewable,
-  showUnsupportedPreviewToast,
-} from "@/components/file/attachment-file-list";
-
-const PROJECT_FILE_ACCEPT_TYPES = [
-  ".pdf",
-  ".doc",
-  ".docx",
-  ".xls",
-  ".xlsx",
-  ".ppt",
-  ".pptx",
-  ".txt",
-  ".md",
-  ".csv",
-  ".rtf",
-  ".odt",
-  ".ods",
-  ".odp",
-  ".jpg",
-  ".jpeg",
-  ".png",
-  ".gif",
-  ".bmp",
-  ".webp",
-  ".svg",
-  ".ico",
-  ".tiff",
-  ".tif",
-  ".mp3",
-  ".wav",
-  ".flac",
-  ".aac",
-  ".ogg",
-  ".wma",
-  ".m4a",
-  ".opus",
-].join(",");
+import { FileUploadField } from "@/components/file/file-upload-field";
 
 interface Props {
   open: boolean;
@@ -97,13 +57,10 @@ export function UploadProjectFileDialog({
   const [category, setCategory] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [firstApproverId, setFirstApproverId] = useState<string>("");
-  const [file, setFile] = useState<File | null>(null);
-  const [uploadedFile, setUploadedFile] = useState<FilesVo | null>(null);
+  const [files, setFiles] = useState<FilesVo[]>([]);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string>("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 仅重置表单录入项；项目详情和阶段刷新交给下面的 effect 按 open 触发。
   const reset = useCallback(() => {
@@ -113,9 +70,7 @@ export function UploadProjectFileDialog({
     setCategory("");
     setDescription("");
     setFirstApproverId("");
-    setFile(null);
-    setUploadedFile(null);
-    setUploadProgress(0);
+    setFiles([]);
     setError("");
   }, [lockedProjectId]);
 
@@ -160,80 +115,22 @@ export function UploadProjectFileDialog({
     };
   }, [open, projectId]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (selected) {
-      if (selected.size > MAX_ATTACHMENT_FILE_SIZE) {
-        setError(`文件大小不能超过 500MB，当前文件 ${(selected.size / 1024 / 1024).toFixed(1)}MB`);
-        return;
-      }
-      setError("");
-      setFile(selected);
-      setUploadedFile(null);
-      setUploadProgress(0);
-      // 默认用原文件名填到展示名，用户可自行改
-      if (!displayName) {
-        const name = selected.name.replace(/\.[^./\\]+$/, "");
-        setDisplayName(name);
-      }
-    }
-    e.target.value = "";
-  };
-
-  const handleLocalPreview = () => {
-    if (!file) return;
-    const browserCanPreview =
-      isFileNameBrowserPreviewable(file.name) ||
-      file.type.startsWith("image/") ||
-      file.type.startsWith("text/") ||
-      file.type === "application/pdf";
-    if (!browserCanPreview) {
-      showUnsupportedPreviewToast();
-      return;
-    }
-
-    const url = URL.createObjectURL(file);
-    const previewWindow = window.open(url, "_blank");
-    if (!previewWindow) {
-      URL.revokeObjectURL(url);
-      toast.error("浏览器拦截了预览窗口，请允许弹窗后重试");
-      return;
-    }
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  };
-
   const handleSubmit = async () => {
     setError("");
     if (!projectId) return setError("请选择项目");
-    if (!file) return setError("请选择要上传的文件");
-    if (!displayName.trim()) return setError("请填写文件名称");
+    if (!files.length || uploading) return setError("请先完成文件上传");
 
     setSubmitting(true);
     try {
-      // 1. 上传文件拿 fileId
-      let fid = uploadedFile?.fileId;
-      if (!fid) {
-        setUploading(true);
-        setUploadProgress(0);
-        const upRes = await uploadProjectAttachment(file, (p) => setUploadProgress(p));
-        setUploading(false);
-        if (upRes.code !== ResponseCode.SUCCESS || !upRes.data) {
-          return setError(upRes.msg || "文件上传失败");
-        }
-        setUploadedFile(upRes.data);
-        fid = upRes.data.fileId;
-      }
-
-      // 2. 创建项目文件并提交审批
-      const res = await createProjectFile({
+      const res = await createProjectFilesBatch(files.map((file) => ({
         projectId,
         projectStageId: stageId || undefined,
-        fileId: fid,
-        fileName: displayName.trim(),
+        fileId: file.fileId,
+        fileName: files.length === 1 && displayName.trim() ? displayName.trim() : file.displayName,
         fileCategory: category || undefined,
         description: description || undefined,
         firstApproverId: firstApproverId || undefined,
-      });
+      })));
       if (res.code === ResponseCode.SUCCESS) {
         toast.success("已提交审批");
         onOpenChange(false);
@@ -308,14 +205,14 @@ export function UploadProjectFileDialog({
             </div>
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">
-                文件名称 *
+                文件名称（单文件选填）
               </label>
               <input
                 type="text"
                 className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm bg-white"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="如：施工图-A区-V2"
+                placeholder="留空使用原文件名" disabled={files.length > 1}
               />
             </div>
             <div>
@@ -370,66 +267,8 @@ export function UploadProjectFileDialog({
             <label className="text-xs font-medium text-slate-600 mb-1 block">
               上传文件 <span className="text-rose-500">*</span>
             </label>
-            {!file ? (
-              <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-slate-200 rounded-xl cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-colors">
-                <Upload className="w-6 h-6 text-slate-300" />
-                <p className="text-sm text-slate-600 font-medium">
-                  点击选择文件（文档、图片、音频等）
-                </p>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  accept={PROJECT_FILE_ACCEPT_TYPES}
-                  onChange={handleFileSelect}
-                />
-              </label>
-            ) : (
-              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                <FileText className="w-6 h-6 text-emerald-500 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-700 truncate">{file.name}</p>
-                  <p className="text-xs text-slate-400">
-                    {file.size > 1024 * 1024
-                      ? `${(file.size / 1024 / 1024).toFixed(1)} MB`
-                      : `${(file.size / 1024).toFixed(1)} KB`}
-                    {uploadedFile ? " · 已上传" : ""}
-                  </p>
-                  {uploading && (
-                    <div className="mt-2">
-                      <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-                        <span>上传中...</span>
-                        <span>{uploadProgress}%</span>
-                      </div>
-                      <div className="w-full bg-slate-200 rounded-full h-1.5">
-                        <div
-                          className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${uploadProgress}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleLocalPreview}
-                  className="p-1.5 text-slate-400 hover:text-blue-600"
-                  title="预览文件"
-                >
-                  <Eye className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFile(null);
-                    setUploadedFile(null);
-                  }}
-                  className="p-1.5 text-slate-400 hover:text-rose-500"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            <FileUploadField purpose="project" value={files} onChange={setFiles}
+              onBusyChange={setUploading} disabled={submitting} />
           </div>
 
           {error && (

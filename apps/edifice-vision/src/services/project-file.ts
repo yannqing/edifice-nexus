@@ -16,6 +16,10 @@ export async function createProjectFile(
   return post<number>("/project-files/create", { body: params });
 }
 
+export function createProjectFilesBatch(params: CreateProjectFileParams[]) {
+  return post<string[]>("/project-files/create-batch", { body: params });
+}
+
 export async function approveProjectFile(
   params: ApproveProjectFileParams,
 ): Promise<BaseResponse<boolean>> {

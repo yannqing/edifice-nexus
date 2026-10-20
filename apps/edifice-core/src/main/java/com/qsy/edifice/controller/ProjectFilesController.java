@@ -57,6 +57,22 @@ public class ProjectFilesController {
         return ResultUtils.success(Code.SUCCESS, id, "提交成功");
     }
 
+    @PostMapping("/create-batch")
+    @PreAuthorize("hasAuthority('menu:my-projects') or hasAuthority('menu:all-projects') or hasAuthority('menu:project-files-approval') or hasRole('SUPER_ADMIN')")
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    public BaseResponse<List<String>> createBatch(@RequestBody List<CreateProjectFileDto> items,
+                                                  HttpServletRequest request) throws JsonProcessingException {
+        if (items == null || items.isEmpty() || items.size() > 20)
+            throw new com.qsy.edifice.exception.BusinessException("每批文件数量应为1到20个");
+        if (items.stream().map(CreateProjectFileDto::getFileId).distinct().count() != items.size())
+            throw new com.qsy.edifice.exception.BusinessException("文件不能重复");
+        Long userId = jwtUtils.getUserFromToken(request.getHeader("token")).getUserId();
+        List<String> ids = new java.util.ArrayList<>();
+        for (CreateProjectFileDto item : items)
+            ids.add(String.valueOf(projectFilesService.createAndSubmit(item, userId)));
+        return ResultUtils.success(Code.SUCCESS, ids, "提交成功");
+    }
+
     @PostMapping("/approve")
     @Operation(summary = "审批（通过 / 驳回）",
             description = "通过 + nextApproverId 非空时流转下一级；不传 nextApproverId 视为终审")
