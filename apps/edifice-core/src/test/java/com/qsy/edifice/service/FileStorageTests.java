@@ -79,7 +79,8 @@ class FileStorageTests {
         var response = downloads.response(file, request);
         assertTrue(response.getHeaders().getContentDisposition().isAttachment());
         response.getBody().writeTo(new ByteArrayOutputStream());
-        verifyNoInteractions(storage);
+        verify(storage).checkAvailable(file);
+        verifyNoMoreInteractions(storage);
     }
 
     @Test void legacyEmptyFileDoesNotRequestInvalidObjectRange() throws Exception {
@@ -92,7 +93,8 @@ class FileStorageTests {
         assertEquals(200, response.getStatusCode().value());
         assertEquals(0L, response.getHeaders().getContentLength());
         response.getBody().writeTo(new ByteArrayOutputStream());
-        verifyNoInteractions(storage);
+        verify(storage).checkAvailable(file);
+        verifyNoMoreInteractions(storage);
     }
 
     @Test void cookieFallbackIsRestrictedToFileReads() {

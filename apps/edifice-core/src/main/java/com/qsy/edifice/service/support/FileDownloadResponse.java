@@ -2,6 +2,7 @@ package com.qsy.edifice.service.support;
 
 import com.qsy.edifice.domain.entity.Files;
 import com.qsy.edifice.mapper.FilesMapper;
+import com.qsy.edifice.exception.BusinessException;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.*;
@@ -33,6 +34,11 @@ public class FileDownloadResponse {
             } catch (IllegalArgumentException e) {
                 return ResponseEntity.status(416).header(HttpHeaders.CONTENT_RANGE, "bytes */" + size).build();
             }
+        }
+        try { storage.checkAvailable(file); }
+        catch (IOException | RuntimeException error) {
+            org.slf4j.LoggerFactory.getLogger(FileDownloadResponse.class).warn("File unavailable: {}", file.getFileId(), error);
+            throw new BusinessException("文件不存在或存储暂不可用，请稍后重试或联系管理员");
         }
         long start = offset; long length = count;
         boolean inline = "preview".equals(request.getParameter("mode"))

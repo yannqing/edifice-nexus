@@ -81,6 +81,16 @@ public class FileObjectStorage {
 
     public InputStream open(Files file) throws IOException { return open(file, 0, null); }
 
+    public void checkAvailable(Files file) throws IOException {
+        long size;
+        if ("minio".equalsIgnoreCase(file.getStorageType())) {
+            var request = HeadObjectRequest.builder().bucket(file.getStorageBucket()).key(file.getObjectKey());
+            if (file.getObjectVersion() != null) request.versionId(file.getObjectVersion());
+            size = s3().headObject(request.build()).contentLength();
+        } else size = java.nio.file.Files.size(resolveLegacy(file));
+        if (file.getFileSize() == null || size != file.getFileSize()) throw new IOException("File size differs from metadata");
+    }
+
     public InputStream open(Files file, long offset, Long length) throws IOException {
         if ("minio".equalsIgnoreCase(file.getStorageType())) {
             GetObjectRequest.Builder request = GetObjectRequest.builder()
