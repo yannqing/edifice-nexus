@@ -112,6 +112,7 @@ export default function AllProjectsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedType, setSelectedType] = useState("all");
+  const [projectLevel, setProjectLevel] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [projects, setProjects] = useState<ProjectListVo[]>([]);
   const [total, setTotal] = useState(0);
@@ -136,7 +137,7 @@ export default function AllProjectsPage() {
   // 筛选变化时重置页码
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedStatus, selectedType, debouncedSearch]);
+  }, [selectedStatus, selectedType, debouncedSearch, projectLevel]);
 
   // 加载项目列表（带请求取消，防止切换筛选时旧数据闪现）
   // 注意：abort 时不能关闭 loading——否则 StrictMode 双调用或快速切筛选时，
@@ -154,18 +155,13 @@ export default function AllProjectsPage() {
           selectedType !== "all" ? Number(selectedType) : undefined,
         current: currentPage,
         pageSize: PAGE_SIZE,
+        projectLevel: projectLevel === "all" ? undefined : Number(projectLevel),
+        archiveStatus: selectedStatus === "archived" ? 1 : 0,
       }, signal);
 
       if (response.code === ResponseCode.SUCCESS && response.data) {
-        let records = response.data.records ?? [];
-        // 归档筛选：已归档 tab 只显示已归档；其他 tab 排除已归档
-        if (selectedStatus === "archived") {
-          records = records.filter((p) => p.archiveStatus === 1);
-        } else {
-          records = records.filter((p) => p.archiveStatus !== 1);
-        }
-        setProjects(records);
-        setTotal(records.length);
+        setProjects(response.data.records ?? []);
+        setTotal(response.data.total);
       }
       setLoading(false);
     } catch (err) {
@@ -174,7 +170,7 @@ export default function AllProjectsPage() {
       setTotal(0);
       setLoading(false);
     }
-  }, [debouncedSearch, selectedStatus, selectedType, currentPage]);
+  }, [debouncedSearch, selectedStatus, selectedType, currentPage, projectLevel]);
 
   // 加载统计数据
   const fetchStatistics = useCallback(async () => {
@@ -231,6 +227,7 @@ export default function AllProjectsPage() {
     setSelectedStatus("all");
     setSelectedType("all");
     setSearchText("");
+    setProjectLevel("all");
   };
 
   const handleDeleteProject = async () => {
@@ -393,6 +390,12 @@ export default function AllProjectsPage() {
             ))}
           </select>
 
+          <select aria-label="项目层级" value={projectLevel} onChange={(event) => setProjectLevel(event.target.value)}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+            <option value="all">全部项目层级</option>
+            <option value="0">主项目及独立项目</option>
+            <option value="1">结算子项目</option>
+          </select>
           <select
             value={selectedStatus}
             onChange={(e) => setSelectedStatus(e.target.value)}
@@ -510,6 +513,7 @@ export default function AllProjectsPage() {
                       </p>
                       <p className="text-xs text-slate-400 mt-0.5">
                         {project.projectCode}
+                        {project.parentProjectId && <span className="ml-2 text-teal-600">结算子项目</span>}
                       </p>
                     </td>
                     <td className="py-4 px-4">

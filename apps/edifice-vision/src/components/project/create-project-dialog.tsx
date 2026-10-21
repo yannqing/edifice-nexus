@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   createProject,
+  createSettlementProject,
   getProjectTypes,
   getStageTemplates,
   getUserList,
@@ -24,6 +25,7 @@ import type {
   ProjectStageTemplate,
   UserListItem,
   FilesVo,
+  ProjectDetailVo,
 } from "@/types/project";
 import { FileUploadField } from "@/components/file/file-upload-field";
 import { AmountInput } from "@/components/ui/amount-input";
@@ -32,6 +34,7 @@ interface CreateProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  parentProject?: ProjectDetailVo;
 }
 
 interface ProjectTypeOption {
@@ -59,6 +62,7 @@ export function CreateProjectDialog({
   open,
   onOpenChange,
   onSuccess,
+  parentProject,
 }: CreateProjectDialogProps) {
   const [form, setForm] = useState<CreateProjectParams>({ ...initialForm });
   const [projectTypes, setProjectTypes] = useState<ProjectTypeOption[]>([]);
@@ -93,7 +97,13 @@ export function CreateProjectDialog({
 
   useEffect(() => {
     if (open) {
-      setForm({ ...initialForm });
+      setForm({
+        ...initialForm,
+        projectCharges: parentProject?.projectMemberList?.filter((member) => Number(member.projectRoleId) === 101)
+          .map((member) => String(member.userId)) ?? [],
+        projectMembers: parentProject?.projectMemberList?.filter((member) => Number(member.projectRoleId) !== 101)
+          .map((member) => String(member.userId)) ?? [],
+      });
       setStep(1);
       setError("");
       setContractMainFile(null);
@@ -101,7 +111,7 @@ export function CreateProjectDialog({
       setStageTemplates([]);
       fetchOptions();
     }
-  }, [open, fetchOptions]);
+  }, [open, fetchOptions, parentProject]);
 
   // 项目类型变化时加载对应阶段模板
   useEffect(() => {
@@ -174,9 +184,11 @@ export function CreateProjectDialog({
         preStartTime: form.preStartTime ? `${form.preStartTime}T00:00:00` : undefined,
         preEndTime: form.preEndTime ? `${form.preEndTime}T00:00:00` : undefined,
       };
-      const res = await createProject(params);
+      const res = parentProject
+        ? await createSettlementProject(parentProject.projectId, params)
+        : await createProject(params);
       if (res.code === ResponseCode.SUCCESS) {
-        toast.success("项目创建成功");
+        toast.success(parentProject ? "结算子项目创建成功" : "项目创建成功");
         onOpenChange(false);
         onSuccess();
       } else {
@@ -194,9 +206,9 @@ export function CreateProjectDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>新建项目</DialogTitle>
+          <DialogTitle>{parentProject ? "新建结算子项目" : "新建项目"}</DialogTitle>
           <DialogDescription>
-            填写项目基本信息、合同信息和成员分配
+            {parentProject ? `所属主项目：${parentProject.projectName}` : "填写项目基本信息、合同信息和成员分配"}
           </DialogDescription>
         </DialogHeader>
 

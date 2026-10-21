@@ -119,6 +119,7 @@ export default function MyProjectsPage() {
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("card");
   const [searchText, setSearchText] = useState("");
+  const [projectLevel, setProjectLevel] = useState("all");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [projects, setProjects] = useState<ProjectListVo[]>([]);
@@ -168,7 +169,7 @@ export default function MyProjectsPage() {
   // 搜索或筛选变化时重置页码
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeFilter, debouncedSearch]);
+  }, [activeFilter, debouncedSearch, projectLevel]);
 
   // 加载项目数据（带请求取消，防止切换 tab 时旧数据闪现）
   // 注意：abort 时不能关闭 loading——否则 StrictMode 双调用或快速切 tab 时，
@@ -182,20 +183,13 @@ export default function MyProjectsPage() {
         projectStatus: statusValue ?? undefined,
         current: currentPage,
         pageSize: PAGE_SIZE,
+        projectLevel: projectLevel === "all" ? undefined : Number(projectLevel),
+        archiveStatus: activeFilter === "all" ? undefined : activeFilter === "archived" ? 1 : 0,
       }, signal);
 
       if (response.code === ResponseCode.SUCCESS && response.data) {
-        let records = response.data.records ?? [];
-        // 已归档项目隔离：除「已归档」和「全部」tab 外，其他 tab 不显示已归档项目
-        if (activeFilter === "archived") {
-          records = records.filter((p) => p.archiveStatus === 1);
-        } else if (activeFilter === "all") {
-          // 全部 tab 包含已归档
-        } else {
-          records = records.filter((p) => p.archiveStatus !== 1);
-        }
-        setProjects(records);
-        setTotal(records.length);
+        setProjects(response.data.records ?? []);
+        setTotal(response.data.total);
       }
       setLoading(false);
     } catch (err) {
@@ -204,7 +198,7 @@ export default function MyProjectsPage() {
       setTotal(0);
       setLoading(false);
     }
-  }, [activeFilter, debouncedSearch, currentPage]);
+  }, [activeFilter, debouncedSearch, currentPage, projectLevel]);
 
   // 加载各状态的数量
   const fetchFilterCounts = useCallback(async () => {
@@ -357,6 +351,12 @@ export default function MyProjectsPage() {
             <List className="w-4 h-4" />
           </button>
         </div>
+        <select aria-label="项目层级" value={projectLevel} onChange={(event) => setProjectLevel(event.target.value)}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+          <option value="all">全部项目层级</option>
+          <option value="0">主项目及独立项目</option>
+          <option value="1">结算子项目</option>
+        </select>
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -424,6 +424,7 @@ export default function MyProjectsPage() {
                 </h3>
                 <p className="text-xs text-slate-400 mb-4">
                   {project.projectCode}
+                  {project.parentProjectId && <span className="ml-2 text-teal-600">结算子项目</span>}
                 </p>
 
                 {/* Progress */}
@@ -597,6 +598,7 @@ export default function MyProjectsPage() {
                       </p>
                       <p className="text-xs text-slate-400 mt-0.5">
                         {project.projectCode}
+                        {project.parentProjectId && <span className="ml-2 text-teal-600">结算子项目</span>}
                       </p>
                     </td>
                     <td className="py-4 px-4">
@@ -772,6 +774,7 @@ export default function MyProjectsPage() {
             onClick={() => {
               setActiveFilter("all");
               setSearchText("");
+              setProjectLevel("all");
             }}
             className="px-4 py-2 text-sm text-blue-600 font-medium hover:bg-blue-50 rounded-lg transition-colors"
           >

@@ -3,6 +3,7 @@ package com.qsy.edifice.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.qsy.edifice.domain.entity.Project;
 import com.qsy.edifice.domain.vo.ProjectStatisticsVo;
+import com.qsy.edifice.domain.vo.SettlementProjectSummaryVo;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -13,6 +14,12 @@ import java.util.List;
  */
 @Mapper
 public interface ProjectMapper extends BaseMapper<Project> {
+
+    Project selectByIdForUpdate(@Param("id") Long id);
+
+    SettlementProjectSummaryVo selectSettlementSummary(@Param("parentId") Long parentId,
+                                                       @Param("userId") Long userId,
+                                                       @Param("canViewAll") boolean canViewAll);
 
     /**
      * 根据项目编码查询项目

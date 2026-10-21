@@ -63,6 +63,7 @@ export interface ProjectMemberVo {
 
 export interface ProjectListVo {
   projectId: string;
+  parentProjectId?: string | null;
   projectName: string;
   projectCode: string;
   projectType: ProjectTypeVo | null;
@@ -84,6 +85,10 @@ export interface ProjectListVo {
 
 export interface ProjectDetailVo {
   projectId: string;
+  parentProjectId?: string | null;
+  parentProjectName?: string | null;
+  parentProjectCode?: string | null;
+  archiveStatus?: number;
   projectName: string;
   projectCode: string;
   projectType: ProjectTypeVo | null;
@@ -112,6 +117,9 @@ export interface ProjectStatisticsVo {
 // ==================== 查询参数 ====================
 
 export interface GetMyProjectListParams {
+  archiveStatus?: number;
+  parentProjectId?: string;
+  projectLevel?: number;
   keywords?: string;
   projectStatus?: number;
   current?: number;
@@ -119,6 +127,9 @@ export interface GetMyProjectListParams {
 }
 
 export interface GetAllProjectListParams {
+  archiveStatus?: number;
+  parentProjectId?: string;
+  projectLevel?: number;
   keywords?: string;
   projectStatus?: number;
   projectType?: number;
@@ -134,6 +145,18 @@ export interface PageResult<T> {
   size: number;
   current: number;
   pages: number;
+}
+
+export interface SettlementProjectPage {
+  projects: PageResult<ProjectListVo>;
+  summary: {
+    projectCount: number;
+    completedCount: number;
+    contractAmount: number;
+    baseAmount: number;
+    benefitAmount: number;
+  };
+  canCreate: boolean;
 }
 
 // ==================== 更新项目参数 ====================

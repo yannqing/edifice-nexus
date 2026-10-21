@@ -277,9 +277,13 @@ public class ProjectServiceImpl implements ProjectService {
         if (projectId == null) {
             return false;
         }
-        Project project = projectMapper.selectById(projectId);
+        Project project = projectMapper.selectByIdForUpdate(projectId);
         if (project == null) {
             return false;
+        }
+        if (projectMapper.selectCount(new LambdaQueryWrapper<Project>()
+                .eq(Project::getParentProjectId, projectId)) > 0) {
+            throw new BusinessException(ErrorType.OPERATION_FAILED, "主项目下仍有结算子项目，不能删除主项目");
         }
 
         String projectIdText = String.valueOf(projectId);
@@ -387,8 +391,11 @@ public class ProjectServiceImpl implements ProjectService {
         // 项目类型筛选
         wrapper.eq(dto.getProjectType() != null, Project::getProjectType, dto.getProjectType());
 
+        filterProjectLevel(wrapper, dto.getParentProjectId(), dto.getProjectLevel());
+        filterArchiveStatus(wrapper, dto.getArchiveStatus());
+
         // 按创建时间倒序
-        wrapper.orderByDesc(Project::getCreatedTime);
+        wrapper.orderByDesc(Project::getCreatedTime, Project::getProjectId);
 
         // 分页查询
         Page<Project> page = projectMapper.selectPage(new Page<>(dto.getCurrent(), dto.getPageSize()), wrapper);
@@ -415,6 +422,9 @@ public class ProjectServiceImpl implements ProjectService {
         GetMyProjectListDto mineDto = new GetMyProjectListDto();
         mineDto.setKeywords(dto.getKeywords());
         mineDto.setProjectStatus(dto.getProjectStatus());
+        mineDto.setParentProjectId(dto.getParentProjectId());
+        mineDto.setProjectLevel(dto.getProjectLevel());
+        mineDto.setArchiveStatus(dto.getArchiveStatus());
         mineDto.setCurrent(dto.getCurrent());
         mineDto.setPageSize(dto.getPageSize());
         return getMyProjectPage(userId, mineDto);
@@ -630,7 +640,9 @@ public class ProjectServiceImpl implements ProjectService {
 
         // 项目状态筛选
         wrapper.eq(dto.getProjectStatus() != null,Project::getProjectStatus, dto.getProjectStatus());
-
+        filterProjectLevel(wrapper, dto.getParentProjectId(), dto.getProjectLevel());
+        filterArchiveStatus(wrapper, dto.getArchiveStatus());
+        wrapper.orderByDesc(Project::getCreatedTime, Project::getProjectId);
 
         // 4. 分页查询
         Page<Project> page = projectMapper.selectPage(new Page<>(dto.getCurrent(), dto.getPageSize()), wrapper);
@@ -663,7 +675,38 @@ public class ProjectServiceImpl implements ProjectService {
         if (!canViewAll && projectMemberService.getProjectMemberByProjectIdAndUserId(projectId, userId) == null) {
             throw new BusinessException(ErrorType.NO_AUTH_ERROR, "无权查看该项目详情");
         }
-        return convertToDetailVo(project);
+        ProjectDetailVo detail = convertToDetailVo(project);
+        if (project.getParentProjectId() != null) {
+            Project parent = projectMapper.selectById(project.getParentProjectId());
+            if (parent != null && (canViewAll || projectMemberService
+                    .getProjectMemberByProjectIdAndUserId(parent.getProjectId(), userId) != null)) {
+                detail.setParentProjectName(parent.getProjectName());
+                detail.setParentProjectCode(parent.getProjectCode());
+            }
+        }
+        return detail;
+    }
+
+    private void filterProjectLevel(LambdaQueryWrapper<Project> wrapper, Long parentId, Integer level) {
+        if (parentId != null) {
+            wrapper.eq(Project::getParentProjectId, parentId);
+        } else if (Objects.equals(level, 0)) {
+            wrapper.isNull(Project::getParentProjectId);
+        } else if (Objects.equals(level, 1)) {
+            wrapper.isNotNull(Project::getParentProjectId);
+        } else if (level != null) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "无效的项目层级");
+        }
+    }
+
+    private void filterArchiveStatus(LambdaQueryWrapper<Project> wrapper, Integer status) {
+        if (Objects.equals(status, 1)) {
+            wrapper.eq(Project::getArchiveStatus, 1);
+        } else if (Objects.equals(status, 0)) {
+            wrapper.and(w -> w.isNull(Project::getArchiveStatus).or().ne(Project::getArchiveStatus, 1));
+        } else if (status != null) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "无效的归档状态");
+        }
     }
 
     @Override
@@ -871,7 +914,7 @@ public class ProjectServiceImpl implements ProjectService {
         if (projectId == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目ID不能为空");
         }
-        Project project = projectMapper.selectById(projectId);
+        Project project = projectMapper.selectByIdForUpdate(projectId);
         if (project == null) {
             throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
         }
@@ -899,6 +942,12 @@ public class ProjectServiceImpl implements ProjectService {
         Project project = projectMapper.selectById(projectId);
         if (project == null) {
             throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
+        }
+        if (project.getParentProjectId() != null) {
+            Project parent = projectMapper.selectByIdForUpdate(project.getParentProjectId());
+            if (parent == null || Objects.equals(parent.getArchiveStatus(), ARCHIVE_STATUS_ARCHIVED)) {
+                throw new BusinessException(ErrorType.OPERATION_FAILED, "请先取消主项目归档，再取消子项目归档");
+            }
         }
         if (!Objects.equals(project.getArchiveStatus(), ARCHIVE_STATUS_ARCHIVED)) {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "只有已归档项目可以取消归档");
@@ -931,6 +980,17 @@ public class ProjectServiceImpl implements ProjectService {
         }
         if (Objects.equals(project.getArchiveStatus(), ARCHIVE_STATUS_ARCHIVED)) {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "项目已归档，不能继续发起业务操作");
+        }
+    }
+
+    @Override
+    public void ensureProjectManager(Long projectId, Long userId, boolean canManageAll) {
+        ensureProjectNotArchived(projectId);
+        if (canManageAll) return;
+        ProjectMember member = userId == null ? null
+                : projectMemberService.getProjectMemberByProjectIdAndUserId(projectId, userId);
+        if (member == null || !Objects.equals(member.getProjectRole(), ROLE_MANAGER_ID)) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "仅当前项目经理或项目管理员可以操作");
         }
     }
 
@@ -1613,6 +1673,12 @@ public class ProjectServiceImpl implements ProjectService {
         if (Objects.equals(project.getArchiveStatus(), ARCHIVE_STATUS_ARCHIVED)) {
             vo.setArchiveReady(false);
             vo.setArchiveWarning(null);
+        } else if (projectMapper.selectCount(new LambdaQueryWrapper<Project>()
+                .eq(Project::getParentProjectId, project.getProjectId())
+                .and(w -> w.isNull(Project::getArchiveStatus).or()
+                        .ne(Project::getArchiveStatus, ARCHIVE_STATUS_ARCHIVED))) > 0) {
+            vo.setArchiveReady(false);
+            vo.setArchiveWarning("仍有未归档的结算子项目，请先归档子项目");
         } else if (totalStageCount == 0) {
             vo.setArchiveReady(false);
             vo.setArchiveWarning("项目未配置阶段，无法归档");

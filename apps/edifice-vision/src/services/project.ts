@@ -13,6 +13,7 @@ import type {
   ProjectStageTemplate,
   FilesVo,
   UserListItem,
+  SettlementProjectPage,
 } from "@/types/project";
 
 /**
@@ -22,6 +23,22 @@ export async function createProject(
   params: CreateProjectParams
 ): Promise<BaseResponse<number>> {
   return post<number>("/project/create", { body: params });
+}
+
+export async function createSettlementProject(parentId: string, params: CreateProjectParams) {
+  return post<string>(`/project/${parentId}/settlements`, { body: params });
+}
+
+export async function getSettlementProjects(
+  parentId: string,
+  params: { keywords?: string; current?: number; pageSize?: number },
+  signal?: AbortSignal,
+): Promise<BaseResponse<SettlementProjectPage>> {
+  const query: Record<string, string> = {};
+  if (params.keywords) query.keywords = params.keywords;
+  if (params.current !== undefined) query.current = String(params.current);
+  if (params.pageSize !== undefined) query.pageSize = String(params.pageSize);
+  return get<SettlementProjectPage>(`/project/${parentId}/settlements`, { params: query, signal });
 }
 
 /**
@@ -92,6 +109,9 @@ export async function getAllProjects(
     query.projectStatus = String(params.projectStatus);
   if (params?.projectType !== undefined)
     query.projectType = String(params.projectType);
+  if (params?.parentProjectId) query.parentProjectId = params.parentProjectId;
+  if (params?.projectLevel !== undefined) query.projectLevel = String(params.projectLevel);
+  if (params?.archiveStatus !== undefined) query.archiveStatus = String(params.archiveStatus);
   if (params?.current !== undefined) query.current = String(params.current);
   if (params?.pageSize !== undefined) query.pageSize = String(params.pageSize);
 
@@ -109,6 +129,9 @@ export async function getMyProjects(
   if (params?.keywords) query.keywords = params.keywords;
   if (params?.projectStatus !== undefined)
     query.projectStatus = String(params.projectStatus);
+  if (params?.parentProjectId) query.parentProjectId = params.parentProjectId;
+  if (params?.projectLevel !== undefined) query.projectLevel = String(params.projectLevel);
+  if (params?.archiveStatus !== undefined) query.archiveStatus = String(params.archiveStatus);
   if (params?.current !== undefined) query.current = String(params.current);
   if (params?.pageSize !== undefined) query.pageSize = String(params.pageSize);
 

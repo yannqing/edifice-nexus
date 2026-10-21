@@ -34,6 +34,9 @@ public class ProjectListVo implements Serializable {
     @JsonSerialize(using = ToStringSerializer.class)
     private Long projectId;
 
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long parentProjectId;
+
     /**
      * 项目名称
      */

@@ -195,4 +195,6 @@ public interface ProjectService {
      * @param projectId 项目id
      */
     void ensureProjectNotArchived(Long projectId);
+
+    void ensureProjectManager(Long projectId, Long userId, boolean canManageAll);
 }

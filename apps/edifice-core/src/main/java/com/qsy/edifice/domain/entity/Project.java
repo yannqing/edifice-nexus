@@ -29,6 +29,9 @@ public class Project implements Serializable {
     @TableId(value = "project_id", type = IdType.ASSIGN_ID)
     private Long projectId;
 
+    @TableField("parent_project_id")
+    private Long parentProjectId;
+
     /**
      * 项目名称
      */

@@ -31,6 +31,14 @@ public class GetAllProjectListDto {
     @Schema(description = "项目类型id")
     private Long projectType;
 
+    @Schema(description = "主项目ID，仅查询其结算子项目")
+    private Long parentProjectId;
+
+    @Schema(description = "项目层级：0-主项目及独立项目，1-结算子项目；空为全部")
+    private Integer projectLevel;
+
+    private Integer archiveStatus;
+
     /**
      * 当前页
      */

@@ -12,10 +12,14 @@ import com.qsy.edifice.domain.entity.ProjectStageTemplate;
 import com.qsy.edifice.domain.entity.ProjectStage;
 import com.qsy.edifice.domain.entity.ProjectType;
 import com.qsy.edifice.domain.entity.SysUser;
+import com.qsy.edifice.enums.ErrorType;
+import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.domain.vo.ProjectDetailVo;
 import com.qsy.edifice.domain.vo.ProjectLifecycleVo;
 import com.qsy.edifice.domain.vo.ProjectListVo;
 import com.qsy.edifice.domain.vo.ProjectStatisticsVo;
+import com.qsy.edifice.domain.vo.SettlementProjectPageVo;
+import com.qsy.edifice.service.SettlementProjectService;
 import com.qsy.edifice.service.ProjectExcelService;
 import com.qsy.edifice.service.ProjectStageService;
 import com.qsy.edifice.service.ProjectService;
@@ -49,6 +53,8 @@ public class ProjectController {
     @Resource
     private ProjectService projectService;
     @Resource
+    private SettlementProjectService settlementProjectService;
+    @Resource
     private ProjectTypeService projectTypeService;
     @Resource
     private ProjectStageTemplateService projectStageTemplateService;
@@ -71,6 +77,28 @@ public class ProjectController {
         return ResultUtils.success(Code.SUCCESS, projectId, "项目创建成功");
     }
 
+    @PostMapping("/{id}/settlements")
+    @Operation(summary = "创建独立核算的结算子项目")
+    @PreAuthorize("hasAnyAuthority('menu:my-projects', 'menu:all-projects') or hasRole('SUPER_ADMIN')")
+    public BaseResponse<String> createSettlementProject(@PathVariable("id") Long parentId,
+                                                      @RequestBody CreateProjectDto dto,
+                                                      HttpServletRequest request) throws JsonProcessingException {
+        Long userId = jwtUtils.getUserFromToken(request.getHeader("token")).getUserId();
+        return ResultUtils.success(Code.SUCCESS, String.valueOf(settlementProjectService.create(
+                parentId, dto, userId, canManageAllProjects())), "结算子项目创建成功");
+    }
+
+    @GetMapping("/{id}/settlements")
+    @Operation(summary = "分页查询有权查看的结算子项目及独立金额汇总")
+    @PreAuthorize("isAuthenticated()")
+    public BaseResponse<SettlementProjectPageVo> getSettlementProjects(@PathVariable("id") Long parentId,
+                                                                      GetAllProjectListDto dto,
+                                                                      HttpServletRequest request) throws JsonProcessingException {
+        Long userId = jwtUtils.getUserFromToken(request.getHeader("token")).getUserId();
+        return ResultUtils.success(Code.SUCCESS, settlementProjectService.list(
+                parentId, dto, userId, canViewAllProjectDetails(), canManageAllProjects()));
+    }
+
     @PutMapping("/update")
     @Operation(summary = "更新项目", description = "更新项目基本信息、合同信息及成员")
     @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
@@ -81,16 +109,18 @@ public class ProjectController {
 
     @PutMapping("/stage/start")
     @Operation(summary = "启动阶段", description = "批量启动项目阶段（未开始→进行中），支持多个阶段同时启动")
-    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
-    public BaseResponse<Boolean> startStages(@RequestBody List<Long> stageIds) {
+    @PreAuthorize("hasAnyAuthority('menu:my-projects', 'menu:all-projects') or hasRole('SUPER_ADMIN')")
+    public BaseResponse<Boolean> startStages(@RequestBody List<Long> stageIds, HttpServletRequest request) throws JsonProcessingException {
+        authorizeStageManagement(stageIds, request);
         projectStageService.startStages(new HashSet<>(stageIds));
         return ResultUtils.success(Code.SUCCESS, true, "阶段启动成功");
     }
 
     @PutMapping("/stage/restart/{id}")
     @Operation(summary = "重启阶段", description = "重新启动已驳回的阶段（已驳回→进行中）")
-    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
-    public BaseResponse<Boolean> restartStage(@PathVariable("id") Long stageId) {
+    @PreAuthorize("hasAnyAuthority('menu:my-projects', 'menu:all-projects') or hasRole('SUPER_ADMIN')")
+    public BaseResponse<Boolean> restartStage(@PathVariable("id") Long stageId, HttpServletRequest request) throws JsonProcessingException {
+        authorizeStageManagement(List.of(stageId), request);
         projectStageService.restartStage(stageId);
         return ResultUtils.success(Code.SUCCESS, true, "阶段已重新启动");
     }
@@ -257,6 +287,30 @@ public class ProjectController {
                 "menu:project-lifecycle".equals(authority.getAuthority())
                         || "menu:all-projects".equals(authority.getAuthority())
                         || "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
+    }
+
+    private boolean canManageAllProjects() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && authentication.getAuthorities().stream().anyMatch(authority ->
+                "menu:all-projects".equals(authority.getAuthority())
+                        || "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
+    }
+
+    private void authorizeStageManagement(List<Long> stageIds, HttpServletRequest request) throws JsonProcessingException {
+        if (stageIds == null || stageIds.isEmpty() || stageIds.stream().anyMatch(id -> id == null)) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择要操作的阶段");
+        }
+        Long userId = jwtUtils.getUserFromToken(request.getHeader("token")).getUserId();
+        Set<Long> projectIds = new HashSet<>();
+        for (Long stageId : new HashSet<>(stageIds)) {
+            ProjectStage stage = projectStageService.getProjectStageById(stageId);
+            if (stage == null) throw new BusinessException(ErrorType.STAGE_NOT_FOUND);
+            projectIds.add(stage.getProjectId());
+        }
+        if (projectIds.size() != 1) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "一次只能操作同一项目的阶段");
+        }
+        projectService.ensureProjectManager(projectIds.iterator().next(), userId, canManageAllProjects());
     }
 
     private boolean canViewAllProjectDetails() {

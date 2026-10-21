@@ -27,6 +27,8 @@ import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -460,6 +462,13 @@ public class InspectionFormServiceImpl implements InspectionFormService {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目和阶段不能为空");
         }
         projectService.ensureProjectNotArchived(dto.getProjectId());
+        Project inspectionProject = projectService.getProjectById(dto.getProjectId());
+        if (inspectionProject != null && inspectionProject.getParentProjectId() != null) {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            boolean canManageAll = auth != null && auth.getAuthorities().stream().anyMatch(authority ->
+                    "menu:all-projects".equals(authority.getAuthority()) || "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
+            projectService.ensureProjectManager(dto.getProjectId(), userId, canManageAll);
+        }
         if (dto.getFirstApproverId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "一级审批人不能为空");
         }

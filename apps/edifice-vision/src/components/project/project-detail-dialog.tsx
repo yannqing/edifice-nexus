@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Users,
   FileText,
@@ -20,6 +20,9 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  ArrowLeft,
+  ClipboardCheck,
+  FolderTree,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DialogSkeleton } from "@/components/ui/skeleton";
@@ -61,6 +64,8 @@ import {
 import type { ProjectStatus, ProjectCategory } from "@/types";
 import { UploadProjectFileDialog } from "@/components/project-file/upload-project-file-dialog";
 import { useAuth } from "@/store/auth-context";
+import { SettlementProjectsSection } from "@/components/project/settlement-projects-section";
+import { CreateInspectionDialog } from "@/components/inspection/create-inspection-dialog";
 
 function triggerDownload(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
@@ -202,6 +207,10 @@ export function ProjectDetailDialog({
   onOpenChange,
   onStageChange,
 }: ProjectDetailDialogProps) {
+  const [navigation, setNavigation] = useState<{ origin: string; target: string } | null>(null);
+  const activeProjectId = navigation?.origin === projectId ? navigation.target : projectId;
+  const activeViewRef = useRef({ id: activeProjectId, open });
+  useLayoutEffect(() => { activeViewRef.current = { id: activeProjectId, open }; }, [activeProjectId, open]);
   const [detail, setDetail] = useState<ProjectDetailVo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -210,10 +219,11 @@ export function ProjectDetailDialog({
   const [editingCoeffValue, setEditingCoeffValue] = useState<string>("1");
 
   const reloadDetail = async () => {
-    if (!projectId) return;
+    if (!activeProjectId || !activeViewRef.current.open || activeViewRef.current.id !== activeProjectId) return;
     try {
-      const response = await getProjectDetail(projectId);
-      if (response.code === ResponseCode.SUCCESS && response.data) {
+      const response = await getProjectDetail(activeProjectId);
+      if (activeViewRef.current.open && activeViewRef.current.id === activeProjectId
+          && response.code === ResponseCode.SUCCESS && response.data) {
         setDetail(response.data);
       }
     } catch {
@@ -272,7 +282,7 @@ export function ProjectDetailDialog({
   };
 
   useEffect(() => {
-    if (!open || !projectId) {
+    if (!open || !activeProjectId) {
       setDetail(null);
       setError("");
       return;
@@ -284,7 +294,7 @@ export function ProjectDetailDialog({
       setLoading(true);
       setError("");
       try {
-        const response = await getProjectDetail(projectId!);
+        const response = await getProjectDetail(activeProjectId!);
         if (cancelled) return;
         if (response.code === ResponseCode.SUCCESS && response.data) {
           setDetail(response.data);
@@ -302,10 +312,10 @@ export function ProjectDetailDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, projectId]);
+  }, [open, activeProjectId]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(value) => { if (!value) setNavigation(null); onOpenChange(value); }}>
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         {/* 加载态 */}
         {loading && (
@@ -332,7 +342,12 @@ export function ProjectDetailDialog({
         {/* 详情内容 */}
         {!loading && detail && (
           <ProjectDetailContent
+            key={detail.projectId}
             detail={detail}
+            onNavigate={(target) => { if (projectId) setNavigation({ origin: projectId, target }); }}
+            onProjectChange={onStageChange}
+            onInspectionChange={reloadDetail}
+            initialSettlementView={navigation?.origin === projectId}
             stageActionLoading={stageActionLoading}
             onStartStages={handleStartStages}
             onRestartStage={handleRestartStage}
@@ -853,6 +868,10 @@ const ROLE_PROJECT_MANAGER = 101;
 /** 详情内容 */
 function ProjectDetailContent({
   detail,
+  onNavigate,
+  onProjectChange,
+  onInspectionChange,
+  initialSettlementView,
   stageActionLoading,
   onStartStages,
   onRestartStage,
@@ -864,6 +883,10 @@ function ProjectDetailContent({
   onCancelEditCoeff,
 }: {
   detail: ProjectDetailVo;
+  onNavigate: (id: string) => void;
+  onProjectChange?: () => void;
+  onInspectionChange: () => void;
+  initialSettlementView: boolean;
   stageActionLoading: boolean;
   onStartStages: (stageIds: string[]) => void;
   onRestartStage: (stageId: string) => void;
@@ -875,6 +898,8 @@ function ProjectDetailContent({
   onCancelEditCoeff: () => void;
 }) {
   const { user } = useAuth();
+  const [inspectionOpen, setInspectionOpen] = useState(false);
+  const [activeView, setActiveView] = useState(initialSettlementView ? "settlements" : "overview");
 
   /** 判断当前用户是否为该项目的项目经理 */
   const isManager = (() => {
@@ -911,7 +936,14 @@ function ProjectDetailContent({
   return (
     <>
       <DialogHeader>
-        <div className="flex items-center gap-2 mb-1">
+        {detail.parentProjectId && detail.parentProjectName && (
+          <button type="button" onClick={() => onNavigate(detail.parentProjectId!)}
+            className="mb-2 flex min-w-0 items-start gap-1 text-left text-xs text-blue-600 hover:underline">
+            <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+            <span className="break-words">主项目：{detail.parentProjectName}</span>
+          </button>
+        )}
+        <div className="flex flex-wrap items-center gap-2 mb-1 pr-8">
           <span
             className={cn(
               "text-xs px-2 py-0.5 rounded-md font-medium",
@@ -927,12 +959,47 @@ function ProjectDetailContent({
           >
             {statusLabel}
           </Badge>
+          {detail.parentProjectId && <Badge variant="secondary" className="text-xs">结算子项目</Badge>}
         </div>
-        <DialogTitle>{detail.projectName}</DialogTitle>
+        <DialogTitle className="break-words">{detail.projectName}</DialogTitle>
         <DialogDescription>{detail.projectCode}</DialogDescription>
       </DialogHeader>
 
-      <div className="mt-4 space-y-5">
+      {!detail.parentProjectId && (
+        <div role="tablist" aria-label="项目详情视图" className="mt-4 flex gap-4 border-b border-slate-200">
+          {[
+            { value: "overview", label: "项目概况", icon: Info },
+            { value: "settlements", label: "结算子项目", icon: FolderTree },
+          ].map(({ value, label, icon: Icon }) => (
+            <button key={value} role="tab" id={`${value}-tab-${detail.projectId}`}
+              aria-controls={`${value}-panel-${detail.projectId}`} aria-selected={activeView === value}
+              tabIndex={activeView === value ? 0 : -1}
+              onClick={() => setActiveView(value)}
+              onKeyDown={(event) => {
+                if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                event.preventDefault();
+                const target = event.key === "Home" ? "overview" : event.key === "End" ? "settlements"
+                  : activeView === "overview" ? "settlements" : "overview";
+                setActiveView(target);
+                document.getElementById(`${target}-tab-${detail.projectId}`)?.focus();
+              }}
+              className={cn("flex items-center gap-1.5 border-b-2 px-1 pb-2 text-sm font-medium",
+                activeView === value ? "border-blue-600 text-blue-600" : "border-transparent text-slate-500 hover:text-slate-700")}>
+              <Icon className="h-4 w-4" />{label}
+            </button>
+          ))}
+        </div>
+      )}
+      {!detail.parentProjectId && activeView === "settlements" ? (
+        <div className="mt-4" role="tabpanel" tabIndex={0} id={`settlements-panel-${detail.projectId}`} aria-labelledby={`settlements-tab-${detail.projectId}`}>
+          <SettlementProjectsSection project={detail} onSelect={onNavigate} onChange={onProjectChange} />
+        </div>
+      ) : (
+      <div className="mt-4 space-y-5" role={detail.parentProjectId ? undefined : "tabpanel"}
+        id={`overview-panel-${detail.projectId}`} aria-labelledby={detail.parentProjectId ? undefined : `overview-tab-${detail.projectId}`}>
+        {detail.parentProjectId && isManager && detail.archiveStatus !== 1 && stages.some((stage) => stage.stageStatus === 1) && (
+          <Button size="sm" onClick={() => setInspectionOpen(true)}><ClipboardCheck className="mr-1 h-4 w-4" />发起验工</Button>
+        )}
         {/* 基本信息 */}
         <section>
           <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5 mb-3">
@@ -1183,7 +1250,10 @@ function ProjectDetailContent({
           projectId={detail.projectId}
           projectName={detail.projectName}
         />
+        <CreateInspectionDialog open={inspectionOpen} onOpenChange={setInspectionOpen} initialProject={detail}
+          onSuccess={() => { onInspectionChange(); onProjectChange?.(); }} />
       </div>
+      )}
     </>
   );
 }

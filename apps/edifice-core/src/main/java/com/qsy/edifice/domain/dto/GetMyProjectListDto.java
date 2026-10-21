@@ -22,6 +22,12 @@ public class GetMyProjectListDto {
     @Schema(description = "项目状态")
     private Integer projectStatus;
 
+    private Long parentProjectId;
+
+    private Integer projectLevel;
+
+    private Integer archiveStatus;
+
     /**
      * 当前页
      */

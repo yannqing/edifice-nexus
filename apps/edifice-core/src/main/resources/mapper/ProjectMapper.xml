@@ -5,6 +5,7 @@
     <!-- 结果映射 -->
     <resultMap id="BaseResultMap" type="com.qsy.edifice.domain.entity.Project">
         <id column="project_id" property="projectId" jdbcType="BIGINT"/>
+        <result column="parent_project_id" property="parentProjectId" jdbcType="BIGINT"/>
         <result column="project_name" property="projectName" jdbcType="VARCHAR"/>
         <result column="project_code" property="projectCode" jdbcType="VARCHAR"/>
         <result column="project_type" property="projectType" jdbcType="BIGINT"/>
@@ -19,9 +20,33 @@
 
     <!-- 基础字段列表 -->
     <sql id="Base_Column_List">
-        project_id, project_name, project_code, project_type, project_status, is_show,
+        project_id, parent_project_id, project_name, project_code, project_type, project_status, is_show,
         project_start_time, project_end_time, created_time, updated_time, is_delete
     </sql>
+
+    <select id="selectByIdForUpdate" resultType="com.qsy.edifice.domain.entity.Project">
+        SELECT * FROM project WHERE project_id = #{id} AND is_delete = 0 FOR UPDATE
+    </select>
+
+    <select id="selectSettlementSummary" resultType="com.qsy.edifice.domain.vo.SettlementProjectSummaryVo">
+        SELECT COUNT(*) AS projectCount,
+               COALESCE(SUM(CASE WHEN p.project_status = 4 THEN 1 ELSE 0 END), 0) AS completedCount,
+               COALESCE(SUM(c.contract_amount), 0) AS contractAmount,
+               COALESCE(SUM(c.base_amount), 0) AS baseAmount,
+               COALESCE(SUM(c.benefit_amount), 0) AS benefitAmount
+        FROM project p
+        LEFT JOIN (
+            SELECT project_id, SUM(contract_amount) AS contract_amount,
+                   SUM(base_amount) AS base_amount,
+                   SUM(CASE WHEN contract_type = 1 THEN benefit_amount ELSE 0 END) AS benefit_amount
+            FROM contract WHERE is_delete = 0 GROUP BY project_id
+        ) c ON c.project_id = p.project_id
+        WHERE p.parent_project_id = #{parentId} AND p.is_delete = 0
+        <if test="!canViewAll">
+            AND EXISTS (SELECT 1 FROM project_member pm
+                        WHERE pm.project_id = p.project_id AND pm.user_id = #{userId} AND pm.is_delete = 0)
+        </if>
+    </select>
 
     <!-- 根据项目编码查询项目 -->
     <select id="selectByProjectCode" resultMap="BaseResultMap">
