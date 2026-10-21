@@ -7,9 +7,22 @@ import type {
   ApproveProjectFileParams,
   CreateProjectFileParams,
   ProjectFileVo,
+  ProjectFileFolder,
 } from "@/types/project-file";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+
+export function getProjectFileFolders(projectId: string, signal?: AbortSignal) {
+  return get<ProjectFileFolder[]>("/project-file-folders", { params: { projectId }, signal });
+}
+
+export function createProjectFileFolder(params: { projectId: string; parentFolderId: string; folderName: string }) {
+  return post<ProjectFileFolder>("/project-file-folders", { body: params });
+}
+
+export function resolveProjectFileFolders(params: { projectId: string; parentFolderId: string; paths: string[] }) {
+  return post<Record<string, string>>("/project-file-folders/resolve-paths", { body: params });
+}
 
 export async function createProjectFile(
   params: CreateProjectFileParams,
@@ -71,6 +84,7 @@ export async function cancelProjectFile(
 
 export async function getProjectFileList(params?: {
   projectId?: string;
+  folderId?: string;
   approvalStatus?: number;
   fileCategory?: string;
   keyword?: string;
@@ -81,6 +95,7 @@ export async function getProjectFileList(params?: {
 }, signal?: AbortSignal): Promise<BaseResponse<PageResult<ProjectFileVo>>> {
   const q: Record<string, string> = {};
   if (params?.projectId) q.projectId = params.projectId;
+  if (params?.folderId !== undefined) q.folderId = params.folderId;
   if (params?.approvalStatus !== undefined) q.approvalStatus = String(params.approvalStatus);
   if (params?.fileCategory) q.fileCategory = params.fileCategory;
   if (params?.keyword) q.keyword = params.keyword;

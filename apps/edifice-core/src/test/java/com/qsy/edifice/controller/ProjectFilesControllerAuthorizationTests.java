@@ -4,12 +4,15 @@ import com.qsy.edifice.domain.dto.CreateProjectFileDto;
 import com.qsy.edifice.domain.dto.SubmitApprovalDto;
 import com.qsy.edifice.domain.dto.SubmitProjectFileBatchDto;
 import com.qsy.edifice.domain.dto.ApproveDto;
+import com.qsy.edifice.domain.dto.CreateProjectFileFolderDto;
+import com.qsy.edifice.domain.dto.ResolveProjectFileFoldersDto;
 import com.qsy.edifice.domain.entity.ApprovalRecords;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.mapper.ApprovalRecordsMapper;
 import com.qsy.edifice.service.ApprovalFlowService;
 import com.qsy.edifice.service.ProjectFilesService;
+import com.qsy.edifice.service.ProjectFileFolderService;
 import com.qsy.edifice.utils.JwtUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.AfterEach;
@@ -36,6 +39,8 @@ import static org.mockito.Mockito.*;
 @ContextConfiguration(classes = ProjectFilesControllerAuthorizationTests.Config.class)
 class ProjectFilesControllerAuthorizationTests {
     @Autowired ProjectFilesController controller;
+    @Autowired ProjectFileFoldersController folderController;
+    @MockBean ProjectFileFolderService folderService;
     @Autowired ApprovalFlowController genericController;
     @Autowired ProjectFilesService service;
     @Autowired ApprovalFlowService flow;
@@ -44,7 +49,7 @@ class ProjectFilesControllerAuthorizationTests {
     HttpServletRequest request;
 
     @BeforeEach void setup() throws Exception {
-        reset(service, flow, jwt, records);
+        reset(service, flow, jwt, records, folderService);
         request = mock(HttpServletRequest.class);
         when(request.getHeader("token")).thenReturn("test-token");
         when(jwt.getUserFromToken("test-token")).thenReturn(SysUser.builder().userId(7L).build());
@@ -56,7 +61,7 @@ class ProjectFilesControllerAuthorizationTests {
     }
 
     @Test void projectPermissionsCanSaveAndSubmitDraftsUsingAuthenticatedOwner() throws Exception {
-        var items = List.of(new CreateProjectFileDto(10L, null, 1L, "a.pdf", null, null, null));
+        var items = List.of(new CreateProjectFileDto(10L, null, 1L, "a.pdf", null, null, null, null));
         for (String authority : List.of("menu:my-projects", "menu:all-projects", "ROLE_SUPER_ADMIN")) {
             authenticate(authority);
             controller.saveDrafts(items, request);
@@ -73,6 +78,24 @@ class ProjectFilesControllerAuthorizationTests {
         verifyNoInteractions(service);
     }
 
+    @Test void folderOperationsUseAuthenticatedIdentityAndDoNotSubmitApproval() throws Exception {
+        authenticate("menu:my-projects");
+        var dto = new CreateProjectFileFolderDto(); dto.setProjectId(10L); dto.setFolderName("Reports");
+        folderController.create(dto, request);
+        verify(folderService).create(10L, null, "Reports", 7L);
+        var paths = new ResolveProjectFileFoldersDto(); paths.setProjectId(10L); paths.setPaths(List.of("Reports/January"));
+        folderController.resolve(paths, request);
+        verify(folderService).resolvePaths(10L, null, List.of("Reports/January"), 7L);
+        verifyNoInteractions(flow, records, service);
+    }
+
+    @Test void unrelatedMenuCannotCreateFolderOrDirectoryTree() {
+        authenticate("menu:workbench");
+        assertThrows(AccessDeniedException.class, () -> folderController.create(new CreateProjectFileFolderDto(), request));
+        assertThrows(AccessDeniedException.class, () -> folderController.resolve(new ResolveProjectFileFoldersDto(), request));
+        verifyNoInteractions(folderService);
+    }
+
     @Test void genericEndpointsCannotBypassFileBatchStateEvenForAdmin() {
         authenticate("ROLE_SUPER_ADMIN");
         assertThrows(BusinessException.class, () -> genericController.submit(new SubmitApprovalDto("FILE", 10L, 8L, null), request));
@@ -86,6 +109,7 @@ class ProjectFilesControllerAuthorizationTests {
     @EnableMethodSecurity
     static class Config {
         @Bean ProjectFilesController controller() { return new ProjectFilesController(); }
+        @Bean ProjectFileFoldersController folderController() { return new ProjectFileFoldersController(); }
         @Bean ApprovalFlowController genericController() { return new ApprovalFlowController(); }
         @Bean ProjectFilesService service() { return mock(ProjectFilesService.class); }
         @Bean ApprovalFlowService flow() { return mock(ApprovalFlowService.class); }

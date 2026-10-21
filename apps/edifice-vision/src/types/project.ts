@@ -203,6 +203,8 @@ export interface CreateProjectParams {
 // ==================== 文件上传响应 ====================
 
 export interface FilesVo {
+  /** Browser-only path, never used as a physical storage key. */
+  relativePath?: string;
   fileId: string;
   fileType: string;
   displayName: string;

@@ -23,6 +23,8 @@ import {
   ArrowLeft,
   ClipboardCheck,
   FolderTree,
+  Folder,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { DialogSkeleton } from "@/components/ui/skeleton";
@@ -43,6 +45,8 @@ import {
   fetchFileBlobWithMeta,
   fetchProjectFileBlob,
   getProjectFileList,
+  getProjectFileFolders,
+  createProjectFileFolder,
   getProjectFileDownloadUrl,
   prepareNativeFileUrl,
 } from "@/services/project-file";
@@ -57,6 +61,8 @@ import {
   STAGE_COMPLETED_STATUSES,
 } from "@/types/project";
 import type { ProjectFileVo } from "@/types/project-file";
+import type { ProjectFileFolder } from "@/types/project-file";
+import { folderAncestors } from "@/lib/project-file-folders";
 import {
   FILE_CATEGORY_OPTIONS,
   PROJECT_FILE_STATUS_MAP,
@@ -368,9 +374,11 @@ export function ProjectDetailDialog({
 function ProjectFilesSection({
   projectId,
   projectName,
+  readOnly,
 }: {
   projectId: string;
   projectName: string;
+  readOnly: boolean;
 }) {
   const SECTION_PAGE_SIZE = 5;
   const [items, setItems] = useState<ProjectFileVo[]>([]);
@@ -384,6 +392,18 @@ function ProjectFilesSection({
   const [fileCategory, setFileCategory] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [folders, setFolders] = useState<ProjectFileFolder[]>([]);
+  const [folderId, setFolderId] = useState("0");
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [folderError, setFolderError] = useState("");
+  const [folderPage, setFolderPage] = useState(1);
+  const [error, setError] = useState("");
+  const ancestors = folderAncestors(folders, folderId);
+  const visibleFolders = folders.filter((folder) => folder.parentFolderId === folderId
+    && (!debouncedKeyword || folder.folderName.toLowerCase().includes(debouncedKeyword.toLowerCase())));
+  const folderPages = Math.max(1, Math.ceil(visibleFolders.length / 10));
   const totalPages = Math.max(1, Math.ceil(total / SECTION_PAGE_SIZE));
 
   // 搜索防抖
@@ -398,30 +418,38 @@ function ProjectFilesSection({
   // 切分类重置页码
   useEffect(() => {
     setCurrentPage(1);
-  }, [fileCategory]);
+    setFolderPage(1);
+  }, [fileCategory, folderId, debouncedKeyword]);
 
   const fetchData = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
+    setLoading(true); setError("");
     try {
-      const res = await getProjectFileList({
+      const [res, directoryRes] = await Promise.all([getProjectFileList({
         projectId,
+        folderId,
         keyword: debouncedKeyword || undefined,
         fileCategory: fileCategory || undefined,
         current: currentPage,
         pageSize: SECTION_PAGE_SIZE,
-      }, signal);
-      if (!signal?.aborted && res.code === ResponseCode.SUCCESS && res.data) {
+      }, signal), getProjectFileFolders(projectId, signal)]);
+      if (signal?.aborted) return;
+      if (res.code !== ResponseCode.SUCCESS || !res.data) throw new Error(res.msg || "项目文件加载失败");
+      if (directoryRes.code !== ResponseCode.SUCCESS || !directoryRes.data) throw new Error(directoryRes.msg || "文件夹加载失败");
+      if (!signal?.aborted) {
         setItems(res.data.records ?? []);
         setTotal(res.data.total ?? 0);
+        setFolders(directoryRes.data);
+        if (currentPage > Math.max(1, Math.ceil(res.data.total / SECTION_PAGE_SIZE))) setCurrentPage(Math.max(1, Math.ceil(res.data.total / SECTION_PAGE_SIZE)));
       }
     } catch (err) {
-      if (isAbortError(err)) return;
+      if (isAbortError(err) || signal?.aborted) return;
+      setError(err instanceof Error ? err.message : "项目文件加载失败");
       setItems([]);
       setTotal(0);
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [projectId, debouncedKeyword, fileCategory, currentPage]);
+  }, [projectId, folderId, debouncedKeyword, fileCategory, currentPage]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -429,9 +457,22 @@ function ProjectFilesSection({
     return () => controller.abort();
   }, [fetchData]);
 
+  const navigateFolder = (id: string) => { setFolderId(id); setCurrentPage(1); setFolderPage(1); setKeyword(""); setDebouncedKeyword(""); };
+  const createFolder = async () => {
+    if (!folderName.trim() || creatingFolder) return;
+    setCreatingFolder(true); setFolderError("");
+    try {
+      const res = await createProjectFileFolder({ projectId, parentFolderId: folderId, folderName: folderName.trim() });
+      if (res.code !== ResponseCode.SUCCESS || !res.data) throw new Error(res.msg || "创建失败");
+      setNewFolderOpen(false); setFolderName(""); toast.success("文件夹已创建");
+      await fetchData();
+    } catch (e) { setFolderError(e instanceof Error ? e.message : "文件夹创建失败"); }
+    finally { setCreatingFolder(false); }
+  };
+
   return (
     <section>
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
           <Paperclip className="w-4 h-4 text-slate-400" /> 项目文件
           <span className="text-xs font-normal text-slate-400 ml-1">
@@ -439,17 +480,33 @@ function ProjectFilesSection({
           </span>
         </h4>
         <div className="flex shrink-0 items-center gap-2">
-          <Button variant="outline" className="h-7 text-xs" onClick={() => { setFileDialogTab("drafts"); setUploadOpen(true); }}>
+          <Button variant="outline" className="h-7 text-xs" disabled={readOnly} onClick={() => { setFileDialogTab("drafts"); setUploadOpen(true); }}>
             我的草稿
+          </Button>
+          <Button variant="outline" className="h-7 text-xs" disabled={readOnly || loading || !!error}
+            onClick={() => { setFolderName(""); setFolderError(""); setNewFolderOpen(true); }}>
+            <FolderPlus className="mr-1 h-3 w-3" />新建文件夹
           </Button>
           <Button
             className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+            disabled={readOnly || loading || !!error}
             onClick={() => { setFileDialogTab("upload"); setUploadOpen(true); }}
           >
-            <FolderPlus className="w-3 h-3 mr-1" /> 上传文件
+            <Upload className="w-3 h-3 mr-1" /> 上传文件
           </Button>
         </div>
       </div>
+
+      <nav aria-label="文件夹路径" className="mb-3 flex min-w-0 flex-wrap items-center gap-1 text-xs text-slate-500">
+        <button type="button" className="flex items-center gap-1 rounded px-1 py-1 hover:bg-slate-100" onClick={() => navigateFolder("0")} aria-current={folderId === "0" ? "location" : undefined}>
+          <Folder className="h-3.5 w-3.5" />根目录
+        </button>
+        {ancestors.map((folder, index) => <span key={folder.folderId} className="flex min-w-0 items-center gap-1">
+          <ChevronRight className="h-3 w-3 shrink-0" />
+          <button type="button" className="max-w-48 truncate rounded px-1 py-1 hover:bg-slate-100" title={folder.folderName}
+            aria-current={index === ancestors.length - 1 ? "location" : undefined} onClick={() => navigateFolder(folder.folderId)}>{folder.folderName}</button>
+        </span>)}
+      </nav>
 
       {/* 搜索 + 分类筛选 */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -457,7 +514,7 @@ function ProjectFilesSection({
           <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="按分类 / 说明搜索..."
+            placeholder="搜索当前目录的文件、文件夹..."
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             className="w-full pl-8 pr-3 py-1.5 rounded-md border border-slate-200 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -475,11 +532,25 @@ function ProjectFilesSection({
         </select>
       </div>
 
+      {error && <div role="alert" className="mb-3 flex items-center justify-between gap-2 text-xs text-rose-600">
+        <span className="break-words">{error}</span><Button size="sm" variant="outline" onClick={() => fetchData()}>重试</Button>
+      </div>}
+      {!loading && !error && visibleFolders.length > 0 && <div className="mb-3 border-y border-slate-100">
+        {visibleFolders.slice((folderPage - 1) * 10, folderPage * 10).map((folder) => <button key={folder.folderId} type="button"
+          onClick={() => navigateFolder(folder.folderId)} className="flex h-10 w-full min-w-0 items-center gap-2 border-b border-slate-100 px-2 text-left text-sm hover:bg-slate-50 last:border-0">
+          <Folder className="h-4 w-4 shrink-0 text-amber-600" /><span className="min-w-0 flex-1 truncate" title={folder.folderName}>{folder.folderName}</span><ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+        </button>)}
+        {folderPages > 1 && <div className="flex items-center justify-end gap-2 py-2 text-xs text-slate-500">
+          <span>文件夹 {folderPage}/{folderPages}</span>
+          <Button size="icon" variant="ghost" className="h-6 w-6" title="上一页文件夹" disabled={folderPage <= 1} onClick={() => setFolderPage((p) => p - 1)}><ChevronLeft className="h-3 w-3" /></Button>
+          <Button size="icon" variant="ghost" className="h-6 w-6" title="下一页文件夹" disabled={folderPage >= folderPages} onClick={() => setFolderPage((p) => p + 1)}><ChevronRight className="h-3 w-3" /></Button>
+        </div>}
+      </div>}
       {loading ? (
         <p className="text-xs text-slate-400 text-center py-4">加载中...</p>
-      ) : items.length === 0 ? (
+      ) : !error && items.length === 0 ? (
         <p className="text-xs text-slate-400 text-center py-4 bg-slate-50 rounded-lg">
-          暂无文件，点击右上角上传文件开始
+          当前目录暂无文件
         </p>
       ) : (
         <>
@@ -529,9 +600,24 @@ function ProjectFilesSection({
         onOpenChange={setUploadOpen}
         lockedProjectId={projectId}
         lockedProjectName={projectName}
+        initialFolderId={folderId}
         initialTab={fileDialogTab}
         onSuccess={() => fetchData()}
       />
+      <Dialog open={newFolderOpen} onOpenChange={(next) => { if (!creatingFolder) setNewFolderOpen(next); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>新建文件夹</DialogTitle><DialogDescription className="break-all">{["根目录", ...ancestors.map((folder) => folder.folderName)].join(" / ")}</DialogDescription></DialogHeader>
+          <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void createFolder(); }}>
+            <label className="block text-sm text-slate-600">文件夹名称
+              <input autoFocus maxLength={128} value={folderName} disabled={creatingFolder} onChange={(e) => setFolderName(e.target.value)}
+                className="mt-2 h-9 w-full rounded-md border border-slate-200 px-3 text-sm" />
+            </label>
+            {folderError && <p role="alert" className="text-xs text-rose-600">{folderError}</p>}
+            <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={creatingFolder} onClick={() => setNewFolderOpen(false)}>取消</Button>
+              <Button type="submit" disabled={creatingFolder || !folderName.trim()}>{creatingFolder && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}创建</Button></div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
@@ -897,7 +983,7 @@ function ProjectDetailContent({
   onSaveCoeff: (stageId: string) => void;
   onCancelEditCoeff: () => void;
 }) {
-  const { user } = useAuth();
+  const { user, roles, permissions } = useAuth();
   const [inspectionOpen, setInspectionOpen] = useState(false);
   const [activeView, setActiveView] = useState(initialSettlementView ? "settlements" : "overview");
 
@@ -908,6 +994,10 @@ function ProjectDetailContent({
       (m) => String(m.userId) === String(user.userId) && Number(m.projectRoleId) === ROLE_PROJECT_MANAGER
     );
   })();
+  const fileAdministrator = roles.some((role) => role.roleCode === "SUPER_ADMIN")
+    || permissions.some((code) => code === "menu:all-projects" || code === "menu:project-files-approval");
+  const fileMember = (detail.projectMemberList ?? []).some((member) => String(member.userId) === String(user?.userId));
+  const canManageFiles = fileAdministrator || (fileMember && permissions.includes("menu:my-projects"));
 
   const statusLabel = getStatusLabel(detail.projectStatus);
   const category = getCategoryLabel(detail.projectType?.projectTypeCode ?? "");
@@ -1247,8 +1337,10 @@ function ProjectDetailContent({
 
         {/* 项目文件（审批归档） */}
         <ProjectFilesSection
+          key={detail.projectId}
           projectId={detail.projectId}
           projectName={detail.projectName}
+          readOnly={detail.archiveStatus === 1 || !canManageFiles}
         />
         <CreateInspectionDialog open={inspectionOpen} onOpenChange={setInspectionOpen} initialProject={detail}
           onSuccess={() => { onInspectionChange(); onProjectChange?.(); }} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, FileCheck2, Loader2, Pencil, Save, Search, Trash2, Upload, UserRound } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button";
 import { FileUploadField } from "@/components/file/file-upload-field";
 import { UserPickerDialog } from "@/components/user/user-picker-dialog";
 import { getAllProjects, getProjectDetail } from "@/services/project";
-import { getProjectFileDraftPolicy, getProjectFileDrafts, removeProjectFileDraft, saveProjectFileDrafts, submitProjectFileDrafts, updateProjectFileDraft } from "@/services/project-file";
+import { getProjectFileDraftPolicy, getProjectFileDrafts, getProjectFileFolders, resolveProjectFileFolders, removeProjectFileDraft, saveProjectFileDrafts, submitProjectFileDrafts, updateProjectFileDraft } from "@/services/project-file";
+import { folderAncestors, folderOptions, relativeDirectory } from "@/lib/project-file-folders";
 import { AttachmentFileActions } from "@/components/file/attachment-file-list";
 import { isAbortError } from "@/lib/request";
 import { cn } from "@/lib/utils";
 import { ResponseCode } from "@/types/api";
 import type { FilesVo, ProjectListVo, ProjectStageVo } from "@/types/project";
-import { FILE_CATEGORY_OPTIONS, type ProjectFileVo } from "@/types/project-file";
+import { FILE_CATEGORY_OPTIONS, type ProjectFileVo, type ProjectFileFolder } from "@/types/project-file";
 
 interface Props {
   open: boolean;
@@ -23,12 +24,13 @@ interface Props {
   lockedProjectId?: string;
   lockedProjectName?: string;
   initialTab?: "upload" | "drafts";
+  initialFolderId?: string;
 }
 
 const fieldClass = "h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm disabled:bg-slate-50";
 const dateText = (value?: string | null) => value?.replace("T", " ").slice(0, 16) ?? "-";
 
-export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedProjectId, lockedProjectName, initialTab = "upload" }: Props) {
+export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedProjectId, lockedProjectName, initialTab = "upload", initialFolderId = "0" }: Props) {
   const [tab, setTab] = useState<"upload" | "drafts">(initialTab);
   const [projects, setProjects] = useState<ProjectListVo[]>([]);
   const [projectId, setProjectId] = useState(lockedProjectId ?? "");
@@ -38,6 +40,10 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
   const [description, setDescription] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [files, setFiles] = useState<FilesVo[]>([]);
+  const [folders, setFolders] = useState<ProjectFileFolder[]>([]);
+  const [folderId, setFolderId] = useState(initialFolderId);
+  const [foldersReady, setFoldersReady] = useState(false);
+  const locations = useMemo(() => folderOptions(folders), [folders]);
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [initializing, setInitializing] = useState(true);
@@ -67,6 +73,7 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
     setCategory(""); setDescription(""); setDisplayName(""); setTitle(""); setApplyDescription(""); setApprover(null);
     setInitializing(true);
     setEditing(null); setPickerOpen(false);
+    setFolderId(initialFolderId); setFolders([]); setFoldersReady(false);
     void Promise.all([getProjectFileDraftPolicy(), lockedProjectId ? Promise.resolve(null) : getAllProjects({ pageSize: 200 })])
       .then(([policy, projectRes]) => {
         if (!alive) return;
@@ -76,15 +83,20 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
       }).catch((e) => { if (alive) setError(e instanceof Error ? e.message : "加载失败，请重新打开"); })
       .finally(() => { if (alive) setInitializing(false); });
     return () => { alive = false; };
-  }, [open, initialTab, lockedProjectId]);
+  }, [open, initialTab, lockedProjectId, initialFolderId]);
 
   useEffect(() => {
     if (!open || !projectId) return;
     let alive = true;
-    setStages([]);
-    void getProjectDetail(projectId).then((res) => {
-      if (alive && res.code === ResponseCode.SUCCESS) setStages(res.data?.projectStages ?? []);
-    }).catch(() => { if (alive) setError("项目阶段加载失败，请重新打开"); });
+    setStages([]); setFoldersReady(false);
+    void Promise.all([getProjectDetail(projectId), getProjectFileFolders(projectId)]).then(([res, folderRes]) => {
+      if (!alive) return;
+      if (res.code !== ResponseCode.SUCCESS || !res.data) throw new Error(res.msg || "项目加载失败");
+      if (folderRes.code !== ResponseCode.SUCCESS || !folderRes.data) throw new Error(folderRes.msg || "文件夹加载失败");
+      setStages(res.data.projectStages ?? []); setFolders(folderRes.data);
+      setFolderId((id) => id === "0" || folderRes.data!.some((folder) => folder.folderId === id) ? id : "0");
+      setFoldersReady(true);
+    }).catch((e) => { if (alive) setError(e instanceof Error ? e.message : "项目加载失败，请重新打开"); });
     return () => { alive = false; };
   }, [open, projectId]);
 
@@ -119,13 +131,33 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
     if (!projectId || !files.length || uploading) return;
     setBusy(true); setError("");
     try {
-      const res = await saveProjectFileDrafts(files.map((file) => ({ projectId, fileId: file.fileId,
-        projectStageId: stageId || undefined, fileCategory: category || undefined, description: description || undefined,
-        fileName: files.length === 1 && displayName.trim() ? displayName.trim() : file.displayName })));
-      if (res.code !== ResponseCode.SUCCESS || !res.data) throw new Error(res.msg || "草稿保存失败");
-      setFiles([]); setSelected((prev) => new Set([...prev, ...res.data!])); setPage(1); setKeyword(""); setSearch("");
-      setReload((v) => v + 1); setTab("drafts"); toast.success(`已保存 ${res.data.length} 份草稿`); onSuccess();
-    } catch (e) { setError(e instanceof Error ? e.message : "保存失败，请重试"); }
+      const paths = [...new Set(files.map((file) => relativeDirectory(file.relativePath)).filter(Boolean))];
+      let folderIds: Record<string, string> = {};
+      if (paths.length) {
+        const resolved = await resolveProjectFileFolders({ projectId, parentFolderId: folderId, paths });
+        if (resolved.code !== ResponseCode.SUCCESS || !resolved.data) throw new Error(resolved.msg || "文件夹创建失败");
+        folderIds = resolved.data;
+      }
+      let saved = 0;
+      for (let offset = 0; offset < files.length; offset += 20) {
+        const group = files.slice(offset, offset + 20);
+        const res = await saveProjectFileDrafts(group.map((file) => {
+          const directory = relativeDirectory(file.relativePath);
+          if (directory && !folderIds[directory]) throw new Error("文件夹路径未完整保存，请重试");
+          return { projectId, fileId: file.fileId, folderId: directory ? folderIds[directory] : folderId,
+            projectStageId: stageId || undefined, fileCategory: category || undefined, description: description || undefined,
+            fileName: files.length === 1 && displayName.trim() ? displayName.trim() : file.displayName };
+        }));
+        if (res.code !== ResponseCode.SUCCESS || !res.data) throw new Error(res.msg || "草稿保存失败");
+        saved += group.length;
+        setSelected((prev) => new Set([...prev, ...res.data!]));
+        setFiles(files.slice(saved));
+      }
+      const updatedFolders = await getProjectFileFolders(projectId).catch(() => null);
+      if (updatedFolders?.code === ResponseCode.SUCCESS && updatedFolders.data) setFolders(updatedFolders.data);
+      setPage(1); setKeyword(""); setSearch("");
+      setReload((v) => v + 1); setTab("drafts"); toast.success(`已保存 ${saved} 份草稿`); onSuccess();
+    } catch (e) { setReload((v) => v + 1); onSuccess(); setError(e instanceof Error ? e.message : "保存失败，请重试"); }
     finally { setBusy(false); }
   };
 
@@ -162,6 +194,7 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
     setBusy(true);
     try {
       const res = await updateProjectFileDraft(editing.projectFileId, { projectId: editing.projectId, fileId: editing.fileId,
+        folderId: editing.folderId || "0",
         fileName: editing.fileName || undefined, projectStageId: editing.projectStageId || undefined,
         fileCategory: editing.fileCategory || undefined, description: editing.description || undefined });
       if (res.code !== ResponseCode.SUCCESS) throw new Error(res.msg || "修改失败");
@@ -186,7 +219,7 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
 
   return <>
     <Dialog open={open} onOpenChange={close}>
-      <DialogContent className="flex h-[min(820px,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[min(820px,calc(100dvh_-_2rem))] max-h-[calc(100dvh_-_2rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 transition-[opacity,transform]">
         <DialogHeader className="shrink-0 border-b border-slate-100 px-5 pb-3 pt-5 pr-12">
           <DialogTitle>项目文件申请</DialogTitle>
           <DialogDescription>草稿自保存起保留 {retention} 天，到期失效；已提交文件不受影响。</DialogDescription>
@@ -211,6 +244,11 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
           </div>
           {tab === "upload" ? <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-xs text-slate-600 sm:col-span-2">保存目录
+                <select className={fieldClass} value={folderId} disabled={busy || uploading || !foldersReady || files.length > 0} onChange={(e) => setFolderId(e.target.value)}>
+                  <option value="0">项目文件 / 根目录</option>{locations.map((folder) => <option key={folder.id} value={folder.id}>{folder.path}</option>)}
+                </select>
+              </label>
               <label className="space-y-1 text-xs text-slate-600">所属阶段
                 <select className={fieldClass} value={stageId} disabled={busy || uploading || !projectId} onChange={(e) => setStageId(e.target.value)}>
                   <option value="">不关联阶段</option>{stages.map((s) => <option key={s.projectStageId} value={s.projectStageId}>{s.stageName}</option>)}
@@ -228,7 +266,9 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
                 <input className={fieldClass} value={description} maxLength={512} disabled={busy} onChange={(e) => setDescription(e.target.value)} />
               </label>
             </div>
-            <div className="mt-4"><FileUploadField purpose="project" value={files} onChange={setFiles} onBusyChange={setUploading} disabled={busy || !projectId} /></div>
+            <div className="mt-4"><FileUploadField purpose="project" value={files} onChange={setFiles} onBusyChange={setUploading}
+              allowDirectory maxDirectoryDepth={20 - folderAncestors(folders, folderId).length}
+              maxFiles={maxBatchFiles} disabled={busy || !projectId || !foldersReady} /></div>
           </div> : <div className="flex min-h-0 flex-1 flex-col px-5 pt-3">
             <div className="flex shrink-0 flex-wrap items-center gap-2 pb-3">
               <div className="relative min-w-0 flex-1">
@@ -247,6 +287,7 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
                     <div className="min-w-0 flex-1">
                       <AttachmentFileActions fileId={draft.fileId} fileName={draft.fileName} fileSize={draft.fileSize ?? undefined} />
                       <p className="mt-1 text-xs text-slate-500">{draft.fileCategory || "未分类"} · {draft.stageName || "不关联阶段"} · 保存于 {dateText(draft.createdTime)}</p>
+                      <p className="mt-1 break-all text-xs text-slate-500">目录：{draft.folderPath || "根目录"}</p>
                       <p className={cn("mt-1 text-xs", draft.draftExpiresAt && new Date(draft.draftExpiresAt).getTime() - Date.now() < 3 * 86400000 ? "text-amber-700" : "text-slate-500")}>到期时间：{dateText(draft.draftExpiresAt)}</p>
                     </div>
                     <div className="flex shrink-0 flex-col sm:flex-row">
@@ -290,6 +331,9 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
         <DialogHeader><DialogTitle>编辑文件草稿</DialogTitle><DialogDescription>到期时间：{dateText(editing?.draftExpiresAt)}</DialogDescription></DialogHeader>
         {editing && <div className="mt-4 space-y-3">
           <label className="block space-y-1 text-xs text-slate-600">文件名称<input className={fieldClass} maxLength={255} value={editing.fileName ?? ""} onChange={(e) => setEditing({ ...editing, fileName: e.target.value })} /></label>
+          <label className="block space-y-1 text-xs text-slate-600">保存目录<select className={fieldClass} value={editing.folderId || "0"} onChange={(e) => setEditing({ ...editing, folderId: e.target.value })}>
+            <option value="0">根目录</option>{locations.map((folder) => <option key={folder.id} value={folder.id}>{folder.path}</option>)}
+          </select></label>
           <label className="block space-y-1 text-xs text-slate-600">所属阶段<select className={fieldClass} value={editing.projectStageId ?? ""} onChange={(e) => setEditing({ ...editing, projectStageId: e.target.value })}>
             <option value="">不关联阶段</option>{stages.map((s) => <option key={s.projectStageId} value={s.projectStageId}>{s.stageName}</option>)}
           </select></label>

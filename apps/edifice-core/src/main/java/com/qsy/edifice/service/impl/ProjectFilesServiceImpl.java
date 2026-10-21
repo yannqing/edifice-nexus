@@ -18,6 +18,7 @@ import com.qsy.edifice.mapper.*;
 import com.qsy.edifice.service.ApprovalFlowService;
 import com.qsy.edifice.service.ProjectFilesService;
 import com.qsy.edifice.service.ProjectMemberService;
+import com.qsy.edifice.service.ProjectFileFolderService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -71,6 +72,9 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
 
     @Resource
     private ProjectMemberService projectMemberService;
+
+    @Resource
+    private ProjectFileFolderService folderService;
 
     // ==================== 旧接口 ====================
 
@@ -143,7 +147,7 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
         if (userId == null || items == null || items.isEmpty() || items.size() > 20
                 || items.stream().anyMatch(i -> i == null || i.getFileId() == null || i.getProjectId() == null))
             throw new BusinessException("每次保存1到20个文件，项目和文件不能为空");
-        if (items.stream().map(CreateProjectFileDto::getFileId).distinct().count() != items.size())
+        if (items.stream().map(i -> i.getFileId() + ":" + (i.getFolderId() == null ? 0 : i.getFolderId())).distinct().count() != items.size())
             throw new BusinessException("文件不能重复");
         Long projectId = items.get(0).getProjectId();
         if (items.stream().anyMatch(i -> !projectId.equals(i.getProjectId()))) throw new BusinessException("只能保存同一项目的文件");
@@ -151,6 +155,7 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
         List<String> ids = new ArrayList<>();
         // Consistent lock order also makes a retried save idempotent for the same physical files.
         for (CreateProjectFileDto item : items.stream().sorted(Comparator.comparing(CreateProjectFileDto::getFileId)).toList()) {
+            Long folderId = item.getFolderId() == null ? null : folderService.validateFolder(projectId, item.getFolderId());
             Files file = filesMapper.selectOne(new LambdaQueryWrapper<Files>().eq(Files::getFileId, item.getFileId()).last("FOR UPDATE"));
             if (file == null || !Objects.equals(file.getUploadUserId(), userId))
                 throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只能保存本人上传的文件");
@@ -158,13 +163,16 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
             String category = bounded(item.getFileCategory(), 64, "文件分类");
             if (StringUtils.hasText(category) && !Set.of("图纸", "合同", "成果文件", "计算底稿", "其他").contains(category))
                 throw new BusinessException("不支持的文件分类");
-            ProjectFiles existing = projectFilesMapper.selectOne(new LambdaQueryWrapper<ProjectFiles>()
+            var existingQuery = new LambdaQueryWrapper<ProjectFiles>()
                     .eq(ProjectFiles::getProjectId, String.valueOf(projectId)).eq(ProjectFiles::getFileId, item.getFileId())
                     .eq(ProjectFiles::getUploadUserId, userId).eq(ProjectFiles::getApprovalStatus, 0)
-                    .gt(ProjectFiles::getDraftExpiresAt, LocalDateTime.now()).last("LIMIT 1 FOR UPDATE"));
+                    .gt(ProjectFiles::getDraftExpiresAt, LocalDateTime.now()).last("LIMIT 1 FOR UPDATE");
+            if (folderId == null) existingQuery.isNull(ProjectFiles::getFolderId);
+            else existingQuery.eq(ProjectFiles::getFolderId, folderId);
+            ProjectFiles existing = projectFilesMapper.selectOne(existingQuery);
             if (existing != null) { ids.add(String.valueOf(existing.getProjectFileId())); continue; }
             ProjectFiles draft = ProjectFiles.builder().projectId(String.valueOf(projectId))
-                    .projectStageId(item.getProjectStageId()).fileId(item.getFileId()).uploadUserId(userId)
+                    .projectStageId(item.getProjectStageId()).folderId(folderId).fileId(item.getFileId()).uploadUserId(userId)
                     .fileName(bounded(item.getFileName(), 255, "文件名称")).fileCategory(category)
                     .description(bounded(item.getDescription(), 512, "文件说明"))
                     .approvalStatus(0).batchHeader(0).draftExpiresAt(LocalDateTime.now().plusDays(getDraftRetentionDays())).build();
@@ -216,11 +224,13 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
             throw new BusinessException("不能替换草稿的源文件或所属项目");
         validateProject(dto.getProjectId(), userId);
         validateStage(dto.getProjectId(), dto.getProjectStageId());
+        Long folderId = dto.getFolderId() == null ? draft.getFolderId() : folderService.validateFolder(dto.getProjectId(), dto.getFolderId());
         String category = bounded(dto.getFileCategory(), 64, "分类");
         if (StringUtils.hasText(category) && !Set.of("图纸", "合同", "成果文件", "计算底稿", "其他").contains(category))
             throw new BusinessException("不支持的文件分类");
         projectFilesMapper.update(null, new LambdaUpdateWrapper<ProjectFiles>()
                 .eq(ProjectFiles::getProjectFileId, id).set(ProjectFiles::getProjectStageId, dto.getProjectStageId())
+                .set(ProjectFiles::getFolderId, folderId)
                 .set(ProjectFiles::getFileName, bounded(dto.getFileName(), 255, "文件名"))
                 .set(ProjectFiles::getFileCategory, category).set(ProjectFiles::getDescription, bounded(dto.getDescription(), 512, "说明"))
                 .set(ProjectFiles::getUpdatedTime, LocalDateTime.now()));
@@ -238,6 +248,7 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
         for (ProjectFiles draft : drafts) {
             if (!String.valueOf(dto.getProjectId()).equals(draft.getProjectId())) throw new BusinessException("不能合并不同项目的文件");
             validateStage(dto.getProjectId(), draft.getProjectStageId());
+            if (draft.getFolderId() != null) folderService.validateFolder(dto.getProjectId(), draft.getFolderId());
             if (filesMapper.selectById(draft.getFileId()) == null) throw new BusinessException("草稿的源文件不存在，请重新上传");
         }
         Long firstApprover = dto.getFirstApproverId() == null ? resolveProjectManagerId(dto.getProjectId()) : dto.getFirstApproverId();
@@ -278,7 +289,7 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
         for (int start = 0; start < entries.size(); start += 20) {
             ids.addAll(saveDrafts(entries.subList(start, Math.min(start + 20, entries.size())).stream()
                     .map(f -> new CreateProjectFileDto(parseProjectIdSafe(f.getProjectId()), f.getProjectStageId(), f.getFileId(),
-                            f.getFileName(), f.getFileCategory(), f.getDescription(), null)).toList(), userId));
+                            f.getFileName(), f.getFileCategory(), f.getDescription(), null, f.getFolderId())).toList(), userId));
         }
         return ids;
     }
@@ -422,6 +433,12 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
         else w.eq(ProjectFiles::getBatchHeader, 0).ne(ProjectFiles::getApprovalStatus, 4);
         if (dto.getProjectId() != null) {
             w.eq(ProjectFiles::getProjectId, String.valueOf(dto.getProjectId()));
+        }
+        if (dto.getFolderId() != null) {
+            if (dto.getProjectId() == null) throw new BusinessException("按文件夹查询时必须指定项目");
+            Long folderId = folderService.validateFolder(dto.getProjectId(), dto.getFolderId());
+            if (folderId == null) w.isNull(ProjectFiles::getFolderId);
+            else w.eq(ProjectFiles::getFolderId, folderId);
         }
         if (dto.getApprovalStatus() != null) {
             w.eq(ProjectFiles::getApprovalStatus, dto.getApprovalStatus());
@@ -585,6 +602,8 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
 
     private List<ProjectFileVo> toVos(List<ProjectFiles> list, boolean withChain) {
         if (list == null || list.isEmpty()) return Collections.emptyList();
+        Set<Long> folderIds = list.stream().map(ProjectFiles::getFolderId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, String> folderPaths = folderIds.isEmpty() ? Map.of() : folderService.pathsFor(folderIds);
 
         Set<Long> headerIds = list.stream().filter(e -> Integer.valueOf(1).equals(e.getBatchHeader()))
                 .map(ProjectFiles::getProjectFileId).collect(Collectors.toSet());
@@ -628,6 +647,7 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
                     .projectCode(p == null ? null : p.getProjectCode())
                     .projectStageId(e.getProjectStageId())
                     .stageName(s == null ? null : s.getStageName())
+                    .folderId(e.getFolderId()).folderPath(e.getFolderId() == null ? null : folderPaths.get(e.getFolderId()))
                     .fileId(e.getFileId())
                     .fileName(resolveDisplayName(e, f))
                     .fileUrl(f == null ? null : f.getFileUrl())

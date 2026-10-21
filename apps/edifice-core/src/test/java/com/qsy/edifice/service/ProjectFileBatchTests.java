@@ -38,6 +38,7 @@ class ProjectFileBatchTests {
     ApprovalFlowService flow;
     ApprovalRecordsMapper records;
     ProjectMapper projects;
+    ProjectFileFolderService folders;
     JdbcTemplate jdbc;
     TransactionTemplate transaction;
     Map<Long, Files> sourceFiles;
@@ -47,7 +48,7 @@ class ProjectFileBatchTests {
         jdbc = new JdbcTemplate(source);
         jdbc.execute("""
                 CREATE TABLE project_files (
-                  project_file_id BIGINT PRIMARY KEY, project_id VARCHAR(64), project_stage_id BIGINT, file_id BIGINT,
+                  project_file_id BIGINT PRIMARY KEY, project_id VARCHAR(64), project_stage_id BIGINT, folder_id BIGINT, file_id BIGINT,
                   file_name VARCHAR(255), upload_user_id BIGINT, file_category VARCHAR(64), description VARCHAR(512),
                   approval_status INT DEFAULT 0 NOT NULL, current_record_id BIGINT,
                   batch_header INT DEFAULT 0 NOT NULL, batch_id BIGINT, draft_expires_at TIMESTAMP, submitted_time TIMESTAMP,
@@ -69,6 +70,12 @@ class ProjectFileBatchTests {
         service = new ProjectFilesServiceImpl();
         files = mock(FilesMapper.class); projects = mock(ProjectMapper.class);
         flow = mock(ApprovalFlowService.class); records = mock(ApprovalRecordsMapper.class);
+        folders = mock(ProjectFileFolderService.class);
+        when(folders.validateFolder(eq(10L), anyLong())).thenAnswer(call -> {
+            Long id = call.getArgument(1); return id == 0 ? null : id;
+        });
+        when(folders.pathsFor(anySet())).thenReturn(Map.of(100L, "Reports", 200L, "Drawings"));
+        ReflectionTestUtils.setField(service, "folderService", folders);
         var members = mock(ProjectMemberService.class);
         var users = mock(SysUserMapper.class);
         ReflectionTestUtils.setField(service, "projectFilesMapper", mapper);
@@ -106,7 +113,7 @@ class ProjectFileBatchTests {
     <T> T tx(Supplier<T> action) { return transaction.execute(status -> action.get()); }
     List<String> save(long from, long to) {
         return tx(() -> service.saveDrafts(LongStream.rangeClosed(from, to)
-                .mapToObj(id -> new CreateProjectFileDto(10L, null, id, "file-" + id + ".pdf", "图纸", null, null)).toList(), 7L));
+                .mapToObj(id -> new CreateProjectFileDto(10L, null, id, "file-" + id + ".pdf", "图纸", null, null, null)).toList(), 7L));
     }
     SubmitProjectFileBatchDto batch(List<String> ids) {
         var dto = new SubmitProjectFileBatchDto(); dto.setProjectId(10L); dto.setFirstApproverId(8L);
@@ -132,6 +139,52 @@ class ProjectFileBatchTests {
         assertEquals(22, service.listProjectFilesPage(query, 7L, true).getTotal());
         assertThrows(BusinessException.class, () -> tx(() -> service.submitDrafts(batch(ids), 7L)));
         assertThrows(BusinessException.class, () -> tx(() -> { service.removeDraft(Long.valueOf(ids.get(0)), 7L); return null; }));
+    }
+
+    @Test void foldersRemainClassificationWhenDraftsAreMergedIntoOneApplication() {
+        var root = new CreateProjectFileDto(10L, null, 1L, "root.pdf", null, null, null, null);
+        var report = new CreateProjectFileDto(10L, null, 2L, "report.pdf", null, null, null, 100L);
+        var drawing = new CreateProjectFileDto(10L, null, 3L, "drawing.pdf", null, null, null, 200L);
+        var ids = tx(() -> service.saveDrafts(List.of(root, report, drawing), 7L));
+        Long id = tx(() -> service.submitDrafts(batch(ids), 7L));
+        assertNull(mapper.selectById(id).getFolderId());
+        var detail = service.getDetail(id, 7L, false);
+        assertEquals(3, detail.getBatchFiles().size());
+        assertEquals("Reports", detail.getBatchFiles().stream().filter(file -> Long.valueOf(100L).equals(file.getFolderId())).findFirst().orElseThrow().getFolderPath());
+        var query = new GetProjectFileListDto(); query.setProjectId(10L); query.setFolderId(0L);
+        assertEquals(1, service.listProjectFilesPage(query, 7L, false).getTotal());
+        query.setFolderId(100L);
+        assertEquals(1, service.listProjectFilesPage(query, 7L, false).getTotal());
+        query.setFolderId(null);
+        assertEquals(3, service.listProjectFilesPage(query, 7L, false).getTotal());
+        verify(flow, times(1)).submit(any(), eq(7L));
+        jdbc.update("UPDATE project_files SET approval_status=3 WHERE project_file_id=? OR batch_id=?", id, id);
+        var copied = tx(() -> service.copyToDrafts(id, 7L));
+        assertEquals(3, copied.size());
+        assertEquals(Set.of(100L, 200L), copied.stream().map(Long::valueOf).map(mapper::selectById)
+                .map(ProjectFiles::getFolderId).filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet()));
+    }
+
+    @Test void samePhysicalFileMayBeClassifiedInTwoFoldersWithoutOverwritingEither() {
+        var first = new CreateProjectFileDto(10L, null, 1L, "same.pdf", null, null, null, 100L);
+        var second = new CreateProjectFileDto(10L, null, 1L, "same.pdf", null, null, null, 200L);
+        var ids = tx(() -> service.saveDrafts(List.of(first, second), 7L));
+        assertEquals(2, ids.size());
+        assertNotEquals(ids.get(0), ids.get(1));
+        assertEquals(new HashSet<>(ids), new HashSet<>(tx(() -> service.saveDrafts(List.of(first, second), 7L))));
+    }
+
+    @Test void foreignFolderValidationPreventsPersistenceAndOldDraftUpdatesPreserveFolder() {
+        var dto = new CreateProjectFileDto(10L, null, 1L, "report.pdf", null, null, null, 100L);
+        Long id = Long.valueOf(tx(() -> service.saveDrafts(List.of(dto), 7L)).get(0));
+        dto.setFolderId(null); dto.setFileName("renamed.pdf");
+        tx(() -> { service.updateDraft(id, dto, 7L); return null; });
+        assertEquals(100L, mapper.selectById(id).getFolderId());
+        when(folders.validateFolder(10L, 999L)).thenThrow(new BusinessException("foreign folder"));
+        dto.setFolderId(999L);
+        assertThrows(BusinessException.class, () -> tx(() -> service.saveDrafts(List.of(dto), 7L)));
+        assertThrows(BusinessException.class, () -> tx(() -> { service.updateDraft(id, dto, 7L); return null; }));
+        assertEquals(100L, mapper.selectById(id).getFolderId());
     }
 
     @Test void rejectsForeignExpiredDuplicateAndCrossProjectDraftsAtomically() {
@@ -212,7 +265,7 @@ class ProjectFileBatchTests {
     @Test void editDoesNotRenewExpiryAndCannotChangeOwnershipProjectOrSource() {
         Long id = Long.valueOf(save(1, 1).get(0));
         LocalDateTime expiry = mapper.selectById(id).getDraftExpiresAt();
-        var edit = new CreateProjectFileDto(10L, null, 1L, "更名.pdf", "成果文件", "修改说明", null);
+        var edit = new CreateProjectFileDto(10L, null, 1L, "更名.pdf", "成果文件", "修改说明", null, null);
         tx(() -> { service.updateDraft(id, edit, 7L); return null; });
         assertEquals("更名.pdf", mapper.selectById(id).getFileName());
         assertEquals(expiry, mapper.selectById(id).getDraftExpiresAt());
@@ -244,7 +297,7 @@ class ProjectFileBatchTests {
     }
 
     @Test void invalidStageOrArchivedProjectCannotCreateOrSubmitDrafts() {
-        var invalid = new CreateProjectFileDto(10L, 999L, 1L, "a.pdf", "图纸", null, null);
+        var invalid = new CreateProjectFileDto(10L, 999L, 1L, "a.pdf", "图纸", null, null, null);
         assertThrows(BusinessException.class, () -> tx(() -> service.saveDrafts(List.of(invalid), 7L)));
         List<String> ids = save(1, 1);
         projects.selectById(10L).setArchiveStatus(1);

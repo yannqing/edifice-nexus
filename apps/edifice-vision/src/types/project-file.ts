@@ -7,6 +7,8 @@ export interface ProjectFileVo {
   projectCode: string | null;
   projectStageId: string;
   stageName: string | null;
+  folderId?: string | null;
+  folderPath?: string | null;
   fileId: string;
   fileName: string | null;
   fileUrl: string | null;
@@ -35,6 +37,7 @@ export interface ProjectFileVo {
 
 export interface CreateProjectFileParams {
   projectId: string;
+  folderId?: string;
   /** 选填：哪个阶段的文件 */
   projectStageId?: string;
   fileId: string;
@@ -64,3 +67,12 @@ export const PROJECT_FILE_STATUS_MAP: Record<number, string> = {
 };
 
 export const FILE_CATEGORY_OPTIONS = ["图纸", "合同", "成果文件", "计算底稿", "其他"];
+
+export interface ProjectFileFolder {
+  folderId: string;
+  projectId: string;
+  parentFolderId: string;
+  folderName: string;
+  createdBy: string;
+  createdTime: string;
+}

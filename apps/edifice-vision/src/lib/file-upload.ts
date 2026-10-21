@@ -50,7 +50,8 @@ async function retry<T>(action: () => Promise<T>, signal?: AbortSignal): Promise
 }
 
 function sessionKey(file: File, purpose: UploadPurpose) {
-  return `edifice:upload:v1:${purpose}:${file.name}:${file.size}:${file.lastModified}`;
+  const directory = file.webkitRelativePath ? `:${encodeURIComponent(file.webkitRelativePath)}` : "";
+  return `edifice:upload:v1:${purpose}:${file.name}:${file.size}:${file.lastModified}${directory}`;
 }
 function cached(key: string) { try { return sessionStorage.getItem(key); } catch { return null; } }
 function cache(key: string, id?: string) {

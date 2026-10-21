@@ -41,6 +41,10 @@ public class ProjectFiles implements Serializable {
     @JsonSerialize(using = ToStringSerializer.class)
     private Long projectStageId;
 
+    @TableField("folder_id")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long folderId;
+
     @TableField("file_id")
     @JsonSerialize(using = ToStringSerializer.class)
     private Long fileId;

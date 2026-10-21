@@ -41,6 +41,10 @@ public class ProjectFileVo implements Serializable {
     private String stageName;
 
     @JsonSerialize(using = ToStringSerializer.class)
+    private Long folderId;
+    private String folderPath;
+
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long fileId;
 
     /** 源文件元数据（从 files 表补齐） */

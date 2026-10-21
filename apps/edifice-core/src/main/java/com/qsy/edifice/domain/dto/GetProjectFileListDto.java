@@ -23,6 +23,9 @@ public class GetProjectFileListDto {
     @Schema(description = "项目ID（可空，单项目场景传）")
     private Long projectId;
 
+    /** Null searches all folders; zero selects the root directory. */
+    private Long folderId;
+
     @Schema(description = "审批状态：0-待提交/1-审批中/2-通过/3-驳回")
     private Integer approvalStatus;
 

@@ -38,4 +38,6 @@ public class CreateProjectFileDto {
     /** 项目负责人作为一级审批人；如果前端不传，后端会尝试从项目成员里查 ROLE_MANAGER */
     @Schema(description = "一级审批人（项目负责人）id")
     private Long firstApproverId;
+
+    private Long folderId;
 }

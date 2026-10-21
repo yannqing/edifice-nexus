@@ -88,6 +88,7 @@ export function ProjectFileDetailDialog({ open, onOpenChange, file }: Props) {
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500">
               <div>阶段：<span className="text-slate-700">{file.stageName ?? "-"}</span></div>
               <div>分类：<span className="text-slate-700">{file.fileCategory ?? "-"}</span></div>
+              {!file.batchHeader && <div className="col-span-2 break-all">目录：<span className="text-slate-700">{file.folderPath || "根目录"}</span></div>}
               <div>
                 大小：<span className="text-slate-700">
                   {file.fileExtension ?? "?"} · {formatSize(file.fileSize)}
