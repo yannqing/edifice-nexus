@@ -1,11 +1,13 @@
 package com.qsy.edifice.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.ApproveDto;
 import com.qsy.edifice.domain.dto.CreateProjectFileDto;
 import com.qsy.edifice.domain.dto.GetProjectFileListDto;
 import com.qsy.edifice.domain.dto.SubmitApprovalDto;
+import com.qsy.edifice.domain.dto.SubmitProjectFileBatchDto;
 import com.qsy.edifice.domain.entity.*;
 import com.qsy.edifice.domain.vo.ApprovalRecordVo;
 import com.qsy.edifice.domain.vo.ProjectFileVo;
@@ -45,6 +47,9 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
 
     @Resource
     private ProjectFilesMapper projectFilesMapper;
+
+    @org.springframework.beans.factory.annotation.Value("${project-files.draft-retention-days:30}")
+    private int draftRetentionDays = 30;
 
     @Resource
     private FilesMapper filesMapper;
@@ -107,66 +112,196 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
     // ==================== 三级审批 ====================
 
     @Override
+    public int getDraftRetentionDays() {
+        return draftRetentionDays == 7 ? 7 : 30;
+    }
+
+    private void validateProject(Long projectId, Long userId) {
+        Project project = projectId == null ? null : projectMapper.selectById(projectId);
+        if (project == null) throw new BusinessException("项目不存在");
+        if (Objects.equals(project.getArchiveStatus(), 1)) throw new BusinessException("项目已归档，不能新增文件申请");
+        if (!hasProjectFileManageAuthority()
+                && projectMemberService.getProjectMemberByProjectIdAndUserId(projectId, userId) == null)
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只有项目成员可以管理文件草稿");
+    }
+
+    private void validateStage(Long projectId, Long stageId) {
+        if (stageId == null) return;
+        ProjectStage stage = projectStageMapper.selectById(stageId);
+        if (stage == null || !Objects.equals(stage.getProjectId(), projectId))
+            throw new BusinessException("所选阶段不属于当前项目");
+    }
+
+    private String bounded(String value, int length, String label) {
+        if (value != null && value.length() > length) throw new BusinessException(label + "过长");
+        return value == null ? null : value.trim();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<String> saveDrafts(List<CreateProjectFileDto> items, Long userId) {
+        if (userId == null || items == null || items.isEmpty() || items.size() > 20
+                || items.stream().anyMatch(i -> i == null || i.getFileId() == null || i.getProjectId() == null))
+            throw new BusinessException("每次保存1到20个文件，项目和文件不能为空");
+        if (items.stream().map(CreateProjectFileDto::getFileId).distinct().count() != items.size())
+            throw new BusinessException("文件不能重复");
+        Long projectId = items.get(0).getProjectId();
+        if (items.stream().anyMatch(i -> !projectId.equals(i.getProjectId()))) throw new BusinessException("只能保存同一项目的文件");
+        validateProject(projectId, userId);
+        List<String> ids = new ArrayList<>();
+        // Consistent lock order also makes a retried save idempotent for the same physical files.
+        for (CreateProjectFileDto item : items.stream().sorted(Comparator.comparing(CreateProjectFileDto::getFileId)).toList()) {
+            Files file = filesMapper.selectOne(new LambdaQueryWrapper<Files>().eq(Files::getFileId, item.getFileId()).last("FOR UPDATE"));
+            if (file == null || !Objects.equals(file.getUploadUserId(), userId))
+                throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只能保存本人上传的文件");
+            validateStage(projectId, item.getProjectStageId());
+            String category = bounded(item.getFileCategory(), 64, "文件分类");
+            if (StringUtils.hasText(category) && !Set.of("图纸", "合同", "成果文件", "计算底稿", "其他").contains(category))
+                throw new BusinessException("不支持的文件分类");
+            ProjectFiles existing = projectFilesMapper.selectOne(new LambdaQueryWrapper<ProjectFiles>()
+                    .eq(ProjectFiles::getProjectId, String.valueOf(projectId)).eq(ProjectFiles::getFileId, item.getFileId())
+                    .eq(ProjectFiles::getUploadUserId, userId).eq(ProjectFiles::getApprovalStatus, 0)
+                    .gt(ProjectFiles::getDraftExpiresAt, LocalDateTime.now()).last("LIMIT 1 FOR UPDATE"));
+            if (existing != null) { ids.add(String.valueOf(existing.getProjectFileId())); continue; }
+            ProjectFiles draft = ProjectFiles.builder().projectId(String.valueOf(projectId))
+                    .projectStageId(item.getProjectStageId()).fileId(item.getFileId()).uploadUserId(userId)
+                    .fileName(bounded(item.getFileName(), 255, "文件名称")).fileCategory(category)
+                    .description(bounded(item.getDescription(), 512, "文件说明"))
+                    .approvalStatus(0).batchHeader(0).draftExpiresAt(LocalDateTime.now().plusDays(getDraftRetentionDays())).build();
+            projectFilesMapper.insert(draft);
+            ids.add(String.valueOf(draft.getProjectFileId()));
+        }
+        return ids;
+    }
+
+    @Override
+    public Page<ProjectFileVo> listDrafts(Long projectId, String keyword, int current, int pageSize, Long userId) {
+        if (userId == null || projectId == null) throw new BusinessException("项目不能为空");
+        validateProject(projectId, userId);
+        LambdaQueryWrapper<ProjectFiles> query = new LambdaQueryWrapper<ProjectFiles>()
+                .eq(ProjectFiles::getProjectId, String.valueOf(projectId)).eq(ProjectFiles::getUploadUserId, userId)
+                .eq(ProjectFiles::getApprovalStatus, 0).eq(ProjectFiles::getBatchHeader, 0)
+                .gt(ProjectFiles::getDraftExpiresAt, LocalDateTime.now());
+        if (StringUtils.hasText(keyword)) query.and(q -> q.like(ProjectFiles::getFileName, keyword.trim())
+                .or().like(ProjectFiles::getDescription, keyword.trim()).or().like(ProjectFiles::getFileCategory, keyword.trim()));
+        query.orderByAsc(ProjectFiles::getDraftExpiresAt).orderByAsc(ProjectFiles::getProjectFileId);
+        int page = Math.max(1, current), size = Math.max(1, Math.min(100, pageSize));
+        Page<ProjectFiles> result = projectFilesMapper.selectPage(new Page<>(page, size), query);
+        return new Page<ProjectFileVo>(page, size, result.getTotal()).setRecords(toVos(result.getRecords(), false));
+    }
+
+    private ProjectFiles ownedDraft(Long id, Long userId) {
+        ProjectFiles draft = projectFilesMapper.lock(id);
+        if (draft == null || !Objects.equals(draft.getUploadUserId(), userId))
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "无权操作该草稿");
+        if (!Integer.valueOf(0).equals(draft.getApprovalStatus()) || draft.getBatchId() != null
+                || draft.getDraftExpiresAt() == null || !draft.getDraftExpiresAt().isAfter(LocalDateTime.now()))
+            throw new BusinessException("草稿已提交、已删除或已过期，请刷新后重试");
+        return draft;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void removeDraft(Long id, Long userId) {
+        ownedDraft(id, userId);
+        projectFilesMapper.deleteById(id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateDraft(Long id, CreateProjectFileDto dto, Long userId) {
+        ProjectFiles draft = ownedDraft(id, userId);
+        if (dto == null || !Objects.equals(dto.getFileId(), draft.getFileId())
+                || !Objects.equals(String.valueOf(dto.getProjectId()), draft.getProjectId()))
+            throw new BusinessException("不能替换草稿的源文件或所属项目");
+        validateProject(dto.getProjectId(), userId);
+        validateStage(dto.getProjectId(), dto.getProjectStageId());
+        String category = bounded(dto.getFileCategory(), 64, "分类");
+        if (StringUtils.hasText(category) && !Set.of("图纸", "合同", "成果文件", "计算底稿", "其他").contains(category))
+            throw new BusinessException("不支持的文件分类");
+        projectFilesMapper.update(null, new LambdaUpdateWrapper<ProjectFiles>()
+                .eq(ProjectFiles::getProjectFileId, id).set(ProjectFiles::getProjectStageId, dto.getProjectStageId())
+                .set(ProjectFiles::getFileName, bounded(dto.getFileName(), 255, "文件名"))
+                .set(ProjectFiles::getFileCategory, category).set(ProjectFiles::getDescription, bounded(dto.getDescription(), 512, "说明"))
+                .set(ProjectFiles::getUpdatedTime, LocalDateTime.now()));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long submitDrafts(SubmitProjectFileBatchDto dto, Long userId) {
+        if (dto == null || dto.getProjectId() == null || dto.getDraftIds() == null || dto.getDraftIds().isEmpty()
+                || dto.getDraftIds().size() > 200 || dto.getDraftIds().contains(null)
+                || new HashSet<>(dto.getDraftIds()).size() != dto.getDraftIds().size())
+            throw new BusinessException("请选择1到200个不重复的草稿");
+        validateProject(dto.getProjectId(), userId);
+        List<ProjectFiles> drafts = dto.getDraftIds().stream().sorted().map(id -> ownedDraft(id, userId)).toList();
+        for (ProjectFiles draft : drafts) {
+            if (!String.valueOf(dto.getProjectId()).equals(draft.getProjectId())) throw new BusinessException("不能合并不同项目的文件");
+            validateStage(dto.getProjectId(), draft.getProjectStageId());
+            if (filesMapper.selectById(draft.getFileId()) == null) throw new BusinessException("草稿的源文件不存在，请重新上传");
+        }
+        Long firstApprover = dto.getFirstApproverId() == null ? resolveProjectManagerId(dto.getProjectId()) : dto.getFirstApproverId();
+        String title = bounded(dto.getTitle(), 255, "申请标题");
+        ProjectFiles header = ProjectFiles.builder().projectId(String.valueOf(dto.getProjectId())).uploadUserId(userId)
+                .fileName(StringUtils.hasText(title) ? title : "项目文件申请（" + drafts.size() + "个文件）")
+                .description(bounded(dto.getDescription(), 512, "申请说明")).approvalStatus(1).batchHeader(1)
+                .submittedTime(LocalDateTime.now()).build();
+        projectFilesMapper.insert(header);
+        ApprovalRecords record = approvalFlowService.submit(new SubmitApprovalDto(ApprovalBizType.FILE.getExt(),
+                header.getProjectFileId(), firstApprover, header.getDescription()), userId);
+        header.setCurrentRecordId(record.getApprovalRecordId());
+        projectFilesMapper.updateById(header);
+        for (ProjectFiles draft : drafts) {
+            draft.setBatchId(header.getProjectFileId());
+            draft.setApprovalStatus(1);
+            draft.setCurrentRecordId(record.getApprovalRecordId());
+            draft.setSubmittedTime(header.getSubmittedTime());
+            projectFilesMapper.updateById(draft);
+        }
+        log.info("项目文件整批提交 batchId={} count={} userId={}", header.getProjectFileId(), drafts.size(), userId);
+        return header.getProjectFileId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<String> copyToDrafts(Long id, Long userId) {
+        ProjectFiles original = projectFilesMapper.lock(id);
+        if (original == null || !Objects.equals(original.getUploadUserId(), userId))
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只能复制本人的申请");
+        if (!Set.of(3, 4).contains(original.getApprovalStatus())) throw new BusinessException("只有驳回或撤回的申请可以重新保存为草稿");
+        List<ProjectFiles> entries = Integer.valueOf(1).equals(original.getBatchHeader())
+                ? projectFilesMapper.selectList(new LambdaQueryWrapper<ProjectFiles>().eq(ProjectFiles::getBatchId, id)
+                        .orderByAsc(ProjectFiles::getFileId))
+                : List.of(original);
+        List<String> ids = new ArrayList<>();
+        // Keep the rejected application's immutable attachment list and chain intact.
+        for (int start = 0; start < entries.size(); start += 20) {
+            ids.addAll(saveDrafts(entries.subList(start, Math.min(start + 20, entries.size())).stream()
+                    .map(f -> new CreateProjectFileDto(parseProjectIdSafe(f.getProjectId()), f.getProjectStageId(), f.getFileId(),
+                            f.getFileName(), f.getFileCategory(), f.getDescription(), null)).toList(), userId));
+        }
+        return ids;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int expireDrafts() {
+        return projectFilesMapper.update(null, new LambdaUpdateWrapper<ProjectFiles>()
+                .eq(ProjectFiles::getApprovalStatus, 0).eq(ProjectFiles::getBatchHeader, 0).isNull(ProjectFiles::getBatchId)
+                .le(ProjectFiles::getDraftExpiresAt, LocalDateTime.now())
+                .set(ProjectFiles::getApprovalStatus, 5).set(ProjectFiles::getUpdatedTime, LocalDateTime.now()));
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createAndSubmit(CreateProjectFileDto dto, Long uploadUserId) {
-        if (dto.getProjectId() == null || dto.getFileId() == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目 / 文件不能为空");
-        }
-        Project project = projectMapper.selectById(dto.getProjectId());
-        if (project == null) {
-            throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
-        }
-        if (Objects.equals(project.getArchiveStatus(), 1)) {
-            throw new BusinessException(ErrorType.OPERATION_FAILED, "项目已归档，不能上传项目文件");
-        }
-        Files attachment = filesMapper.selectById(dto.getFileId());
-        if (attachment == null) {
-            throw new BusinessException(ErrorType.FILE_NOT_FOUND);
-        }
-        if (!Objects.equals(attachment.getUploadUserId(), uploadUserId)) {
-            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只能提交本人上传的文件");
-        }
-        if (!hasProjectFileManageAuthority()
-                && projectMemberService.getProjectMemberByProjectIdAndUserId(dto.getProjectId(), uploadUserId) == null) {
-            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "只有项目成员可以上传项目文件");
-        }
-
-        Long firstApproverId = dto.getFirstApproverId();
-        if (firstApproverId == null) {
-            firstApproverId = resolveProjectManagerId(dto.getProjectId());
-        }
-        if (firstApproverId == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL,
-                    "未找到项目负责人，请显式指定一级审批人");
-        }
-
-        ProjectFiles entity = ProjectFiles.builder()
-                .projectId(String.valueOf(dto.getProjectId()))
-                .projectStageId(dto.getProjectStageId())
-                .fileId(dto.getFileId())
-                .fileName(dto.getFileName())
-                .uploadUserId(uploadUserId)
-                .fileCategory(dto.getFileCategory())
-                .description(dto.getDescription())
-                .approvalStatus(APPROVAL_IN_PROGRESS)
-                .build();
-        projectFilesMapper.insert(entity);
-
-        // 提交审批链
-        SubmitApprovalDto submit = new SubmitApprovalDto(
-                ApprovalBizType.FILE.getExt(),
-                entity.getProjectFileId(),
-                firstApproverId,
-                dto.getDescription()
-        );
-        ApprovalRecords record = approvalFlowService.submit(submit, uploadUserId);
-
-        entity.setCurrentRecordId(record.getApprovalRecordId());
-        projectFilesMapper.updateById(entity);
-
-        log.info("项目文件已创建并提交审批 projectFileId={} firstApprover={} recordId={}",
-                entity.getProjectFileId(), firstApproverId, record.getApprovalRecordId());
-        return entity.getProjectFileId();
+        List<String> ids = saveDrafts(Collections.singletonList(dto), uploadUserId);
+        SubmitProjectFileBatchDto batch = new SubmitProjectFileBatchDto();
+        batch.setProjectId(dto.getProjectId());
+        batch.setDraftIds(ids.stream().map(Long::valueOf).toList());
+        batch.setFirstApproverId(dto.getFirstApproverId());
+        batch.setDescription(dto.getDescription());
+        return submitDrafts(batch, uploadUserId);
     }
 
     @Override
@@ -176,13 +311,20 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "审批记录id不能为空");
         }
 
-        // 调通用审批流
+        ApprovalRecords pending = approvalRecordsMapper.selectById(dto.getRecordId());
+        if (pending == null || !(ApprovalBizType.FILE.getExt().equals(pending.getBizTypeExt())
+                || (pending.getBizTypeExt() == null && Objects.equals(pending.getApprovalRecordType(), ApprovalBizType.FILE.getCode()))))
+            throw new BusinessException("此审批记录不属于项目文件");
+        ProjectFiles locked = projectFilesMapper.lock(pending.getInspectionFormId());
+        if (locked == null || !Integer.valueOf(1).equals(locked.getApprovalStatus())
+                || !Objects.equals(locked.getCurrentRecordId(), dto.getRecordId()))
+            throw new BusinessException("该文件申请已被处理，请刷新后重试");
         ApprovalFlowService.ApprovalResult result = approvalFlowService.approve(dto, operatorId);
         if (result.bizType != ApprovalBizType.FILE) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "此审批记录不属于项目文件");
         }
 
-        ProjectFiles entity = projectFilesMapper.selectById(result.bizId);
+        ProjectFiles entity = locked;
         if (entity == null) {
             throw new BusinessException(ErrorType.FILE_NOT_FOUND, "项目文件不存在");
         }
@@ -197,7 +339,7 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
             entity.setApprovalStatus(APPROVAL_IN_PROGRESS);
             entity.setCurrentRecordId(result.nextRecordId);
         }
-        projectFilesMapper.updateById(entity);
+        updateApplication(entity);
     }
 
     @Override
@@ -208,6 +350,7 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
         }
 
         ProjectFiles entity = projectFilesMapper.selectById(projectFileId);
+        if (entity != null) entity = projectFilesMapper.lock(entity.getBatchId() == null ? projectFileId : entity.getBatchId());
         if (entity == null) {
             throw new BusinessException(ErrorType.FILE_NOT_FOUND, "项目文件不存在");
         }
@@ -218,7 +361,9 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "只有审批中的项目文件可以撤销");
         }
 
-        ApprovalRecords pending = approvalFlowService.getCurrentPending(ApprovalBizType.FILE, projectFileId);
+        ApprovalRecords pending = approvalFlowService.getCurrentPending(ApprovalBizType.FILE, entity.getProjectFileId());
+        if (pending == null && Integer.valueOf(1).equals(entity.getBatchHeader()))
+            throw new BusinessException("当前审批节点不存在，请刷新后重试");
         if (pending != null) {
             pending.setInspectionFormStatus(RECORD_REJECTED);
             pending.setApprovalDescription("上传人撤销");
@@ -229,15 +374,27 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
             }
         }
 
-        entity.setApprovalStatus(APPROVAL_REJECTED);
+        entity.setApprovalStatus(Integer.valueOf(1).equals(entity.getBatchHeader()) ? 4 : APPROVAL_REJECTED);
         entity.setCurrentRecordId(null);
-        projectFilesMapper.updateById(entity);
-        projectFilesMapper.deleteById(projectFileId);
+        updateApplication(entity);
+        if (!Integer.valueOf(1).equals(entity.getBatchHeader())) projectFilesMapper.deleteById(entity.getProjectFileId());
+    }
+
+    private void updateApplication(ProjectFiles entity) {
+        projectFilesMapper.update(null, new LambdaUpdateWrapper<ProjectFiles>()
+                .and(w -> w.eq(ProjectFiles::getProjectFileId, entity.getProjectFileId())
+                        .or().eq(ProjectFiles::getBatchId, entity.getProjectFileId()))
+                .set(ProjectFiles::getApprovalStatus, entity.getApprovalStatus())
+                .set(ProjectFiles::getCurrentRecordId, entity.getCurrentRecordId())
+                .set(ProjectFiles::getUpdatedTime, LocalDateTime.now()));
     }
 
     @Override
     public List<ProjectFileVo> listProjectFiles(Long projectId, Integer approvalStatus, String keyword) {
-        LambdaQueryWrapper<ProjectFiles> w = new LambdaQueryWrapper<>();
+        LambdaQueryWrapper<ProjectFiles> w = new LambdaQueryWrapper<ProjectFiles>()
+                .eq(ProjectFiles::getBatchHeader, 0)
+                .and(q -> q.in(ProjectFiles::getApprovalStatus, 1, 2, 3).or()
+                        .eq(ProjectFiles::getApprovalStatus, 0).isNull(ProjectFiles::getDraftExpiresAt));
         if (projectId != null) {
             w.eq(ProjectFiles::getProjectId, String.valueOf(projectId));
         }
@@ -256,9 +413,13 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
     @Override
     public Page<ProjectFileVo> listProjectFilesPage(GetProjectFileListDto dto, Long userId, boolean canViewAll) {
         int current = dto.getCurrent() != null && dto.getCurrent() > 0 ? dto.getCurrent() : 1;
-        int pageSize = dto.getPageSize() != null && dto.getPageSize() > 0 ? dto.getPageSize() : 10;
+        int pageSize = dto.getPageSize() != null && dto.getPageSize() > 0 ? Math.min(100, dto.getPageSize()) : 10;
 
         LambdaQueryWrapper<ProjectFiles> w = new LambdaQueryWrapper<>();
+        w.and(q -> q.in(ProjectFiles::getApprovalStatus, 1, 2, 3, 4).or()
+                .eq(ProjectFiles::getApprovalStatus, 0).isNull(ProjectFiles::getDraftExpiresAt));
+        if (Boolean.TRUE.equals(dto.getApplicationsOnly())) w.isNull(ProjectFiles::getBatchId);
+        else w.eq(ProjectFiles::getBatchHeader, 0).ne(ProjectFiles::getApprovalStatus, 4);
         if (dto.getProjectId() != null) {
             w.eq(ProjectFiles::getProjectId, String.valueOf(dto.getProjectId()));
         }
@@ -266,12 +427,16 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
             w.eq(ProjectFiles::getApprovalStatus, dto.getApprovalStatus());
         }
         if (StringUtils.hasText(dto.getFileCategory())) {
-            w.eq(ProjectFiles::getFileCategory, dto.getFileCategory().trim());
+            w.and(q -> q.eq(ProjectFiles::getFileCategory, dto.getFileCategory().trim()).or().apply(
+                    "EXISTS (SELECT 1 FROM project_files child WHERE child.batch_id = project_files.project_file_id "
+                            + "AND child.is_delete = 0 AND child.file_category = {0})", dto.getFileCategory().trim()));
         }
         if (StringUtils.hasText(dto.getKeyword())) {
             String kw = dto.getKeyword().trim();
             w.and(ww -> ww.like(ProjectFiles::getDescription, kw)
-                    .or().like(ProjectFiles::getFileCategory, kw));
+                    .or().like(ProjectFiles::getFileCategory, kw).or().like(ProjectFiles::getFileName, kw)
+                    .or().apply("EXISTS (SELECT 1 FROM project_files child WHERE child.batch_id = project_files.project_file_id "
+                            + "AND child.is_delete = 0 AND (child.file_name LIKE {0} OR child.description LIKE {0}))", "%" + kw + "%"));
         }
 
         // 权限下推到 SQL：非 canViewAll 的用户只能看到「本人上传」或「本人所在项目」的文件
@@ -282,7 +447,9 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
                     .or().apply(
                             "project_id IN (SELECT CAST(project_id AS CHAR) FROM project_member "
                                     + "WHERE user_id = {0} AND is_delete = 0)",
-                            uid));
+                            uid).or().apply("EXISTS (SELECT 1 FROM approval_records ar WHERE ar.inspection_form_id = "
+                                    + "COALESCE(project_files.batch_id, project_files.project_file_id) AND ar.biz_type_ext = 'file' "
+                                    + "AND ar.is_delete = 0 AND ar.approver = {0})", userId));
         }
 
         // 「我上传的」tab：只看 upload_user_id = 当前用户，覆盖权限过滤
@@ -300,14 +467,19 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
     @Override
     public Map<String, Long> getStatistics(Long userId, boolean canViewAll) {
         // 与 listProjectFilesPage 相同的权限过滤，但不分页、不按状态过滤
-        LambdaQueryWrapper<ProjectFiles> w = new LambdaQueryWrapper<>();
+        LambdaQueryWrapper<ProjectFiles> w = new LambdaQueryWrapper<ProjectFiles>()
+                .isNull(ProjectFiles::getBatchId)
+                .and(q -> q.in(ProjectFiles::getApprovalStatus, 1, 2, 3, 4).or()
+                        .eq(ProjectFiles::getApprovalStatus, 0).isNull(ProjectFiles::getDraftExpiresAt));
         if (!canViewAll && userId != null) {
             String uid = String.valueOf(userId);
             w.and(ww -> ww.eq(ProjectFiles::getUploadUserId, userId)
                     .or().apply(
                             "project_id IN (SELECT CAST(project_id AS CHAR) FROM project_member "
                                     + "WHERE user_id = {0} AND is_delete = 0)",
-                            uid));
+                            uid).or().apply("EXISTS (SELECT 1 FROM approval_records ar WHERE ar.inspection_form_id = "
+                                    + "project_files.project_file_id AND ar.biz_type_ext = 'file' "
+                                    + "AND ar.is_delete = 0 AND ar.approver = {0})", userId));
         }
         List<ProjectFiles> all = projectFilesMapper.selectList(w);
         Map<String, Long> stats = new HashMap<>();
@@ -336,6 +508,7 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
     public ProjectFileVo getDetail(Long projectFileId) {
         ProjectFiles entity = projectFilesMapper.selectById(projectFileId);
         if (entity == null) throw new BusinessException(ErrorType.FILE_NOT_FOUND, "项目文件不存在");
+        if (entity.getBatchId() != null) return getDetail(entity.getBatchId());
         return toVos(Collections.singletonList(entity), true).get(0);
     }
 
@@ -343,6 +516,13 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
     public ProjectFileVo getDetail(Long projectFileId, Long userId, boolean canViewAll) {
         ProjectFiles entity = projectFilesMapper.selectById(projectFileId);
         if (entity == null) throw new BusinessException(ErrorType.FILE_NOT_FOUND, "项目文件不存在");
+        if ((Integer.valueOf(0).equals(entity.getApprovalStatus()) && entity.getDraftExpiresAt() != null)
+                || Integer.valueOf(5).equals(entity.getApprovalStatus())) {
+            if (!Objects.equals(entity.getUploadUserId(), userId) || entity.getDraftExpiresAt() == null
+                    || !entity.getDraftExpiresAt().isAfter(LocalDateTime.now()) || !Integer.valueOf(0).equals(entity.getApprovalStatus()))
+                throw new BusinessException(ErrorType.NO_AUTH_ERROR, "草稿不可见或已过期");
+        }
+        if (entity.getBatchId() != null) return getDetail(entity.getBatchId(), userId, canViewAll);
         ProjectFileVo vo = toVos(Collections.singletonList(entity), true).get(0);
         if (!canViewAll && !canViewProjectFile(vo, userId)) {
             throw new BusinessException(ErrorType.NO_AUTH_ERROR, "无权查看该项目文件");
@@ -406,6 +586,13 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
     private List<ProjectFileVo> toVos(List<ProjectFiles> list, boolean withChain) {
         if (list == null || list.isEmpty()) return Collections.emptyList();
 
+        Set<Long> headerIds = list.stream().filter(e -> Integer.valueOf(1).equals(e.getBatchHeader()))
+                .map(ProjectFiles::getProjectFileId).collect(Collectors.toSet());
+        Map<Long, List<ProjectFiles>> children = headerIds.isEmpty() ? Collections.emptyMap()
+                : projectFilesMapper.selectList(new LambdaQueryWrapper<ProjectFiles>().in(ProjectFiles::getBatchId, headerIds)
+                        .orderByAsc(ProjectFiles::getCreatedTime).orderByAsc(ProjectFiles::getProjectFileId))
+                    .stream().collect(Collectors.groupingBy(ProjectFiles::getBatchId));
+
         Set<Long> fileIds = list.stream().map(ProjectFiles::getFileId).filter(Objects::nonNull).collect(Collectors.toSet());
         Set<Long> stageIds = list.stream().map(ProjectFiles::getProjectStageId).filter(Objects::nonNull).collect(Collectors.toSet());
         Set<Long> projectIds = list.stream().map(ProjectFiles::getProjectId)
@@ -423,6 +610,10 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
         Map<Long, Project> projectMap = projectIds.isEmpty() ? Collections.emptyMap()
                 : projectMapper.selectBatchIds(projectIds).stream()
                 .collect(Collectors.toMap(Project::getProjectId, p -> p, (a, b) -> a));
+        Set<Long> uploaderIds = list.stream().map(ProjectFiles::getUploadUserId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, SysUser> uploaders = uploaderIds.isEmpty() ? Collections.emptyMap()
+                : sysUserMapper.selectBatchIds(uploaderIds).stream().collect(Collectors.toMap(SysUser::getUserId, u -> u, (a, b) -> a));
+        Map<Long, List<ApprovalRecordVo>> chains = new HashMap<>();
 
         return list.stream().map(e -> {
             Files f = e.getFileId() == null ? null : fileMap.get(e.getFileId());
@@ -448,16 +639,22 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
                     .uploadUserId(e.getUploadUserId())
                     .approvalStatus(e.getApprovalStatus())
                     .currentRecordId(e.getCurrentRecordId())
+                    .batchHeader(Integer.valueOf(1).equals(e.getBatchHeader()))
+                    .batchId(e.getBatchId()).draftExpiresAt(e.getDraftExpiresAt()).submittedTime(e.getSubmittedTime())
+                    .batchFileCount(Integer.valueOf(1).equals(e.getBatchHeader())
+                            ? children.getOrDefault(e.getProjectFileId(), List.of()).size() : 1)
                     .createdTime(e.getCreatedTime())
                     .updatedTime(e.getUpdatedTime());
 
             if (e.getUploadUserId() != null) {
-                SysUser u = sysUserMapper.selectById(e.getUploadUserId());
+                SysUser u = uploaders.get(e.getUploadUserId());
                 if (u != null) b.uploadUserName(u.getRealName() != null ? u.getRealName() : u.getUsername());
             }
 
             // 审批链 + 当前审批人
-            List<ApprovalRecordVo> chain = approvalFlowService.queryChain(ApprovalBizType.FILE, e.getProjectFileId());
+            List<ApprovalRecordVo> chain = Integer.valueOf(0).equals(e.getApprovalStatus()) || Integer.valueOf(5).equals(e.getApprovalStatus())
+                    ? List.of() : chains.computeIfAbsent(e.getBatchId() == null ? e.getProjectFileId() : e.getBatchId(),
+                            id -> approvalFlowService.queryChain(ApprovalBizType.FILE, id));
             if (e.getCurrentRecordId() != null) {
                 chain.stream()
                         .filter(v -> e.getCurrentRecordId().equals(v.getApprovalRecordId()))
@@ -468,6 +665,8 @@ public class ProjectFilesServiceImpl implements ProjectFilesService {
                         });
             }
             if (withChain) b.approvalChain(chain);
+            if (withChain && Integer.valueOf(1).equals(e.getBatchHeader()))
+                b.batchFiles(toVos(children.getOrDefault(e.getProjectFileId(), List.of()), false));
 
             return b.build();
         }).collect(Collectors.toList());

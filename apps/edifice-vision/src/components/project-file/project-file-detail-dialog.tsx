@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ProjectFileVo } from "@/types/project-file";
 import { PROJECT_FILE_STATUS_MAP } from "@/types/project-file";
+import { BatchFileList } from "./batch-file-list";
 
 interface Props {
   open: boolean;
@@ -54,9 +55,9 @@ export function ProjectFileDetailDialog({ open, onOpenChange, file }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>项目文件详情</DialogTitle>
+          <DialogTitle>{file.batchHeader ? "文件申请详情" : "项目文件详情"}</DialogTitle>
           <DialogDescription>
             项目 <span className="font-medium text-slate-700">{file.projectName ?? "-"}</span>
             {file.projectCode ? <span className="text-slate-400"> · {file.projectCode}</span> : null}
@@ -64,6 +65,7 @@ export function ProjectFileDetailDialog({ open, onOpenChange, file }: Props) {
         </DialogHeader>
 
         <div className="space-y-4 mt-4">
+          <BatchFileList file={file} />
           {/* 文件信息 */}
           <div className="p-3 bg-slate-50 rounded-lg space-y-2 text-sm">
             <div className="flex items-center gap-2">

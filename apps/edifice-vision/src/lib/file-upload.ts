@@ -1,7 +1,8 @@
 import { get, post, del } from "@/lib/request";
 import type { FilesVo } from "@/types/project";
 
-export const MAX_FILE_SIZE = 500 * 1024 * 1024;
+export const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024;
+export const MAX_FILE_SIZE_LABEL = "5GB";
 export const MAX_BATCH_FILES = 20;
 export type UploadPurpose = "contract" | "project" | "inspection" | "bid" | "import";
 export const ATTACHMENT_ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.rtf,.odt,.ods,.odp,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.ico,.tiff,.tif,.mp3,.wav,.flac,.aac,.ogg,.wma,.m4a,.opus,.zip,.rar,.7z,.dwg,.dxf";
@@ -56,12 +57,34 @@ function cache(key: string, id?: string) {
   try { if (id) sessionStorage.setItem(key, id); else sessionStorage.removeItem(key); } catch { /* Private mode. */ }
 }
 
+async function finishUpload(id: string, totalSize: number, signal?: AbortSignal): Promise<FilesVo> {
+  const asynchronous = totalSize > 100 * 1024 * 1024;
+  let response = await retry(() => post<UploadSession>(`/file/uploads/${id}/${asynchronous ? "complete-async" : "complete"}`,
+    { signal, toastOnBizError: false }), signal);
+  for (;;) {
+    if (response.code !== 200 || !response.data) throw new Error(response.msg || "文件校验失败");
+    if (response.data.status === "completed" && response.data.file) return response.data.file;
+    if (!asynchronous || !["verifying", "uploading"].includes(response.data.status)) throw new Error("上传会话已结束，请重新上传");
+    await new Promise<void>((resolve, reject) => {
+      if (signal?.aborted) return reject(abortError());
+      const abort = () => { clearTimeout(timer); reject(abortError()); };
+      const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, 2000);
+      signal?.addEventListener("abort", abort, { once: true });
+    });
+    response = await retry(() => get<UploadSession>(`/file/uploads/${id}`, { signal, toastOnBizError: false }), signal);
+    // A process restart loses only the in-memory job; the object and parts remain retryable.
+    if (response.code === 200 && response.data?.status === "uploading") {
+      response = await post<UploadSession>(`/file/uploads/${id}/complete-async`, { signal, toastOnBizError: false });
+    }
+  }
+}
+
 export async function uploadFile(file: File, purpose: UploadPurpose, options?: {
   signal?: AbortSignal;
   onProgress?: (value: number) => void;
   onSession?: (id: string) => void;
 }): Promise<FilesVo> {
-  if (!file.size || file.size > MAX_FILE_SIZE) throw new Error("单个文件必须大于0且不能超过500MB");
+  if (!file.size || file.size > MAX_FILE_SIZE) throw new Error(`单个文件必须大于0且不能超过${MAX_FILE_SIZE_LABEL}`);
   const signal = options?.signal;
   const key = sessionKey(file, purpose);
   let session: UploadSession | null = null;
@@ -73,7 +96,13 @@ export async function uploadFile(file: File, purpose: UploadPurpose, options?: {
         cache(key); options?.onProgress?.(100); return response.data.file;
       }
       if (response.code === 200 && response.data?.status === "uploading") session = response.data;
+      if (response.code === 200 && response.data?.status === "verifying") session = response.data;
     } catch { if (signal?.aborted) throw abortError(); }
+  }
+  if (session?.status === "verifying") {
+    options?.onProgress?.(95);
+    const result = await finishUpload(session.uploadId, file.size, signal);
+    cache(key); options?.onProgress?.(100); return result;
   }
   if (!session) {
     const response = await post<UploadSession>("/file/uploads", {
@@ -103,10 +132,9 @@ export async function uploadFile(file: File, purpose: UploadPurpose, options?: {
     done += chunk.size;
     options?.onProgress?.(Math.min(95, Math.round(done / file.size * 95)));
   }
-  const response = await retry(() => post<UploadSession>(`/file/uploads/${state.uploadId}/complete`, { signal, toastOnBizError: false }), signal);
-  if (response.code !== 200 || !response.data?.file) throw new Error(response.msg || "文件校验失败");
+  const result = await finishUpload(state.uploadId, file.size, signal);
   cache(key); options?.onProgress?.(100);
-  return response.data.file;
+  return result;
 }
 
 export async function cancelUpload(id: string) {

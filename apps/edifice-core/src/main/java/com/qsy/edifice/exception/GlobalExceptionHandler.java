@@ -56,7 +56,8 @@ public class GlobalExceptionHandler {
                                                                      HttpServletRequest request) {
         String requestURI = request.getRequestURI();
         log.warn("请求地址 {},上传文件超过大小限制 {}", requestURI, e.getMessage());
-        return ResultUtils.failure("文件大小超过限制，请压缩或拆分后再上传（单文件最大 20MB）");
+        return ResultUtils.failure("文件大小超过限制（单文件最大 "
+                + com.qsy.edifice.service.support.FileUploadPolicy.MAX_SIZE_LABEL + "），请使用分片上传");
     }
 
     /**

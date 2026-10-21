@@ -51,6 +51,8 @@ public class ApprovalFlowController {
                                      HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);
+        if (ApprovalBizType.fromExt(dto.getBizType()) == ApprovalBizType.FILE)
+            throw new BusinessException("请从项目文件草稿发起申请");
         ApprovalRecords record = approvalFlowService.submit(dto, loginUser.getUserId());
         return ResultUtils.success(Code.SUCCESS, record.getApprovalRecordId(), "提交成功");
     }
@@ -64,8 +66,20 @@ public class ApprovalFlowController {
             HttpServletRequest request) throws JsonProcessingException {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);
+        if (dto.getRecordId() != null && findFileBusinessId(dto.getRecordId()) != null)
+            throw new BusinessException("请通过项目文件审批接口处理整批文件");
         ApprovalFlowService.ApprovalResult result = approvalFlowService.approve(dto, loginUser.getUserId());
         return ResultUtils.success(Code.SUCCESS, result, "审批完成");
+    }
+
+    @Resource
+    private com.qsy.edifice.mapper.ApprovalRecordsMapper recordsMapper;
+
+    private Long findFileBusinessId(Long recordId) {
+        ApprovalRecords record = recordsMapper.selectById(recordId);
+        return record != null && (ApprovalBizType.fromExt(record.getBizTypeExt()) == ApprovalBizType.FILE
+                || (record.getBizTypeExt() == null && java.util.Objects.equals(record.getApprovalRecordType(), ApprovalBizType.FILE.getCode())))
+                ? record.getInspectionFormId() : null;
     }
 
     @GetMapping("/chain")

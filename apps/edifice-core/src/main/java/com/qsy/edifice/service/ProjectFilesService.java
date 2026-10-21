@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.qsy.edifice.domain.dto.ApproveDto;
 import com.qsy.edifice.domain.dto.CreateProjectFileDto;
 import com.qsy.edifice.domain.dto.GetProjectFileListDto;
+import com.qsy.edifice.domain.dto.SubmitProjectFileBatchDto;
 import com.qsy.edifice.domain.entity.ProjectFiles;
 import com.qsy.edifice.domain.vo.ProjectFileVo;
 
@@ -14,6 +15,15 @@ import java.util.Map;
  * 项目文件服务接口（Phase 3 扩展三级审批）
  */
 public interface ProjectFilesService {
+
+    List<String> saveDrafts(List<CreateProjectFileDto> items, Long userId);
+    Page<ProjectFileVo> listDrafts(Long projectId, String keyword, int current, int pageSize, Long userId);
+    void removeDraft(Long id, Long userId);
+    void updateDraft(Long id, CreateProjectFileDto dto, Long userId);
+    Long submitDrafts(SubmitProjectFileBatchDto dto, Long userId);
+    List<String> copyToDrafts(Long id, Long userId);
+    int getDraftRetentionDays();
+    int expireDrafts();
 
     // ==================== 旧接口（保留） ====================
 

@@ -19,6 +19,7 @@ import { approveProjectFile } from "@/services/project-file";
 import type { ProjectFileVo } from "@/types/project-file";
 import type { UserListItem } from "@/types/project";
 import type { ApprovalFlowConfigVo, ApprovalFlowNodeVo } from "@/types/config-center";
+import { BatchFileList } from "./batch-file-list";
 
 /** 在流程配置里按 nodeOrder 找节点 */
 function nodeAt(config: ApprovalFlowConfigVo | null, order: number): ApprovalFlowNodeVo | null {
@@ -38,6 +39,8 @@ export function ApproveProjectFileDialog({ open, onOpenChange, file, onSuccess }
   const [comment, setComment] = useState<string>("");
   const [terminateHere, setTerminateHere] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
+  const [loadingConfig, setLoadingConfig] = useState(true);
+  const [configError, setConfigError] = useState(false);
   // 项目文件的审批流配置（bizType = file）。null 表示未配置流程，回退到旧逻辑
   const [flowConfig, setFlowConfig] = useState<ApprovalFlowConfigVo | null>(null);
 
@@ -47,18 +50,27 @@ export function ApproveProjectFileDialog({ open, onOpenChange, file, onSuccess }
     setComment("");
     setTerminateHere(false);
     setFlowConfig(null);
+    setLoadingConfig(true);
+    setConfigError(false);
+    let alive = true;
     (async () => {
-      const [usersRes, flowRes] = await Promise.all([
-        getUserCandidates({ pageSize: 500 }),
-        getEnabledFlowConfig("file"),
-      ]);
-      if (usersRes.code === ResponseCode.SUCCESS && usersRes.data) {
-        setUsers((usersRes.data.records ?? []) as unknown as UserListItem[]);
-      }
-      if (flowRes.code === ResponseCode.SUCCESS && flowRes.data) {
-        setFlowConfig(flowRes.data);
-      }
+      try {
+        const [usersRes, flowRes] = await Promise.all([
+          getUserCandidates({ pageSize: 500 }),
+          getEnabledFlowConfig("file"),
+        ]);
+        if (!alive) return;
+        if (flowRes.code !== ResponseCode.SUCCESS || usersRes.code !== ResponseCode.SUCCESS) throw new Error("加载审批配置失败");
+        if (usersRes.code === ResponseCode.SUCCESS && usersRes.data) {
+          setUsers((usersRes.data.records ?? []) as unknown as UserListItem[]);
+        }
+        if (flowRes.code === ResponseCode.SUCCESS && flowRes.data) {
+          setFlowConfig(flowRes.data);
+        }
+      } catch { if (alive) { setConfigError(true); toast.error("审批配置加载失败，请重新打开"); } }
+      finally { if (alive) setLoadingConfig(false); }
     })();
+    return () => { alive = false; };
   }, [open]);
 
   if (!file) return null;
@@ -84,6 +96,7 @@ export function ApproveProjectFileDialog({ open, onOpenChange, file, onSuccess }
   const nextApproverRequiresSelection = !flowConfig || nextNode?.approverSourceType === "starter_select";
 
   const handleApprove = async (pass: boolean) => {
+    if (loadingConfig || configError || submitting) return;
     if (!file.currentRecordId) {
       toast.error("当前没有可操作的审批节点");
       return;
@@ -102,6 +115,7 @@ export function ApproveProjectFileDialog({ open, onOpenChange, file, onSuccess }
         pass,
         nextApproverId: pass && !shouldTerminate && nextApproverRequiresSelection ? nextApproverId : undefined,
         comment: comment || undefined,
+        terminate: pass && shouldTerminate,
       });
       if (res.code === ResponseCode.SUCCESS) {
         toast.success(pass ? "审批通过" : "已驳回");
@@ -115,9 +129,9 @@ export function ApproveProjectFileDialog({ open, onOpenChange, file, onSuccess }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>审批项目文件</DialogTitle>
+          <DialogTitle>{file.batchHeader ? "审批文件申请" : "审批项目文件"}</DialogTitle>
           <DialogDescription>
             项目 <span className="font-medium text-slate-700">{file.projectName}</span> ·
             阶段 <span className="font-medium text-slate-700">{file.stageName ?? "-"}</span> ·
@@ -129,6 +143,9 @@ export function ApproveProjectFileDialog({ open, onOpenChange, file, onSuccess }
         </DialogHeader>
 
         <div className="space-y-4 mt-4">
+          <p className="break-words text-sm font-medium text-slate-800">{file.fileName}</p>
+          <BatchFileList file={file} />
+          {loadingConfig && <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />加载审批配置...</p>}
           {/* 审批链 */}
           <div className="p-3 bg-slate-50 rounded-lg text-xs space-y-1">
             {chain.length === 0 ? (
@@ -232,21 +249,21 @@ export function ApproveProjectFileDialog({ open, onOpenChange, file, onSuccess }
           <Button
             variant="outline"
             onClick={() => handleApprove(false)}
-            disabled={submitting}
+            disabled={submitting || loadingConfig || configError}
           >
-            <XCircle className="w-4 h-4 mr-1 text-rose-500" /> 驳回
+            <XCircle className="w-4 h-4 mr-1 text-rose-500" /> {file.batchHeader ? "整批驳回" : "驳回"}
           </Button>
           <Button
             className="bg-emerald-600 hover:bg-emerald-700 text-white"
             onClick={() => handleApprove(true)}
-            disabled={submitting}
+            disabled={submitting || loadingConfig || configError}
           >
             {submitting ? (
               <Loader2 className="w-4 h-4 animate-spin mr-1" />
             ) : (
               <CheckCircle2 className="w-4 h-4 mr-1" />
             )}
-            通过
+            {file.batchHeader ? "整批通过" : "通过"}
           </Button>
         </div>
       </DialogContent>

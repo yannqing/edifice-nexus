@@ -36,7 +36,10 @@ import { approvalInspection } from "@/services/inspection";
 import { approveAcceptance } from "@/services/acceptance";
 import { approveBid } from "@/services/bid";
 import { approveOaApplication } from "@/services/oa";
-import { approveProjectFile } from "@/services/project-file";
+import { approveProjectFile, getProjectFileDetail } from "@/services/project-file";
+import type { ProjectFileVo } from "@/types/project-file";
+import { BatchFileList } from "@/components/project-file/batch-file-list";
+import { AttachmentFileActions } from "@/components/file/attachment-file-list";
 import { getUserList } from "@/services/project";
 import {
   createApprovalCc,
@@ -137,6 +140,9 @@ export default function TodoCenterPage() {
   const [detail, setDetail] = useState<TodoCenterDetail | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
   const [approveItem, setApproveItem] = useState<TodoCenterItem | null>(null);
+  const [approvalFile, setApprovalFile] = useState<ProjectFileVo | null>(null);
+  const [approvalLoading, setApprovalLoading] = useState(false);
+  const [approvalLoadError, setApprovalLoadError] = useState(false);
   const [approvalFlowConfig, setApprovalFlowConfig] = useState<ApprovalFlowConfigVo | null>(null);
   const [nextApproverId, setNextApproverId] = useState("");
   const [ccUserIds, setCcUserIds] = useState<string[]>([]);
@@ -237,6 +243,9 @@ export default function TodoCenterPage() {
       return;
     }
     setApproveItem(item);
+    setApprovalFile(null);
+    setApprovalLoading(true);
+    setApprovalLoadError(false);
     setNextApproverId("");
     setCcUserIds([]);
     setComment("");
@@ -245,6 +254,12 @@ export default function TodoCenterPage() {
     setApproveOpen(true);
     try {
       const requests: Array<Promise<void>> = [];
+      if (item.bizType === "file") {
+        requests.push(getProjectFileDetail(item.bizId).then((res) => {
+          if (res.code !== ResponseCode.SUCCESS || !res.data) throw new Error("文件申请加载失败");
+          setApprovalFile(res.data);
+        }));
+      }
       if (users.length === 0) {
         requests.push(getUserList().then((res) => {
           if (res.code === ResponseCode.SUCCESS && res.data) {
@@ -259,12 +274,15 @@ export default function TodoCenterPage() {
       }));
       await Promise.all(requests);
     } catch {
-      // The approval API still enforces the flow. Keep the dialog usable if config loading fails.
+      setApprovalLoadError(true);
+      toast.error("审批信息加载失败，请关闭后重试");
+    } finally {
+      setApprovalLoading(false);
     }
   };
 
   const closeApproval = () => {
-    if (submitting) return;
+    if (submitting || approvalLoading) return;
     setApproveOpen(false);
     setApproveItem(null);
     setApprovalFlowConfig(null);
@@ -327,6 +345,7 @@ export default function TodoCenterPage() {
   const showAutoNextApprover = !terminateChecked && approvalFlowConfig && nextFlowNode && !nextApproverRequiresSelection;
 
   const handleApprove = async (pass: boolean) => {
+    if (submitting || approvalLoading || approvalLoadError || (approveItem?.bizType === "file" && !approvalFile)) return;
     if (!approveItem || !approveItem.bizType) return;
     if (!comment.trim()) {
       toast.error(pass ? "请输入审批意见" : "请输入驳回原因");
@@ -687,6 +706,10 @@ export default function TodoCenterPage() {
                 申请人：{approveItem?.applyUserName || "-"} · 当前审批人：{approveItem?.currentApproverName || "-"}
               </div>
             </div>
+            {approvalLoading && <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />加载审批信息...</p>}
+            {approvalLoadError && <p role="alert" className="text-sm text-rose-600">审批信息加载失败，请关闭后重试。</p>}
+            {approvalFile && (approvalFile.batchHeader ? <BatchFileList file={approvalFile} />
+              : <AttachmentFileActions fileId={approvalFile.fileId} fileName={approvalFile.fileName} fileSize={approvalFile.fileSize ?? undefined} />)}
 
             <div className="flex items-center gap-2">
               <input
@@ -772,13 +795,13 @@ export default function TodoCenterPage() {
           </div>
 
           <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-slate-100">
-            <Button variant="outline" className="text-rose-600" onClick={() => handleApprove(false)} disabled={submitting}>
+            <Button variant="outline" className="text-rose-600" onClick={() => handleApprove(false)} disabled={submitting || approvalLoading || approvalLoadError}>
               {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <X className="w-4 h-4 mr-1" />}
-              驳回
+              {approvalFile?.batchHeader ? "整批驳回" : "驳回"}
             </Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleApprove(true)} disabled={submitting}>
+            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => handleApprove(true)} disabled={submitting || approvalLoading || approvalLoadError}>
               {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Check className="w-4 h-4 mr-1" />}
-              通过
+              {approvalFile?.batchHeader ? "整批通过" : "通过"}
             </Button>
           </div>
         </DialogContent>

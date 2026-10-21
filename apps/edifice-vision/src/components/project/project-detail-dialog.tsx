@@ -41,6 +41,7 @@ import {
   fetchProjectFileBlob,
   getProjectFileList,
   getProjectFileDownloadUrl,
+  prepareNativeFileUrl,
 } from "@/services/project-file";
 import { getAccessToken } from "@/lib/token";
 import { getBenefitHistory } from "@/services/contract-benefit";
@@ -360,6 +361,7 @@ function ProjectFilesSection({
   const [items, setItems] = useState<ProjectFileVo[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [fileDialogTab, setFileDialogTab] = useState<"upload" | "drafts">("upload");
   const { user } = useAuth();
 
   const [keyword, setKeyword] = useState("");
@@ -421,12 +423,17 @@ function ProjectFilesSection({
             共 {total} 项
           </span>
         </h4>
-        <Button
-          className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
-          onClick={() => setUploadOpen(true)}
-        >
-          <FolderPlus className="w-3 h-3 mr-1" /> 上传文件
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button variant="outline" className="h-7 text-xs" onClick={() => { setFileDialogTab("drafts"); setUploadOpen(true); }}>
+            我的草稿
+          </Button>
+          <Button
+            className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+            onClick={() => { setFileDialogTab("upload"); setUploadOpen(true); }}
+          >
+            <FolderPlus className="w-3 h-3 mr-1" /> 上传文件
+          </Button>
+        </div>
       </div>
 
       {/* 搜索 + 分类筛选 */}
@@ -507,6 +514,7 @@ function ProjectFilesSection({
         onOpenChange={setUploadOpen}
         lockedProjectId={projectId}
         lockedProjectName={projectName}
+        initialTab={fileDialogTab}
         onSuccess={() => fetchData()}
       />
     </section>
@@ -569,6 +577,10 @@ function ProjectFileRow({
 
     setAction("preview");
     try {
+      if (Number(file.fileSize) > 100 * 1024 * 1024) {
+        previewWindow.location.href = await prepareNativeFileUrl(file.fileId, true);
+        return;
+      }
       const blob = await fetchProjectFileBlob(file.fileId);
       const url = URL.createObjectURL(blob);
       previewWindow.location.href = url;
@@ -590,6 +602,13 @@ function ProjectFileRow({
     setAction("download");
     setDownloadProgress(0);
     try {
+      if (Number(file.fileSize) > 100 * 1024 * 1024) {
+        const url = await prepareNativeFileUrl(file.fileId);
+        const link = document.createElement("a");
+        link.href = url; link.download = fileName;
+        document.body.appendChild(link); link.click(); link.remove();
+        return;
+      }
       const token = getAccessToken();
       const url = getProjectFileDownloadUrl(file.fileId, token);
       const response = await fetch(url, { headers: token ? { token } : {} });
@@ -625,7 +644,8 @@ function ProjectFileRow({
   };
 
   const handleCancel = async () => {
-    if (!window.confirm("确定撤销这个项目文件吗？撤销后该文件将从项目文件列表中移除。")) {
+    if (!window.confirm(file.batchId ? "本文件属于一批申请，撤回会同时撤回本批所有文件，确定继续吗？"
+      : "确定撤销这个项目文件吗？撤销后该文件将从项目文件列表中移除。")) {
       return;
     }
 

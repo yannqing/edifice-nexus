@@ -7,6 +7,7 @@ import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.dto.ApproveDto;
 import com.qsy.edifice.domain.dto.CreateProjectFileDto;
 import com.qsy.edifice.domain.dto.GetProjectFileListDto;
+import com.qsy.edifice.domain.dto.SubmitProjectFileBatchDto;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.domain.vo.ProjectFileVo;
 import com.qsy.edifice.service.ProjectFilesService;
@@ -25,14 +26,8 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /**
- * 项目文件三级审批（Phase 3 #2）
- *
- * 典型流程：
- * 1. 任意成员调 /file/upload/* 拿到 fileId
- * 2. POST /project-files/create 落档并提交审批（一级：项目负责人）
- * 3. 项目负责人 POST /project-files/approve （通过 + nextApproverId=专业主管）
- * 4. 专业主管 POST /project-files/approve （通过 + nextApproverId=总工）
- * 5. 总工 POST /project-files/approve （通过 / 驳回；不传 nextApproverId 视为终审）
+ * 项目文件草稿及整批审批；历史单文件审批继续使用原来的记录。
+ * 上传完成后先保存草稿，submit-drafts 将指定草稿冻结为一批并创建一条审批链。
  */
 @Tag(name = "项目文件")
 @RestController
@@ -44,6 +39,55 @@ public class ProjectFilesController {
 
     @Autowired
     private JwtUtils jwtUtils;
+
+    @GetMapping("/draft-policy")
+    @PreAuthorize("isAuthenticated()")
+    public BaseResponse<java.util.Map<String, Integer>> draftPolicy() {
+        return ResultUtils.success(Code.SUCCESS, java.util.Map.of("retentionDays", projectFilesService.getDraftRetentionDays(), "maxBatchFiles", 200));
+    }
+
+    @PostMapping("/drafts")
+    @PreAuthorize("hasAuthority('menu:my-projects') or hasAuthority('menu:all-projects') or hasAuthority('menu:project-files-approval') or hasRole('SUPER_ADMIN')")
+    public BaseResponse<List<String>> saveDrafts(@RequestBody List<CreateProjectFileDto> items, HttpServletRequest request) throws JsonProcessingException {
+        return ResultUtils.success(Code.SUCCESS, projectFilesService.saveDrafts(items, jwtUtils.getUserFromToken(request.getHeader("token")).getUserId()));
+    }
+
+    @GetMapping("/drafts")
+    @PreAuthorize("isAuthenticated()")
+    public BaseResponse<Page<ProjectFileVo>> drafts(@RequestParam Long projectId,
+            @RequestParam(required = false) String keyword, @RequestParam(defaultValue = "1") int current,
+            @RequestParam(defaultValue = "10") int pageSize, HttpServletRequest request) throws JsonProcessingException {
+        return ResultUtils.success(Code.SUCCESS, projectFilesService.listDrafts(projectId, keyword, current, pageSize,
+                jwtUtils.getUserFromToken(request.getHeader("token")).getUserId()));
+    }
+
+    @DeleteMapping("/drafts/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public BaseResponse<Boolean> removeDraft(@PathVariable Long id, HttpServletRequest request) throws JsonProcessingException {
+        projectFilesService.removeDraft(id, jwtUtils.getUserFromToken(request.getHeader("token")).getUserId());
+        return ResultUtils.success(Code.SUCCESS, true);
+    }
+
+    @PutMapping("/drafts/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public BaseResponse<Boolean> updateDraft(@PathVariable Long id, @RequestBody CreateProjectFileDto dto, HttpServletRequest request) throws JsonProcessingException {
+        projectFilesService.updateDraft(id, dto, jwtUtils.getUserFromToken(request.getHeader("token")).getUserId());
+        return ResultUtils.success(Code.SUCCESS, true);
+    }
+
+    @PostMapping("/submit-drafts")
+    @PreAuthorize("hasAuthority('menu:my-projects') or hasAuthority('menu:all-projects') or hasAuthority('menu:project-files-approval') or hasRole('SUPER_ADMIN')")
+    public BaseResponse<String> submitDrafts(@RequestBody SubmitProjectFileBatchDto dto, HttpServletRequest request) throws JsonProcessingException {
+        return ResultUtils.success(Code.SUCCESS, String.valueOf(projectFilesService.submitDrafts(dto,
+                jwtUtils.getUserFromToken(request.getHeader("token")).getUserId())));
+    }
+
+    @PostMapping("/{id}/copy-to-drafts")
+    @PreAuthorize("isAuthenticated()")
+    public BaseResponse<List<String>> copyToDrafts(@PathVariable Long id, HttpServletRequest request) throws JsonProcessingException {
+        return ResultUtils.success(Code.SUCCESS, projectFilesService.copyToDrafts(id,
+                jwtUtils.getUserFromToken(request.getHeader("token")).getUserId()));
+    }
 
     @PostMapping("/create")
     @Operation(summary = "创建项目文件并提交审批",
@@ -64,13 +108,16 @@ public class ProjectFilesController {
                                                   HttpServletRequest request) throws JsonProcessingException {
         if (items == null || items.isEmpty() || items.size() > 20)
             throw new com.qsy.edifice.exception.BusinessException("每批文件数量应为1到20个");
-        if (items.stream().map(CreateProjectFileDto::getFileId).distinct().count() != items.size())
-            throw new com.qsy.edifice.exception.BusinessException("文件不能重复");
         Long userId = jwtUtils.getUserFromToken(request.getHeader("token")).getUserId();
-        List<String> ids = new java.util.ArrayList<>();
-        for (CreateProjectFileDto item : items)
-            ids.add(String.valueOf(projectFilesService.createAndSubmit(item, userId)));
-        return ResultUtils.success(Code.SUCCESS, ids, "提交成功");
+        List<String> ids = projectFilesService.saveDrafts(items, userId);
+        if (items.stream().map(CreateProjectFileDto::getFirstApproverId).distinct().count() != 1)
+            throw new com.qsy.edifice.exception.BusinessException("一批申请只能指定一位首审人");
+        SubmitProjectFileBatchDto batch = new SubmitProjectFileBatchDto();
+        batch.setProjectId(items.get(0).getProjectId());
+        batch.setDraftIds(ids.stream().map(Long::valueOf).toList());
+        batch.setFirstApproverId(items.get(0).getFirstApproverId());
+        Long id = projectFilesService.submitDrafts(batch, userId);
+        return ResultUtils.success(Code.SUCCESS, List.of(String.valueOf(id)), "整批提交成功");
     }
 
     @PostMapping("/approve")

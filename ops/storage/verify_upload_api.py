@@ -68,7 +68,7 @@ def main():
             assert response["code"] == 200, response.get("msg")
             return response["data"]
 
-        assert api("/file/uploads", {"fileName": "too-large.pdf", "totalSize": 500*1024**2+1, "purpose": "project"}, "POST")["code"] != 200
+        assert api("/file/uploads", {"fileName": "too-large.pdf", "totalSize": 5*1024**3+1, "purpose": "project"}, "POST")["code"] != 200
         body = os.urandom(6 * 1024**2 + 7)
         session = success(api("/file/uploads", {"fileName": "__storage_verification_" + secrets.token_hex(8) + ".pdf",
                          "totalSize": len(body), "purpose": "project"}, "POST"))
@@ -114,7 +114,7 @@ def main():
                 assert response.status == 206 and len(response.read()) == 10
         with call(legacy["path"], headers={"token": "", "Cookie": "access_token=" + tokens[0], "Range": "bytes=0-9"}) as response:
             assert response.status == 206 and len(response.read()) == 10
-        print(json.dumps({"status": "passed", "port": args.port, "checks": ["500MiB limit", "cross-user ownership",
+        print(json.dumps({"status": "passed", "port": args.port, "checks": ["5GiB limit", "cross-user ownership",
               "part size", "part hash", "resume", "idempotent part", "idempotent completion", "cancel", "HEAD", "range", "download hash", "legacy paths"],
               "verificationFileIds": test_files, "verificationUploadIds": sessions}))
     finally:

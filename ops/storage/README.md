@@ -2,12 +2,37 @@
 
 This change affects Edifice only, not Gougu OA uploads. All business file IDs and
 references are preserved. The default backend remains local until explicitly
-configured. Every upload uses 5MiB parts, a 500MiB per-file cap, server-side
+configured. Every upload uses 5MiB parts, a 5GiB per-file cap, server-side
 ownership checks and a read-back SHA-256 check before becoming a business file.
 Multi-attachment fields allow 20 files; contract main document and Excel import
-remain single-file. Project files are submitted atomically as a batch, but retain
-independent approval chains. Failed queue items block form submission until
+remain single-file. Project files can be retained as private drafts and submitted
+as one immutable batch with one approval chain (see migrations/v12). Failed queue items block form submission until
 retried or removed. Reselecting the same file resumes verified parts for 7 days.
+
+## 5GiB Limits
+
+- Policy cap: 5,368,709,120 bytes per file. Every browser request still contains
+  only a 5MiB part; 5GiB uses 1024 parts. Existing BIGINT size columns remain valid.
+- Spring multipart accepts 5GiB files and 5130MiB requests; disk spooling avoids
+  allocating the request in the Java heap. Multipart compatibility routes must
+  not be used for raw multi-GB requests through Cloudflare.
+- Install `nginx-edifice-prod.conf` and `nginx-upload-location.conf` after
+  comparing/backing up the live config. The gateway cap is 5130MiB (framing
+  allowance), request/response buffering is disabled for `/api/`, and timeouts
+  are idle timeouts, not a total-upload deadline. OA config is unchanged.
+- Files above 100MiB finish through `/complete-async` plus authenticated status
+  polling. One verifier and two waiting jobs bound the load. Restarting the
+  backend loses only the transient job; stored parts/object can be retried.
+- MinIO already supports this multipart object size. No 500MiB IAM cap exists;
+  do not increase the memory cgroup limit or expose the bucket to the public.
+- The S3 client has a 15-minute socket idle timeout and 30-minute operation
+  timeout. Large downloads use streaming, 64-bit ranges, and native browser
+  downloads/previews instead of creating a multi-GB JavaScript Blob.
+- `verify_storage.py` defaults to a 5GiB native MinIO check.
+  `verify_large_upload.py --report-dir ...` verifies a full 5GiB file through
+  local HTTPS/Nginx/API/MinIO and deletes only its own verification artifacts.
+  `--public --size-mib 6` additionally checks the Cloudflare request path without
+  sending 5GiB across the server's limited public bandwidth.
 
 ## Pinned Community Build
 
@@ -33,7 +58,7 @@ increase internet bandwidth or provide disaster recovery by itself.
 1. Compare local/server git HEAD and changes. Back up DB, original file trees,
    legacy chunks, runtime configuration and old application artifact. Keep a
    verified backup off this server before retiring old copies. Do not remove original directories.
-2. Stage and test MinIO, including a 500MiB multipart write/read/hash comparison.
+2. Stage and test MinIO, including a 5GiB multipart write/read/hash comparison.
 3. Apply `database/migrations/v11/unified_file_storage.sql` once. It is additive.
 4. Install the new application with storage still local; verify legacy downloads.
 5. Source backend `.env` and `/etc/edifice/storage.env` with exported environment

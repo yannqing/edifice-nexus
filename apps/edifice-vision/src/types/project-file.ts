@@ -17,7 +17,7 @@ export interface ProjectFileVo {
   description: string | null;
   uploadUserId: string | null;
   uploadUserName: string | null;
-  /** 0-待提交/1-审批中/2-通过/3-驳回 */
+  /** 0-草稿/1-审批中/2-通过/3-驳回/4-撤回/5-草稿过期 */
   approvalStatus: number;
   currentRecordId: string | null;
   currentApproverId: string | null;
@@ -25,6 +25,12 @@ export interface ProjectFileVo {
   createdTime: string;
   updatedTime: string | null;
   approvalChain?: ApprovalRecordVo[] | null;
+  batchHeader?: boolean;
+  batchId?: string | null;
+  batchFileCount?: number;
+  batchFiles?: ProjectFileVo[] | null;
+  draftExpiresAt?: string | null;
+  submittedTime?: string | null;
 }
 
 export interface CreateProjectFileParams {
@@ -53,6 +59,8 @@ export const PROJECT_FILE_STATUS_MAP: Record<number, string> = {
   1: "审批中",
   2: "已通过",
   3: "已驳回",
+  4: "已撤回",
+  5: "已过期",
 };
 
 export const FILE_CATEGORY_OPTIONS = ["图纸", "合同", "成果文件", "计算底稿", "其他"];

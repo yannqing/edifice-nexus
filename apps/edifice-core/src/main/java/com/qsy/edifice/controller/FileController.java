@@ -4,6 +4,7 @@ import com.qsy.edifice.common.Code;
 import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.vo.FilesVo;
 import com.qsy.edifice.service.FileService;
+import com.qsy.edifice.service.support.FileUploadPolicy;
 import com.qsy.edifice.utils.ResultUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,12 +27,6 @@ public class FileController {
     @Resource
     private FileService fileService;
 
-    /** 图片/音频类小文件上限 */
-    private static final long MAX_MEDIA_FILE_SIZE_BYTES = 500L * 1024 * 1024;
-
-    /** 文档类（含项目文件）上限 */
-    private static final long MAX_DOCUMENT_FILE_SIZE_BYTES = 500L * 1024 * 1024;
-
     /**
      * 上传图片接口
      *
@@ -42,8 +37,8 @@ public class FileController {
     @Operation(summary = "上传图片文件", description = "支持jpg, jpeg, png, gif, bmp, webp, svg, ico, tiff, tif格式")
     @PostMapping("/upload/images")
     public BaseResponse<FilesVo> uploadImage(@RequestParam("image") MultipartFile image, HttpServletRequest request) throws IOException {
-        if (image != null && image.getSize() > MAX_MEDIA_FILE_SIZE_BYTES) {
-            return ResultUtils.failure("单个文件不能超过500MB");
+        if (image != null && image.getSize() > FileUploadPolicy.MAX_SIZE) {
+            return ResultUtils.failure("单个文件不能超过" + FileUploadPolicy.MAX_SIZE_LABEL);
         }
         FilesVo filesVo = fileService.uploadImageAndReturnVo(image, request);
 
@@ -77,8 +72,8 @@ public class FileController {
     @PostMapping("/upload/document")
     public BaseResponse<FilesVo> uploadDocument(@RequestParam("document") MultipartFile document,
                                                 HttpServletRequest request) throws IOException {
-        if (document != null && document.getSize() > MAX_DOCUMENT_FILE_SIZE_BYTES) {
-            return ResultUtils.failure("单个文件不能超过500MB");
+        if (document != null && document.getSize() > FileUploadPolicy.MAX_SIZE) {
+            return ResultUtils.failure("单个文件不能超过" + FileUploadPolicy.MAX_SIZE_LABEL);
         }
         FilesVo filesVo = fileService.uploadDocumentAndReturnVo(document, request);
 

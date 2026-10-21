@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Loader2, RotateCcw, Upload, X } from "lucide-react";
 import { toast } from "sonner";
-import { ATTACHMENT_ACCEPT, cancelUpload, MAX_BATCH_FILES, MAX_FILE_SIZE, uploadFile, type UploadPurpose } from "@/lib/file-upload";
+import { ATTACHMENT_ACCEPT, cancelUpload, MAX_BATCH_FILES, MAX_FILE_SIZE, MAX_FILE_SIZE_LABEL, uploadFile, type UploadPurpose } from "@/lib/file-upload";
 import type { FilesVo } from "@/types/project";
 import { AttachmentFileActions } from "@/components/file/attachment-file-list";
 
@@ -28,7 +28,7 @@ export function FileUploadField({ value, onChange, purpose, maxFiles = MAX_BATCH
   const inputId = useId();
   const [tasks, setTasks] = useState<Task[]>([]);
   const refs = useRef({ value, onChange, onBusyChange });
-  refs.current = { value, onChange, onBusyChange };
+  useLayoutEffect(() => { refs.current = { value, onChange, onBusyChange }; }, [value, onChange, onBusyChange]);
   const tasksRef = useRef<Task[]>([]);
   const active = useRef(0);
   const alive = useRef(true);
@@ -75,7 +75,7 @@ export function FileUploadField({ value, onChange, purpose, maxFiles = MAX_BATCH
     if (files.length + occupied > maxFiles) { toast.error(`最多添加${maxFiles}个文件`); return; }
     const allowed = new Set(accept.split(",").map((x) => x.trim().toLowerCase()));
     for (const file of files) {
-      if (!file.size || file.size > MAX_FILE_SIZE) { toast.error(`${file.name}：单个文件必须大于0且不能超过500MB`); return; }
+      if (!file.size || file.size > MAX_FILE_SIZE) { toast.error(`${file.name}：单个文件必须大于0且不能超过${MAX_FILE_SIZE_LABEL}`); return; }
       const extension = "." + file.name.split(".").pop()?.toLowerCase();
       if (!allowed.has(extension)) { toast.error(`${file.name}：不支持该文件格式`); return; }
     }
@@ -113,6 +113,6 @@ export function FileUploadField({ value, onChange, purpose, maxFiles = MAX_BATCH
       <input id={inputId} type="file" className="hidden" multiple={maxFiles > 1} accept={accept} disabled={disabled}
         onChange={(event) => { choose(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
     </label>}
-    <p className="text-xs text-slate-400">单个文件最大 500MB{maxFiles > 1 ? `，最多 ${maxFiles} 个` : ""}</p>
+    <p className="text-xs text-slate-400">单个文件最大 {MAX_FILE_SIZE_LABEL}{maxFiles > 1 ? `，最多 ${maxFiles} 个` : ""}</p>
   </div>;
 }

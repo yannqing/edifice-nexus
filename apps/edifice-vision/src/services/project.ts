@@ -188,7 +188,7 @@ export async function getUserList(params?: {
 }
 
 /** Compatibility wrappers; every upload now uses the same verified multipart API. */
-export const MAX_ATTACHMENT_FILE_SIZE = 500 * 1024 * 1024;
+export { MAX_FILE_SIZE as MAX_ATTACHMENT_FILE_SIZE } from "@/lib/file-upload";
 
 export async function uploadDocument(file: File): Promise<BaseResponse<FilesVo>> {
   const { uploadFile } = await import("@/lib/file-upload");

@@ -43,8 +43,8 @@ public class FileObjectStorage {
                             .forcePathStyle(true)
                             .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKey, secretKey)))
                             .httpClientBuilder(UrlConnectionHttpClient.builder()
-                                    .connectionTimeout(Duration.ofSeconds(10)).socketTimeout(Duration.ofMinutes(5)))
-                            .overrideConfiguration(c -> c.apiCallTimeout(Duration.ofMinutes(10)))
+                                    .connectionTimeout(Duration.ofSeconds(10)).socketTimeout(Duration.ofMinutes(15)))
+                            .overrideConfiguration(c -> c.apiCallTimeout(Duration.ofMinutes(30)))
                             .build();
                 }
             }

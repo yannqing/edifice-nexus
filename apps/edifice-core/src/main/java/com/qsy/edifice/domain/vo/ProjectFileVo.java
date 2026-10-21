@@ -58,7 +58,7 @@ public class ProjectFileVo implements Serializable {
 
     private String uploadUserName;
 
-    /** 0-待提交/1-审批中/2-通过/3-驳回 */
+    /** 0-草稿/1-审批中/2-通过/3-驳回/4-撤回/5-草稿过期 */
     private Integer approvalStatus;
 
     @JsonSerialize(using = ToStringSerializer.class)
@@ -74,4 +74,12 @@ public class ProjectFileVo implements Serializable {
 
     /** 审批链（按时间升序） */
     private List<ApprovalRecordVo> approvalChain;
+
+    private Boolean batchHeader;
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long batchId;
+    private Integer batchFileCount;
+    private List<ProjectFileVo> batchFiles;
+    private LocalDateTime draftExpiresAt;
+    private LocalDateTime submittedTime;
 }

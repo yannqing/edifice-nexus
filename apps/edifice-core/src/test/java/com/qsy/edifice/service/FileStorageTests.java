@@ -20,6 +20,8 @@ class FileStorageTests {
     @TempDir Path root;
 
     @Test void policyAcceptsExactLimitForAllPurposesAndRejectsOverflow() {
+        assertEquals(5_368_709_120L, FileUploadPolicy.MAX_SIZE);
+        assertDoesNotThrow(() -> FileUploadPolicy.validate("large.pdf", (long) Integer.MAX_VALUE + 1, "project"));
         for (String purpose : new String[]{"project", "contract", "inspection", "bid", "import"})
             assertDoesNotThrow(() -> FileUploadPolicy.validate("test.xlsx", FileUploadPolicy.MAX_SIZE, purpose));
         assertThrows(BusinessException.class, () -> FileUploadPolicy.validate("test.pdf", FileUploadPolicy.MAX_SIZE + 1, "project"));
@@ -109,5 +111,21 @@ class FileStorageTests {
         assertNull(com.qsy.edifice.utils.JwtUtils.requestToken(request));
         request.addHeader("token", "header-token");
         assertEquals("header-token", com.qsy.edifice.utils.JwtUtils.requestToken(request));
+    }
+
+    @Test void fiveGiBContentLengthAndRangesAboveTwoGiBAreNotTruncated() throws Exception {
+        FileObjectStorage storage = mock(FileObjectStorage.class);
+        FileDownloadResponse downloads = new FileDownloadResponse();
+        ReflectionTestUtils.setField(downloads, "storage", storage);
+        ReflectionTestUtils.setField(downloads, "filesMapper", mock(FilesMapper.class));
+        Files file = new Files(); file.setFileId(1L); file.setFileSize(FileUploadPolicy.MAX_SIZE);
+        file.setDisplayName("large.pdf"); file.setFileExtension("pdf");
+        var request = new MockHttpServletRequest("HEAD", "/file/download/1");
+        assertEquals(FileUploadPolicy.MAX_SIZE, downloads.response(file, request).getHeaders().getContentLength());
+        request.setMethod("GET"); request.addHeader("Range", "bytes=5368709110-5368709119");
+        when(storage.open(file, 5368709110L, 10L)).thenReturn(new ByteArrayInputStream(new byte[10]));
+        var result = downloads.response(file, request);
+        assertEquals("bytes 5368709110-5368709119/5368709120", result.getHeaders().getFirst("Content-Range"));
+        var output = new ByteArrayOutputStream(); result.getBody().writeTo(output); assertEquals(10, output.size());
     }
 }

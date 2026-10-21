@@ -5,7 +5,8 @@ import java.util.Locale;
 import java.util.Set;
 
 public final class FileUploadPolicy {
-    public static final long MAX_SIZE = 500L * 1024 * 1024;
+    public static final long MAX_SIZE = 5L * 1024 * 1024 * 1024;
+    public static final String MAX_SIZE_LABEL = "5GB";
     public static final int CHUNK_SIZE = 5 * 1024 * 1024;
     private static final Set<String> PURPOSES = Set.of("contract", "project", "inspection", "bid", "import");
     private static final Set<String> DOCUMENTS = Set.of(
@@ -17,7 +18,7 @@ public final class FileUploadPolicy {
 
     public static void validate(String name, long size, String purpose) {
         if (!PURPOSES.contains(purpose == null ? "" : purpose)) throw new BusinessException("无效的上传用途");
-        if (size <= 0 || size > MAX_SIZE) throw new BusinessException("单个文件必须大于0且不能超过500MB");
+        if (size <= 0 || size > MAX_SIZE) throw new BusinessException("单个文件必须大于0且不能超过" + MAX_SIZE_LABEL);
         if (name == null || name.isBlank() || name.length() > 240 || name.contains("/") || name.contains("\\")
                 || name.chars().anyMatch(c -> c < 32)) throw new BusinessException("文件名称不合法");
         String extension = extension(name);

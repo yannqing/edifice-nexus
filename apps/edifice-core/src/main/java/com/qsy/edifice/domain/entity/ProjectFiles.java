@@ -62,7 +62,7 @@ public class ProjectFiles implements Serializable {
     @TableField("description")
     private String description;
 
-    /** 审批状态：0-待提交/1-审批中/2-通过/3-驳回 */
+    /** 0-草稿/1-审批中/2-通过/3-驳回/4-撤回/5-草稿过期 */
     @TableField("approval_status")
     private Integer approvalStatus;
 
@@ -70,6 +70,20 @@ public class ProjectFiles implements Serializable {
     @TableField("current_record_id")
     @JsonSerialize(using = ToStringSerializer.class)
     private Long currentRecordId;
+
+    /** 批次申请头没有物理文件；历史单文件记录和批次明细均为 0。 */
+    @TableField("batch_header")
+    private Integer batchHeader;
+
+    @TableField("batch_id")
+    @JsonSerialize(using = ToStringSerializer.class)
+    private Long batchId;
+
+    @TableField("draft_expires_at")
+    private LocalDateTime draftExpiresAt;
+
+    @TableField("submitted_time")
+    private LocalDateTime submittedTime;
 
     @TableField(value = "created_time", fill = FieldFill.INSERT)
     private LocalDateTime createdTime;

@@ -50,6 +50,9 @@ public class TodoCenterServiceImpl implements TodoCenterService {
     private ProjectFilesMapper projectFilesMapper;
 
     @Resource
+    private com.qsy.edifice.service.ProjectFilesService projectFilesService;
+
+    @Resource
     private BidMapper bidMapper;
 
     @Resource
@@ -356,21 +359,17 @@ public class TodoCenterServiceImpl implements TodoCenterService {
     }
 
     private void withdrawProjectFile(ApprovalRecords record, String reason) {
-        ProjectFiles file = projectFilesMapper.selectById(record.getInspectionFormId());
+        ProjectFiles file = projectFilesMapper.lock(record.getInspectionFormId());
         if (file == null) {
             throw new BusinessException(ErrorType.FILE_NOT_FOUND, "项目文件不存在");
         }
-        record.setInspectionFormStatus(STATUS_REJECTED);
-        record.setApprovalDescription(reason);
-        record.setNextApproverId(null);
-        record.setUpdatedTime(LocalDateTime.now());
-        if (approvalRecordsMapper.updatePendingResult(record) != 1) {
+        if (!Objects.equals(file.getCurrentRecordId(), record.getApprovalRecordId())) {
             throw new BusinessException(ErrorType.OPERATION_FAILED, "该审批已被处理，请刷新后重试");
         }
-        file.setApprovalStatus(3);
-        file.setCurrentRecordId(null);
-        projectFilesMapper.updateById(file);
-        projectFilesMapper.deleteById(file.getProjectFileId());
+        projectFilesService.cancel(file.getProjectFileId(), record.getApplyUserId());
+        approvalRecordsMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<ApprovalRecords>()
+                .eq(ApprovalRecords::getApprovalRecordId, record.getApprovalRecordId())
+                .set(ApprovalRecords::getApprovalDescription, reason));
     }
 
     private void updateBusinessAfterWithdraw(ApprovalBizType type, Long bizId) {

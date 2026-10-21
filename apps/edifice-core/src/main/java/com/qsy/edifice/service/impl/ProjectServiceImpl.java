@@ -842,6 +842,9 @@ public class ProjectServiceImpl implements ProjectService {
 
             List<ProjectFiles> projectFileRows = projectFilesMapper.selectList(new LambdaQueryWrapper<ProjectFiles>()
                     .eq(ProjectFiles::getProjectId, String.valueOf(projectId))
+                    .eq(ProjectFiles::getBatchHeader, 0)
+                    .and(q -> q.in(ProjectFiles::getApprovalStatus, 1, 2, 3).or()
+                            .eq(ProjectFiles::getApprovalStatus, 0).isNull(ProjectFiles::getDraftExpiresAt))
                     .orderByAsc(ProjectFiles::getCreatedTime));
             for (ProjectFiles projectFile : projectFileRows) {
                 String label = StringUtils.hasText(projectFile.getFileName()) ? projectFile.getFileName() : "项目文件";
@@ -1622,6 +1625,9 @@ public class ProjectServiceImpl implements ProjectService {
         }
 
         Long fileCount = projectFilesMapper.selectCount(new LambdaQueryWrapper<ProjectFiles>()
+                .eq(ProjectFiles::getBatchHeader, 0)
+                .and(q -> q.in(ProjectFiles::getApprovalStatus, 1, 2, 3).or()
+                        .eq(ProjectFiles::getApprovalStatus, 0).isNull(ProjectFiles::getDraftExpiresAt))
                 .eq(ProjectFiles::getProjectId, String.valueOf(project.getProjectId())));
         vo.setFileCount(fileCount == null ? 0 : fileCount.intValue());
         return vo;
@@ -1643,6 +1649,9 @@ public class ProjectServiceImpl implements ProjectService {
         // project_files.project_id 是 varchar(64) 遗留列，这里按字符串查
         LambdaQueryWrapper<ProjectFiles> w = new LambdaQueryWrapper<>();
         w.in(ProjectFiles::getProjectId, projectIdStrs);
+        w.eq(ProjectFiles::getBatchHeader, 0)
+                .and(q -> q.in(ProjectFiles::getApprovalStatus, 1, 2, 3).or()
+                        .eq(ProjectFiles::getApprovalStatus, 0).isNull(ProjectFiles::getDraftExpiresAt));
         List<ProjectFiles> rows = projectFilesMapper.selectList(w);
         Map<Long, Integer> countMap = new java.util.HashMap<>();
         for (ProjectFiles pf : rows) {

@@ -112,10 +112,21 @@ public class FileServiceImpl extends ServiceImpl<FilesMapper, Files> implements 
         if (!linkedProjectIds.isEmpty() && isMemberOfAnyProject(currentUserId, linkedProjectIds)) {
             return;
         }
+        if (isProjectFileApprover(file.getFileId(), currentUserId)) return;
         if (isOaApplicationApplicant(file.getFileId(), currentUserId) || isBidOwner(file.getFileId(), currentUserId)) {
             return;
         }
         throw new BusinessException(ErrorType.NO_AUTH_ERROR, "无权下载该文件");
+    }
+
+    private boolean isProjectFileApprover(Long fileId, Long userId) {
+        if (userId == null) return false;
+        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(1) FROM project_files pf WHERE pf.file_id = ? "
+                + "AND pf.is_delete = 0 AND pf.approval_status IN (1, 2, 3, 4) AND EXISTS "
+                + "(SELECT 1 FROM approval_records ar WHERE ar.biz_type_ext = 'file' AND ar.is_delete = 0 "
+                + "AND ar.inspection_form_id = COALESCE(pf.batch_id, pf.project_file_id) AND ar.approver = ?)",
+                Integer.class, fileId, userId);
+        return count != null && count > 0;
     }
 
     private boolean hasAnyAuthority(Set<String> expectedAuthorities) {
@@ -154,7 +165,8 @@ public class FileServiceImpl extends ServiceImpl<FilesMapper, Files> implements 
         Set<Long> projectIds = new HashSet<>();
         projectIds.addAll(queryProjectIds(
                 "SELECT CAST(project_id AS SIGNED) FROM project_files " +
-                        "WHERE file_id = ? AND is_delete = 0 AND project_id REGEXP '^[0-9]+$'",
+                        "WHERE file_id = ? AND is_delete = 0 AND (approval_status IN (1, 2, 3) " +
+                        "OR (approval_status = 0 AND draft_expires_at IS NULL)) AND project_id REGEXP '^[0-9]+$'",
                 fileId));
         projectIds.addAll(queryProjectIds(
                 "SELECT project_id FROM contract WHERE is_delete = 0 AND " +

@@ -32,6 +32,9 @@ import {
 import { ApproveProjectFileDialog } from "@/components/project-file/approve-project-file-dialog";
 import { ProjectFileDetailDialog } from "@/components/project-file/project-file-detail-dialog";
 import { useDetailLink } from "@/hooks/use-detail-link";
+import { copyProjectFileToDrafts } from "@/services/project-file";
+import { UploadProjectFileDialog } from "@/components/project-file/upload-project-file-dialog";
+import { toast } from "sonner";
 
 type Tab = "pending" | "all" | "mine";
 const PAGE_SIZE = 10;
@@ -65,6 +68,8 @@ export default function ProjectFilesApprovalPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [current, setCurrent] = useState<ProjectFileVo | null>(null);
   const [currentDetail, setCurrentDetail] = useState<ProjectFileVo | null>(null);
+  const [draftProject, setDraftProject] = useState<ProjectFileVo | null>(null);
+  const [copying, setCopying] = useState(false);
   const [statsData, setStatsData] = useState<{ total: number; pending: number; approved: number; rejected: number } | null>(null);
 
   // 搜索 + 分类筛选 + 分页 state（仅 all/mine tab 用）
@@ -105,6 +110,7 @@ export default function ProjectFilesApprovalPage() {
           keyword: debouncedKeyword || undefined,
           fileCategory: fileCategory || undefined,
           mineOnly: tab === "mine",
+          applicationsOnly: true,
           current: currentPage,
           pageSize: PAGE_SIZE,
         }, signal);
@@ -158,6 +164,14 @@ export default function ProjectFilesApprovalPage() {
       setCurrentDetail(res.data);
       setDetailOpen(true);
     }
+  };
+  const handleCopy = async (file: ProjectFileVo) => {
+    setCopying(true);
+    try {
+      const res = await copyProjectFileToDrafts(file.projectFileId);
+      if (res.code === ResponseCode.SUCCESS) { toast.success("已复制为草稿，原审批记录保留"); setDraftProject(file); }
+    } catch { toast.error("保存草稿失败，请重试"); }
+    finally { setCopying(false); }
   };
   // 详情链接（外部 URL ?id=xxx）走只读详情弹窗
   useDetailLink(handleOpenDetail);
@@ -293,7 +307,7 @@ export default function ProjectFilesApprovalPage() {
                           {f.fileName ?? "-"}
                         </p>
                         <p className="text-xs text-slate-400">
-                          {f.fileExtension ?? ""} · {formatSize(f.fileSize)}
+                          {f.batchHeader ? `一批 ${f.batchFileCount ?? 0} 个文件` : `${f.fileExtension ?? ""} · ${formatSize(f.fileSize)}`}
                         </p>
                       </div>
                       {f.fileUrl && (
@@ -329,6 +343,9 @@ export default function ProjectFilesApprovalPage() {
                     {f.currentApproverName ?? (f.approvalStatus === 2 || f.approvalStatus === 3 ? "—" : "-")}
                   </td>
                   <td className="py-3 px-4 text-right">
+                    {tab === "mine" && (f.approvalStatus === 3 || f.approvalStatus === 4) && (
+                      <Button size="sm" variant="outline" className="mr-2" disabled={copying} onClick={() => handleCopy(f)}>重新申请</Button>
+                    )}
                     {f.approvalStatus === 1 && f.currentRecordId ? (
                       <Button
                         size="sm"
@@ -392,6 +409,9 @@ export default function ProjectFilesApprovalPage() {
         onOpenChange={setDetailOpen}
         file={currentDetail}
       />
+      <UploadProjectFileDialog open={!!draftProject} onOpenChange={(value) => { if (!value) setDraftProject(null); }}
+        lockedProjectId={draftProject?.projectId} lockedProjectName={draftProject?.projectName ?? undefined}
+        initialTab="drafts" onSuccess={() => { fetchData(); fetchStats(); }} />
     </div>
   );
 }

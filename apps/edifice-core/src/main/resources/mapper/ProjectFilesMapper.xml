@@ -14,6 +14,10 @@
         <result column="description" property="description" jdbcType="VARCHAR"/>
         <result column="approval_status" property="approvalStatus" jdbcType="TINYINT"/>
         <result column="current_record_id" property="currentRecordId" jdbcType="BIGINT"/>
+        <result column="batch_header" property="batchHeader" jdbcType="TINYINT"/>
+        <result column="batch_id" property="batchId" jdbcType="BIGINT"/>
+        <result column="draft_expires_at" property="draftExpiresAt" jdbcType="TIMESTAMP"/>
+        <result column="submitted_time" property="submittedTime" jdbcType="TIMESTAMP"/>
         <result column="created_time" property="createdTime" jdbcType="TIMESTAMP"/>
         <result column="updated_time" property="updatedTime" jdbcType="TIMESTAMP"/>
         <result column="is_delete" property="isDelete" jdbcType="TINYINT"/>
@@ -23,6 +27,7 @@
     <sql id="Base_Column_List">
         project_file_id, project_id, project_stage_id, file_id, file_name,
         upload_user_id, file_category, description, approval_status, current_record_id,
+        batch_header, batch_id, draft_expires_at, submitted_time,
         created_time, updated_time, is_delete
     </sql>
 
@@ -33,6 +38,7 @@
         FROM project_files
         WHERE project_id = #{projectId}
         AND is_delete = 0
+        AND batch_header = 0 AND (approval_status IN (1, 2, 3) OR (approval_status = 0 AND draft_expires_at IS NULL))
     </select>
 
     <!-- 根据项目阶段id查询项目文件列表 -->
@@ -42,5 +48,6 @@
         FROM project_files
         WHERE project_stage_id = #{projectStageId}
         AND is_delete = 0
+        AND batch_header = 0 AND (approval_status IN (1, 2, 3) OR (approval_status = 0 AND draft_expires_at IS NULL))
     </select>
 </mapper>

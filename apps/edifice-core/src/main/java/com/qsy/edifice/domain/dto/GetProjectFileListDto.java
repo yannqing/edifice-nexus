@@ -35,6 +35,9 @@ public class GetProjectFileListDto {
     @Schema(description = "仅查我上传的（true 时按 upload_user_id = 当前用户过滤）")
     private Boolean mineOnly;
 
+    @Schema(description = "按申请展示：一批文件只显示一条申请，历史单文件申请保持不变")
+    private Boolean applicationsOnly;
+
     @Schema(description = "当前页")
     private Integer current = 1;
 
