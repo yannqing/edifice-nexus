@@ -6,9 +6,16 @@ import org.springframework.core.task.AsyncTaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.servlet.config.annotation.AsyncSupportConfigurer;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.boot.autoconfigure.web.servlet.WebMvcProperties;
+import java.time.Duration;
 
 @Configuration
 public class FileStreamingConfig implements WebMvcConfigurer {
+    private final WebMvcProperties properties;
+
+    public FileStreamingConfig(WebMvcProperties properties) {
+        this.properties = properties;
+    }
     @Bean
     public AsyncTaskExecutor fileStreamingExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -21,6 +28,8 @@ public class FileStreamingConfig implements WebMvcConfigurer {
 
     @Override
     public void configureAsyncSupport(AsyncSupportConfigurer configurer) {
-        configurer.setTaskExecutor(fileStreamingExecutor()).setDefaultTimeout(600000);
+        Duration timeout = properties.getAsync().getRequestTimeout();
+        configurer.setTaskExecutor(fileStreamingExecutor())
+                .setDefaultTimeout((timeout == null ? Duration.ofHours(24) : timeout).toMillis());
     }
 }
