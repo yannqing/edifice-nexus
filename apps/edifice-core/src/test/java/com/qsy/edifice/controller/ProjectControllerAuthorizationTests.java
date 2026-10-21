@@ -2,6 +2,7 @@ package com.qsy.edifice.controller;
 
 import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.dto.CreateProjectDto;
+import com.qsy.edifice.domain.dto.UpdateProjectDto;
 import com.qsy.edifice.domain.entity.SysUser;
 import com.qsy.edifice.domain.entity.ProjectStage;
 import com.qsy.edifice.exception.BusinessException;
@@ -30,6 +31,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import java.util.List;
+import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -39,6 +41,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.any;
 
 @ExtendWith(SpringExtension.class)
 @ContextConfiguration(classes = ProjectControllerAuthorizationTests.TestConfig.class)
@@ -144,6 +148,77 @@ class ProjectControllerAuthorizationTests {
         doThrow(new BusinessException("not a manager")).when(projectService).ensureProjectManager(10L, 42L, false);
         assertThrows(BusinessException.class, () -> projectController.restartStage(20L, request));
         verify(projectStageService, org.mockito.Mockito.never()).restartStage(20L);
+    }
+
+    @Test
+    void myProjectsManagerCanEditOwnProjectWithoutGlobalPermission() throws Exception {
+        authenticateWith("menu:my-projects");
+        var dto = new UpdateProjectDto(); dto.setProjectId(10L);
+        projectController.updateProjectFull(dto, authenticatedRequest());
+        verify(projectService).ensureProjectManager(10L, 42L, false);
+        verify(projectService).updateProjectFull(dto);
+    }
+
+    @Test
+    void myProjectsPermissionDoesNotAllowEditingAnotherManagersProject() throws Exception {
+        authenticateWith("menu:my-projects");
+        var dto = new UpdateProjectDto(); dto.setProjectId(10L);
+        doThrow(new BusinessException("not a manager")).when(projectService).ensureProjectManager(10L, 42L, false);
+        assertThrows(BusinessException.class, () -> projectController.updateProjectFull(dto, authenticatedRequest()));
+        verify(projectService, never()).updateProjectFull(any());
+    }
+
+    @Test
+    void myProjectsManagerCanChangeCoefficientWithoutOverwritingStageProgress() throws Exception {
+        authenticateWith("menu:my-projects");
+        var request = authenticatedRequest();
+        when(projectStageService.getProjectStageById(20L)).thenReturn(ProjectStage.builder()
+                .projectStageId(20L).projectId(10L).completionRatio(new BigDecimal("40")).stageStatus(1).build());
+        projectController.updateStageCoefficient(20L, new BigDecimal("1.05"), request);
+        verify(projectService).ensureProjectManager(10L, 42L, false);
+        var update = org.mockito.ArgumentCaptor.forClass(ProjectStage.class);
+        verify(projectStageService).updateProjectStage(update.capture());
+        assertEquals(new BigDecimal("1.05"), update.getValue().getCoefficient());
+        org.junit.jupiter.api.Assertions.assertNull(update.getValue().getCompletionRatio());
+        org.junit.jupiter.api.Assertions.assertNull(update.getValue().getStageStatus());
+    }
+
+    @Test
+    void nonManagerCannotChangeCoefficientAndInvalidCoefficientsAreRejected() throws Exception {
+        authenticateWith("menu:my-projects");
+        var request = authenticatedRequest();
+        when(projectStageService.getProjectStageById(20L)).thenReturn(ProjectStage.builder().projectId(10L).build());
+        doThrow(new BusinessException("not a manager")).when(projectService).ensureProjectManager(10L, 42L, false);
+        assertThrows(BusinessException.class, () -> projectController.updateStageCoefficient(20L, BigDecimal.ONE, request));
+        assertThrows(BusinessException.class, () -> projectController.updateStageCoefficient(20L, BigDecimal.ZERO, request));
+        assertThrows(BusinessException.class, () -> projectController.updateStageCoefficient(20L, new BigDecimal("100"), request));
+        verify(projectStageService, never()).updateProjectStage(any());
+    }
+
+    @Test
+    void globalProjectAdministratorKeepsProjectEditingAuthority() throws Exception {
+        authenticateWith("menu:all-projects");
+        var dto = new UpdateProjectDto(); dto.setProjectId(10L);
+        projectController.updateProjectFull(dto, authenticatedRequest());
+        verify(projectService).ensureProjectManager(10L, 42L, true);
+        verify(projectService).updateProjectFull(dto);
+    }
+
+    @Test
+    void unrelatedMenuDoesNotAuthorizeProjectEditingOrCoefficientChanges() {
+        authenticateWith("menu:workbench");
+        assertThrows(AccessDeniedException.class, () -> projectController.updateProjectFull(
+                new UpdateProjectDto(), mock(HttpServletRequest.class)));
+        assertThrows(AccessDeniedException.class, () -> projectController.updateStageCoefficient(
+                20L, BigDecimal.ONE, mock(HttpServletRequest.class)));
+        verifyNoInteractions(projectService, projectStageService, jwtUtils);
+    }
+
+    private HttpServletRequest authenticatedRequest() throws Exception {
+        var request = mock(HttpServletRequest.class);
+        when(request.getHeader("token")).thenReturn("access-token");
+        when(jwtUtils.getUserFromToken("access-token")).thenReturn(SysUser.builder().userId(42L).build());
+        return request;
     }
 
     private void authenticateWith(String authority) {

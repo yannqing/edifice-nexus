@@ -197,4 +197,6 @@ public interface ProjectService {
     void ensureProjectNotArchived(Long projectId);
 
     void ensureProjectManager(Long projectId, Long userId, boolean canManageAll);
+
+    void ensureProjectBusinessAccess(Long projectId, Long stageId, Long userId, boolean canManageAll);
 }

@@ -994,6 +994,21 @@ public class ProjectServiceImpl implements ProjectService {
         }
     }
 
+    @Override
+    public void ensureProjectBusinessAccess(Long projectId, Long stageId, Long userId, boolean canManageAll) {
+        ensureProjectNotArchived(projectId);
+        if (!canManageAll && (userId == null
+                || projectMemberService.getProjectMemberByProjectIdAndUserId(projectId, userId) == null)) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "仅当前项目成员或项目管理员可以操作");
+        }
+        if (stageId != null) {
+            ProjectStage stage = projectStageService.getProjectStageById(stageId);
+            if (stage == null || !Objects.equals(stage.getProjectId(), projectId)) {
+                throw new BusinessException(ErrorType.ARGS_INVALID, "所选阶段不属于当前项目");
+            }
+        }
+    }
+
     private Page<ProjectArchiveVo> getProjectArchivePage(GetProjectArchiveListDto dto, boolean archived) {
         if (dto == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL);

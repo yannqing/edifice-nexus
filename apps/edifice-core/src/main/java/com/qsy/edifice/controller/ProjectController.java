@@ -101,8 +101,13 @@ public class ProjectController {
 
     @PutMapping("/update")
     @Operation(summary = "更新项目", description = "更新项目基本信息、合同信息及成员")
-    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
-    public BaseResponse<Boolean> updateProjectFull(@RequestBody UpdateProjectDto dto) {
+    @PreAuthorize("hasAnyAuthority('menu:my-projects', 'menu:all-projects') or hasRole('SUPER_ADMIN')")
+    public BaseResponse<Boolean> updateProjectFull(@RequestBody UpdateProjectDto dto, HttpServletRequest request) throws JsonProcessingException {
+        if (dto == null || dto.getProjectId() == null) {
+            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目ID不能为空");
+        }
+        Long userId = jwtUtils.getUserFromToken(request.getHeader("token")).getUserId();
+        projectService.ensureProjectManager(dto.getProjectId(), userId, canManageAllProjects());
         projectService.updateProjectFull(dto);
         return ResultUtils.success(Code.SUCCESS, true, "更新成功");
     }
@@ -127,15 +132,21 @@ public class ProjectController {
 
     @PutMapping("/stage/coefficient")
     @Operation(summary = "更新阶段系数")
-    @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
+    @PreAuthorize("hasAnyAuthority('menu:my-projects', 'menu:all-projects') or hasRole('SUPER_ADMIN')")
     public BaseResponse<Boolean> updateStageCoefficient(@RequestParam Long stageId,
-                                                        @RequestParam BigDecimal coefficient) {
+                                                        @RequestParam BigDecimal coefficient,
+                                                        HttpServletRequest request) throws JsonProcessingException {
+        if (coefficient == null || coefficient.signum() <= 0
+                || coefficient.compareTo(new BigDecimal("99.99")) > 0) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "系数必须大于0且不超过99.99");
+        }
+        authorizeStageManagement(List.of(stageId), request);
         ProjectStage stage = projectStageService.getProjectStageById(stageId);
         if (stage == null) {
             return ResultUtils.failure(Code.FAILURE, null, "阶段不存在");
         }
-        stage.setCoefficient(coefficient);
-        projectStageService.updateProjectStage(stage);
+        projectStageService.updateProjectStage(ProjectStage.builder()
+                .projectStageId(stageId).coefficient(coefficient).build());
         return ResultUtils.success(Code.SUCCESS, true, "系数更新成功");
     }
 

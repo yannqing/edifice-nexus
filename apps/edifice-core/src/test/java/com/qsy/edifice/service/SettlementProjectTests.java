@@ -251,6 +251,7 @@ class SettlementProjectTests {
             stored.put(form.getInspectionFormId(), form); return 1;
         });
         when(forms.selectById(anyLong())).thenAnswer(call -> stored.get(call.getArgument(0)));
+        when(forms.selectByIdForUpdate(anyLong())).thenAnswer(call -> stored.get(call.getArgument(0)));
         when(flow.submit(any(), anyLong())).thenReturn(ApprovalRecords.builder().approvalRecordId(100L).build());
         when(flow.getCurrentPending(eq(ApprovalBizType.INSPECTION), anyLong()))
                 .thenReturn(ApprovalRecords.builder().approvalRecordId(100L).build());

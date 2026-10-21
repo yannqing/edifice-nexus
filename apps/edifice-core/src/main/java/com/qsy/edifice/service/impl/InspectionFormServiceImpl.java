@@ -625,6 +625,19 @@ public class InspectionFormServiceImpl implements InspectionFormService {
         if (form == null) {
             throw new BusinessException(ErrorType.INSPECTION_FORM_NOT_FOUND);
         }
+        // Match submission lock order (stage, then form) and re-read after waiting for another approval.
+        ProjectStage stage = projectStageMapper.selectByIdForUpdate(form.getProjectStageId());
+        if (stage == null) {
+            throw new BusinessException(ErrorType.STAGE_NOT_FOUND);
+        }
+        form = inspectionFormMapper.selectByIdForUpdate(dto.getInspectionFormId());
+        if (form == null) {
+            throw new BusinessException(ErrorType.INSPECTION_FORM_NOT_FOUND);
+        }
+        if (!Objects.equals(form.getProjectStageId(), stage.getProjectStageId())
+                || !Objects.equals(parseProjectId(form.getProjectId()), stage.getProjectId())) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "验工单阶段不属于当前项目");
+        }
         if (form.getInspectionFormStatus() != 0 && form.getInspectionFormStatus() != 1) {
             throw new BusinessException(ErrorType.INSPECTION_FORM_STATUS_INVALID,
                     "该验工单已审批完成，无法重复审批");
@@ -670,36 +683,33 @@ public class InspectionFormServiceImpl implements InspectionFormService {
 
         // 4. 联动阶段 / 项目状态（仅在"终审驳回"或"终审通过"时）
         if (result.rejected || result.isFinal) {
-            ProjectStage stage = projectStageService.getProjectStageById(form.getProjectStageId());
-            if (stage != null) {
-                if (result.rejected) {
-                    // 驳回的是本次验工申请，不应停止整个项目阶段。
-                    stage.setStageStatus(1);
-                    log.info("验工审批驳回，阶段保持进行中: stageId={}, stageName={}",
+            if (result.rejected) {
+                // 驳回的是本次验工申请，不应停止整个项目阶段。
+                stage.setStageStatus(1);
+                log.info("验工审批驳回，阶段保持进行中: stageId={}, stageName={}",
+                        stage.getProjectStageId(), stage.getStageName());
+            } else {
+                // 终审通过：在持有阶段行锁时累加完成比例。
+                BigDecimal formRatio = form.getCompletionRatio() != null
+                        ? form.getCompletionRatio() : new BigDecimal("100");
+                BigDecimal currentRatio = stage.getCompletionRatio() != null
+                        ? stage.getCompletionRatio() : BigDecimal.ZERO;
+                BigDecimal newRatio = currentRatio.add(formRatio);
+                if (newRatio.compareTo(new BigDecimal("100")) >= 0) {
+                    newRatio = new BigDecimal("100");
+                    stage.setStageStatus(6); // 已完成（100%）
+                    log.info("验工审批通过，阶段已完成(100%): stageId={}, stageName={}",
                             stage.getProjectStageId(), stage.getStageName());
                 } else {
-                    // 终审通过：累加完成比例
-                    BigDecimal formRatio = form.getCompletionRatio() != null
-                            ? form.getCompletionRatio() : new BigDecimal("100");
-                    BigDecimal currentRatio = stage.getCompletionRatio() != null
-                            ? stage.getCompletionRatio() : BigDecimal.ZERO;
-                    BigDecimal newRatio = currentRatio.add(formRatio);
-                    if (newRatio.compareTo(new BigDecimal("100")) >= 0) {
-                        newRatio = new BigDecimal("100");
-                        stage.setStageStatus(6); // 已完成（100%）
-                        log.info("验工审批通过，阶段已完成(100%): stageId={}, stageName={}",
-                                stage.getProjectStageId(), stage.getStageName());
-                    } else {
-                        // 部分完成，阶段保持 1(进行中)，可继续提交验工单
-                        stage.setStageStatus(1);
-                        log.info("验工审批通过，阶段部分完成({}%): stageId={}, stageName={}",
-                                newRatio, stage.getProjectStageId(), stage.getStageName());
-                    }
-                    stage.setCompletionRatio(newRatio);
+                    // 部分完成，阶段保持 1(进行中)，可继续提交验工单
+                    stage.setStageStatus(1);
+                    log.info("验工审批通过，阶段部分完成({}%): stageId={}, stageName={}",
+                            newRatio, stage.getProjectStageId(), stage.getStageName());
                 }
-                projectStageService.updateProjectStage(stage);
-                projectStageService.syncProjectStatus(stage.getProjectId());
+                stage.setCompletionRatio(newRatio);
             }
+            projectStageService.updateProjectStage(stage);
+            projectStageService.syncProjectStatus(stage.getProjectId());
         }
     }
 

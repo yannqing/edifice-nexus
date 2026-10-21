@@ -58,6 +58,7 @@ class InspectionFormServiceImplTests {
     void rejectedInspectionKeepsStageInProgress() {
         InspectionForm form = InspectionForm.builder()
                 .inspectionFormId(100L)
+                .projectId("10")
                 .projectStageId(20L)
                 .applyUserId(1L)
                 .inspectionFormStatus(0)
@@ -76,11 +77,12 @@ class InspectionFormServiceImplTests {
                 .build();
 
         when(inspectionFormMapper.selectById(100L)).thenReturn(form);
+        when(inspectionFormMapper.selectByIdForUpdate(100L)).thenReturn(form);
+        when(projectStageMapper.selectByIdForUpdate(20L)).thenReturn(stage);
         when(approvalFlowService.getCurrentPending(ApprovalBizType.INSPECTION, 100L)).thenReturn(pending);
         when(approvalFlowService.approve(any(), any())).thenReturn(
                 new ApprovalFlowService.ApprovalResult(
                         200L, ApprovalBizType.INSPECTION, 100L, true, true, null));
-        when(projectStageService.getProjectStageById(20L)).thenReturn(stage);
 
         service.approvalInspection(new ApprovalInspectionDto(100L, 2, "材料需要补充", null, true), 2L);
 

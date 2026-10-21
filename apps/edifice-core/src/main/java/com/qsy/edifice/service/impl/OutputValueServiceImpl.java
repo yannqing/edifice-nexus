@@ -215,11 +215,7 @@ public class OutputValueServiceImpl implements OutputValueService {
                 currentRatio = (checkStage != null && checkStage.getStageStatus() != null && checkStage.getStageStatus() == 6)
                         ? new BigDecimal("100") : BigDecimal.ZERO;
             }
-            BigDecimal maxAllocatedRatio = stageOutputValues.stream()
-                    .filter(ov -> ov.getStatus() != null && ov.getStatus() >= 1)
-                    .map(ov -> ov.getStageCompletionRatio() != null ? ov.getStageCompletionRatio() : new BigDecimal("100"))
-                    .max(BigDecimal::compareTo)
-                    .orElse(BigDecimal.ZERO);
+            BigDecimal maxAllocatedRatio = allocatedCompletionRatio(stageOutputValues, null);
             if (currentRatio.compareTo(maxAllocatedRatio) <= 0) {
                 throw new BusinessException(ErrorType.OPERATION_FAILED, "该阶段产值已全部分配完毕，无法重复提交");
             }
@@ -569,18 +565,7 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        // 计算增量完成比例：当前累计比例 - 已分配的累计比例之和
-        BigDecimal alreadyCompletionRatio = allocatedList.stream()
-                .map(ov -> ov.getStageCompletionRatio() != null ? ov.getStageCompletionRatio() : BigDecimal.ZERO)
-                .reduce(BigDecimal.ZERO, BigDecimal::add)
-                .setScale(2, RoundingMode.HALF_UP);
-        // 兼容旧数据：如果没有 stage_completion_ratio，用 stage_incremental_ratio 累加
-        if (alreadyCompletionRatio.signum() == 0 && !allocatedList.isEmpty()) {
-            alreadyCompletionRatio = allocatedList.stream()
-                    .map(ov -> ov.getStageIncrementalRatio() != null ? ov.getStageIncrementalRatio() : BigDecimal.ZERO)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add)
-                    .setScale(2, RoundingMode.HALF_UP);
-        }
+        BigDecimal alreadyCompletionRatio = allocatedCompletionRatio(allocatedList, null);
         BigDecimal incrementalRatio = completionRatio.subtract(alreadyCompletionRatio).max(BigDecimal.ZERO);
 
         BigDecimal basePart = baseAmt.multiply(baseRatio).multiply(incrementalRatio)
@@ -1050,9 +1035,12 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(ErrorType.OUTPUT_VALUE_NOT_FOUND));
         if (ov.getStatus() != 0) throw new BusinessException(ErrorType.OUTPUT_VALUE_STATUS_INVALID, "当前状态无法确认");
-        if (hasConfirmedStageOutputValue(stageOutputValues, outputValueId)) {
+        BigDecimal priorRatio = allocatedCompletionRatio(stageOutputValues, outputValueId);
+        BigDecimal currentRatio = ov.getStageCompletionRatio() != null
+                ? ov.getStageCompletionRatio() : BD_100;
+        if (priorRatio.signum() > 0 && currentRatio.compareTo(priorRatio) <= 0) {
             throw new BusinessException(ErrorType.OPERATION_FAILED,
-                    "您的这个产值已经通过其他分配单确定，无法进行二次确认");
+                    "该阶段的本次完成比例已分配，无法重复确认");
         }
         assertCurrentHandler(ov, operatorId, "您不是当前确认人");
         if (approveUserId == null) {
@@ -1083,6 +1071,29 @@ public class OutputValueServiceImpl implements OutputValueService {
                 .filter(item -> excludeOutputValueId == null
                         || !Objects.equals(item.getOutputValueId(), excludeOutputValueId))
                 .anyMatch(item -> item.getStatus() != null && item.getStatus() >= 1);
+    }
+
+    private BigDecimal allocatedCompletionRatio(List<OutputValue> outputValues, Long excludeId) {
+        BigDecimal allocated = BigDecimal.ZERO;
+        List<OutputValue> confirmed = outputValues.stream()
+                .filter(item -> item.getStatus() != null && item.getStatus() >= 1)
+                .filter(item -> excludeId == null || !Objects.equals(item.getOutputValueId(), excludeId))
+                .sorted(Comparator.comparing(OutputValue::getCreatedTime,
+                                Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(OutputValue::getOutputValueId,
+                                Comparator.nullsFirst(Comparator.naturalOrder())))
+                .toList();
+        // Cumulative snapshots replace prior progress; only legacy incremental-only rows are added.
+        for (OutputValue item : confirmed) {
+            if (item.getStageCompletionRatio() != null && item.getStageCompletionRatio().signum() > 0) {
+                allocated = allocated.max(item.getStageCompletionRatio());
+            } else if (item.getStageIncrementalRatio() != null) {
+                allocated = allocated.add(item.getStageIncrementalRatio());
+            } else {
+                allocated = BD_100;
+            }
+        }
+        return allocated.max(BigDecimal.ZERO).min(BD_100).setScale(2, RoundingMode.HALF_UP);
     }
 
     @Override

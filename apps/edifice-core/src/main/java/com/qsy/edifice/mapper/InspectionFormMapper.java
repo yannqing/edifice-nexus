@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.qsy.edifice.domain.entity.InspectionForm;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
@@ -12,6 +13,9 @@ import java.util.List;
  */
 @Mapper
 public interface InspectionFormMapper extends BaseMapper<InspectionForm> {
+
+    @Select("SELECT * FROM inspection_form WHERE inspection_form_id = #{id} AND is_delete = 0 FOR UPDATE")
+    InspectionForm selectByIdForUpdate(@Param("id") Long id);
 
     /**
      * 根据验工单编号查询验工单

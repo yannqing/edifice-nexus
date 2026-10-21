@@ -17,6 +17,8 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
@@ -24,6 +26,7 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -62,8 +65,9 @@ public class TimesheetServiceImpl implements TimesheetService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Long saveOrUpdateTimesheet(TimesheetDto dto, Long userId) {
-        if (dto.getProjectId() == null) {
+        if (dto == null || dto.getProjectId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请选择项目");
         }
         if (dto.getWorkType() == null) {
@@ -78,12 +82,19 @@ public class TimesheetServiceImpl implements TimesheetService {
         if (dto.getHours().compareTo(new BigDecimal("24")) > 0) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "单日工时不能超过24小时");
         }
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        boolean canManageAll = authentication != null && authentication.getAuthorities().stream().anyMatch(authority ->
+                "menu:all-projects".equals(authority.getAuthority()) || "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
+        projectService.ensureProjectBusinessAccess(dto.getProjectId(), dto.getProjectStageId(), userId, canManageAll);
 
         if (dto.getTimesheetId() != null) {
             // 更新
             Timesheet existing = timesheetMapper.selectById(dto.getTimesheetId());
             if (existing == null || !existing.getUserId().equals(userId)) {
                 throw new BusinessException(ErrorType.NO_AUTH_ERROR);
+            }
+            if (!Objects.equals(existing.getProjectId(), dto.getProjectId())) {
+                projectService.ensureProjectBusinessAccess(existing.getProjectId(), existing.getProjectStageId(), userId, canManageAll);
             }
 
             existing.setProjectId(dto.getProjectId());

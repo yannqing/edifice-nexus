@@ -17,9 +17,11 @@ import com.qsy.edifice.mapper.SysUserMapper;
 import com.qsy.edifice.service.AcceptanceService;
 import com.qsy.edifice.service.ApprovalFlowService;
 import com.qsy.edifice.service.ProjectMemberService;
+import com.qsy.edifice.service.ProjectService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -67,12 +69,15 @@ public class AcceptanceServiceImpl implements AcceptanceService {
     @Resource
     private ProjectMemberService projectMemberService;
 
+    @Resource
+    private ProjectService projectService;
+
     // ==================== 创建 ====================
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createAndSubmit(CreateAcceptanceDto dto, Long applyUserId) {
-        if (dto.getProjectId() == null || dto.getAcceptanceType() == null
+        if (dto == null || dto.getProjectId() == null || dto.getAcceptanceType() == null
                 || !StringUtils.hasText(dto.getTitle())) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目 / 类型 / 标题不能为空");
         }
@@ -82,6 +87,10 @@ public class AcceptanceServiceImpl implements AcceptanceService {
         if (dto.getAcceptanceType() == TYPE_STAGE && dto.getProjectStageId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "阶段性验收必须选择项目阶段");
         }
+        var authentication = SecurityContextHolder.getContext().getAuthentication();
+        boolean canManageAll = authentication != null && authentication.getAuthorities().stream().anyMatch(authority ->
+                "menu:all-projects".equals(authority.getAuthority()) || "ROLE_SUPER_ADMIN".equals(authority.getAuthority()));
+        projectService.ensureProjectBusinessAccess(dto.getProjectId(), dto.getProjectStageId(), applyUserId, canManageAll);
 
         Long firstApproverId = dto.getFirstApproverId();
         if (firstApproverId == null) {
