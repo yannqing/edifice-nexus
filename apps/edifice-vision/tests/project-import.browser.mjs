@@ -126,10 +126,28 @@ try {
   const failedResult = dialog.getByText("导入完成：成功 0 条，失败 1 条", { exact: true });
   await failedResult.waitFor();
   assert((await failedResult.getAttribute("class")).includes("text-rose-600"), "All-failed import must not look successful");
+  await dialog.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await dialog.waitFor({ state: "hidden" });
+  await page.getByRole("button", { name: "导入", exact: true }).click();
+  const engineeringFormats = ["GBQ7", "GDLPB6", "GEC5", "GTJ", "GJG", "GQI"];
+  const contractInput = dialog.locator('input[type="file"]').nth(1);
+  const accepted = (await contractInput.getAttribute("accept")).split(",");
+  for (const extension of engineeringFormats) assert(accepted.includes("." + extension.toLowerCase()));
+  assert.equal(await dialog.locator('input[type="file"]').nth(0).getAttribute("accept"), ".xlsx,.xls");
+  await contractInput.setInputFiles(engineeringFormats.map((extension) => ({
+    name: "estimate." + extension, mimeType: "application/octet-stream", buffer: Buffer.from("isolated engineering upload fixture"),
+  })));
+  await page.waitForFunction(() => document.querySelector('[role="dialog"] input[type="file"]')?.disabled === false);
+  for (const extension of engineeringFormats) {
+    await dialog.getByText("estimate." + extension, { exact: true }).waitFor();
+    assert([...sessions.values()].some((session) => session.file.displayName === "estimate." + extension && session.file.fileType === "contract"));
+  }
+  assert(await start().isDisabled(), "Engineering attachments must not replace the Excel workbook");
   assert.deepEqual(errors, []);
   assert.deepEqual(unexpected, []);
   console.log(JSON.stringify({ uploadsAndImportMocked: true, contractRequired: true, unfinishedUploadBlocked: true,
-    importCloseBlocked: true, repeatedImportBlocked: true, contractIdsSubmitted: true, resetsOnClose: true, duplicateNamesBlocked: true, failedImportMarked: true, errors, output }));
+    importCloseBlocked: true, repeatedImportBlocked: true, contractIdsSubmitted: true, resetsOnClose: true, duplicateNamesBlocked: true, failedImportMarked: true,
+    engineeringFormatsAccepted: engineeringFormats, excelRestrictionPreserved: true, errors, output }));
 } finally {
   await context.close();
   await browser.close();

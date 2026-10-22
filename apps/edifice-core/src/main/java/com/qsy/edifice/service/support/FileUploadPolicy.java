@@ -12,7 +12,8 @@ public final class FileUploadPolicy {
     private static final Set<String> DOCUMENTS = Set.of(
             "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "md", "csv", "rtf",
             "odt", "ods", "odp", "jpg", "jpeg", "png", "gif", "bmp", "webp", "svg", "ico", "tiff", "tif",
-            "mp3", "wav", "flac", "aac", "ogg", "wma", "m4a", "opus", "zip", "rar", "7z", "dwg", "dxf");
+            "mp3", "wav", "flac", "aac", "ogg", "wma", "m4a", "opus", "zip", "rar", "7z", "dwg", "dxf",
+            "gbq7", "gdlpb6", "gec5", "gtj", "gjg", "gqi");
 
     private FileUploadPolicy() {}
 

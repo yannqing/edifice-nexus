@@ -13,6 +13,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.file.Path;
+import java.util.Locale;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -34,6 +35,40 @@ class FileStorageTests {
         assertThrows(BusinessException.class, () -> FileUploadPolicy.validate("file.pdf", 1, "import"));
         assertThrows(BusinessException.class, () -> FileUploadPolicy.validate("file.pdf", 1, null));
         assertDoesNotThrow(() -> FileUploadPolicy.validate("drawing.DWG", 1, "project"));
+    }
+
+    @Test void engineeringFormatsUseSharedAttachmentPolicyAndAcceptCaseVariants() {
+        for (String extension : new String[]{"gbq7", "gdlpb6", "gec5", "gtj", "gjg", "gqi"}) {
+            for (String variant : new String[]{extension, extension.toUpperCase(Locale.ROOT),
+                    extension.substring(0, 1).toUpperCase(Locale.ROOT) + extension.substring(1)}) {
+                for (String purpose : new String[]{"project", "contract", "inspection", "bid"}) {
+                    assertDoesNotThrow(() -> FileUploadPolicy.validate("estimate." + variant, FileUploadPolicy.MAX_SIZE, purpose));
+                }
+                assertEquals(extension, FileUploadPolicy.extension("estimate." + variant));
+                assertThrows(BusinessException.class, () -> FileUploadPolicy.validate("estimate." + variant, 1, "import"));
+            }
+            assertThrows(BusinessException.class, () -> FileUploadPolicy.validate("estimate." + extension + ".exe", 1, "project"));
+            assertThrows(BusinessException.class, () -> FileUploadPolicy.validate("../estimate." + extension, 1, "project"));
+            assertThrows(BusinessException.class, () -> FileUploadPolicy.validate("estimate." + extension, FileUploadPolicy.MAX_SIZE + 1, "project"));
+        }
+    }
+
+    @Test void engineeringFormatsRemainDownloadsInsteadOfUnsafeInlinePreviews() throws Exception {
+        FileObjectStorage storage = mock(FileObjectStorage.class);
+        FileDownloadResponse downloads = new FileDownloadResponse();
+        ReflectionTestUtils.setField(downloads, "storage", storage);
+        for (String extension : new String[]{"gbq7", "gdlpb6", "gec5", "gtj", "gjg", "gqi"}) {
+            Files file = new Files(); file.setFileSize(10L); file.setFileExtension(extension);
+            file.setDisplayName("estimate." + extension); file.setMimeType("application/octet-stream");
+            var request = new MockHttpServletRequest("HEAD", "/file/download/1");
+            request.setParameter("mode", "preview");
+            var response = downloads.response(file, request);
+            assertTrue(response.getHeaders().getContentDisposition().isAttachment());
+            assertEquals("application/octet-stream", response.getHeaders().getContentType().toString());
+            response.getBody().writeTo(new ByteArrayOutputStream());
+            verify(storage).checkAvailable(file);
+        }
+        verifyNoMoreInteractions(storage);
     }
 
     @Test void legacyResolutionPreservesActualRootLayoutAndRejectsEscape() throws Exception {

@@ -5,7 +5,7 @@ export const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024;
 export const MAX_FILE_SIZE_LABEL = "5GB";
 export const MAX_BATCH_FILES = 20;
 export type UploadPurpose = "contract" | "project" | "inspection" | "bid" | "import";
-export const ATTACHMENT_ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.rtf,.odt,.ods,.odp,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.ico,.tiff,.tif,.mp3,.wav,.flac,.aac,.ogg,.wma,.m4a,.opus,.zip,.rar,.7z,.dwg,.dxf";
+export const ATTACHMENT_ACCEPT = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.rtf,.odt,.ods,.odp,.jpg,.jpeg,.png,.gif,.bmp,.webp,.svg,.ico,.tiff,.tif,.mp3,.wav,.flac,.aac,.ogg,.wma,.m4a,.opus,.zip,.rar,.7z,.dwg,.dxf,.gbq7,.gdlpb6,.gec5,.gtj,.gjg,.gqi";
 
 interface UploadSession {
   uploadId: string;
