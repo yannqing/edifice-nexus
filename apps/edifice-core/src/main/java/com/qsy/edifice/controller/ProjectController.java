@@ -7,6 +7,7 @@ import com.qsy.edifice.domain.common.BaseResponse;
 import com.qsy.edifice.domain.dto.CreateProjectDto;
 import com.qsy.edifice.domain.dto.GetAllProjectListDto;
 import com.qsy.edifice.domain.dto.GetMyProjectListDto;
+import com.qsy.edifice.domain.dto.ImportProjectDto;
 import com.qsy.edifice.domain.dto.UpdateProjectDto;
 import com.qsy.edifice.domain.entity.ProjectStageTemplate;
 import com.qsy.edifice.domain.entity.ProjectStage;
@@ -17,6 +18,7 @@ import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.domain.vo.ProjectDetailVo;
 import com.qsy.edifice.domain.vo.ProjectLifecycleVo;
 import com.qsy.edifice.domain.vo.ProjectListVo;
+import com.qsy.edifice.domain.vo.ProjectImportResultVo;
 import com.qsy.edifice.domain.vo.ProjectStatisticsVo;
 import com.qsy.edifice.domain.vo.SettlementProjectPageVo;
 import com.qsy.edifice.service.SettlementProjectService;
@@ -272,21 +274,23 @@ public class ProjectController {
     @PostMapping("/import")
     @Operation(summary = "导入项目", description = "通过 Excel 文件批量导入项目")
     @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
-    public BaseResponse<String> importProjects(
+    public BaseResponse<ProjectImportResultVo> importProjects(
             @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "contractFileIds", required = false) List<Long> contractFileIds,
             HttpServletRequest request) throws Exception {
         String token = request.getHeader("token");
         SysUser loginUser = jwtUtils.getUserFromToken(token);
-        String result = projectExcelService.importProjects(file, loginUser.getUserId());
+        ProjectImportResultVo result = projectExcelService.importProjects(file, contractFileIds, loginUser.getUserId(), request);
         return ResultUtils.success(Code.SUCCESS, result);
     }
 
     @PostMapping("/import-file")
     @PreAuthorize("hasAuthority('menu:all-projects') or hasRole('SUPER_ADMIN')")
-    public BaseResponse<String> importStoredProject(@RequestBody java.util.Map<String, Long> body,
+    public BaseResponse<ProjectImportResultVo> importStoredProject(@RequestBody ImportProjectDto body,
                                                    HttpServletRequest request) throws Exception {
         Long userId = jwtUtils.getUserFromToken(request.getHeader("token")).getUserId();
-        return ResultUtils.success(Code.SUCCESS, storedProjectImport.importFile(body.get("fileId"), userId, request));
+        return ResultUtils.success(Code.SUCCESS, storedProjectImport.importFile(
+                body.getFileId(), body.getContractFileIds(), userId, request));
     }
 
     private boolean canViewAllLifecycle() {

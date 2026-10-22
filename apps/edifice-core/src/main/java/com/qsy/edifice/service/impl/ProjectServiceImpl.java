@@ -361,6 +361,62 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Page<ProjectTreeNodeVo> getProjectTree(GetAllProjectListDto dto, Long userId, boolean canViewAll) {
+        validateTreeQuery(dto, userId);
+        Page<ProjectTreeNodeVo> page = projectMapper.selectTreeRoots(new Page<>(dto.getCurrent(), dto.getPageSize()), dto, userId, canViewAll);
+        if (page.getRecords().isEmpty()) return page;
+        List<Long> ids = page.getRecords().stream().map(ProjectTreeNodeVo::getProjectId).toList();
+        Set<Long> visible = canViewAll ? new HashSet<>(ids) : new HashSet<>(projectMapper.selectVisibleTreeProjectIds(ids, userId));
+        List<ProjectListVo> projects = projectMapper.selectBatchIds(ids).stream()
+                .filter(project -> visible.contains(project.getProjectId())).map(this::convertToListVo).toList();
+        fillFileCounts(projects);
+        Map<Long, ProjectListVo> byId = projects.stream().collect(Collectors.toMap(ProjectListVo::getProjectId, p -> p));
+        page.getRecords().forEach(node -> node.setProject(byId.get(node.getProjectId())));
+        return page;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ProjectListVo> getProjectTreeChildren(Long parentId, GetAllProjectListDto dto, Long userId, boolean canViewAll) {
+        validateTreeQuery(dto, userId);
+        if (parentId == null || (!canViewAll && !projectMapper.hasTreeAccess(parentId, userId)))
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "项目不存在或无权查看");
+        Project parent = projectMapper.selectById(parentId);
+        if (parent == null || parent.getParentProjectId() != null)
+            throw new BusinessException(ErrorType.ARGS_INVALID, "请选择有效的总项目");
+        Page<Project> page = projectMapper.selectTreeChildren(new Page<>(dto.getCurrent(), dto.getPageSize()), parentId, dto, userId, canViewAll);
+        Page<ProjectListVo> result = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
+        List<ProjectListVo> records = page.getRecords().stream().map(this::convertToListVo).toList();
+        fillFileCounts(records);
+        result.setRecords(records);
+        return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProjectTreeStatisticsVo getProjectTreeStatistics(GetAllProjectListDto dto, Long userId, boolean canViewAll) {
+        validateTreeQuery(dto, userId);
+        ProjectTreeStatisticsVo statistics = projectMapper.selectTreeStatistics(dto, userId, canViewAll);
+        statistics.setSummary(projectMapper.selectTreeSummary(dto, userId, canViewAll));
+        return statistics;
+    }
+
+    private void validateTreeQuery(GetAllProjectListDto dto, Long userId) {
+        if (dto == null || userId == null) throw new BusinessException(ErrorType.ARGS_NOT_NULL);
+        if (dto.getParentProjectId() != null || (dto.getProjectLevel() != null && !Set.of(0, 1).contains(dto.getProjectLevel()))
+                || (dto.getArchiveStatus() != null && !Set.of(0, 1).contains(dto.getArchiveStatus()))
+                || (dto.getProjectStatus() != null && !Set.of(0, 1, 2, 3, 4).contains(dto.getProjectStatus())))
+            throw new BusinessException(ErrorType.ARGS_INVALID, "无效的项目筛选条件");
+        if (dto.getKeywords() != null) {
+            dto.setKeywords(dto.getKeywords().trim());
+            if (dto.getKeywords().length() > 255) throw new BusinessException(ErrorType.ARGS_INVALID, "搜索内容不能超过255个字符");
+        }
+        dto.setCurrent(dto.getCurrent() == null ? 1 : Math.max(1, dto.getCurrent()));
+        dto.setPageSize(dto.getPageSize() == null ? 10 : Math.max(1, Math.min(100, dto.getPageSize())));
+    }
+
+    @Override
     public Page<ProjectListVo> getAllProjectPage(GetAllProjectListDto dto) {
         if (dto == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL);

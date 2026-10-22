@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Download } from "lucide-react";
 import {
@@ -25,37 +25,55 @@ interface ImportProjectDialogProps {
   onSuccess: () => void;
 }
 
-export function ImportProjectDialog({
+export function ImportProjectDialog(props: ImportProjectDialogProps) {
+  return <ImportProjectDialogSession key={props.open ? "open" : "closed"} {...props} />;
+}
+
+function ImportProjectDialogSession({
   open,
   onOpenChange,
   onSuccess,
 }: ImportProjectDialogProps) {
   const [file, setFile] = useState<FilesVo | null>(null);
+  const [contractFiles, setContractFiles] = useState<FilesVo[]>([]);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState("");
   const [isError, setIsError] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
+  const [contractBusy, setContractBusy] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const importing = useRef(false);
+  const busy = uploading || fileBusy || contractBusy;
+  const contractNames = contractFiles.map((item) => item.displayName.trim());
+  const duplicateNames = [...new Set(contractNames.filter((name, index) => contractNames.indexOf(name) !== index))];
 
-  const handleReset = () => {
-    setFile(null);
-    setResult("");
-    setIsError(false);
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && (busy || importing.current)) return;
+    onOpenChange(nextOpen);
   };
 
   const handleImport = async () => {
-    if (!file || fileBusy) return;
+    if (!file || !contractFiles.length || busy || completed || duplicateNames.length || importing.current) return;
 
+    importing.current = true;
     setUploading(true);
     setResult("");
     setIsError(false);
 
     try {
-      const res = await importProjectsByFileId(file.fileId);
+      const res = await importProjectsByFileId(file.fileId, contractFiles.map((item) => item.fileId));
       if (res.code === ResponseCode.SUCCESS) {
-        toast.success(res.data || "导入成功");
-        setResult(res.data || "导入成功");
-        setIsError(false);
-        onSuccess();
+        const imported = res.data;
+        setResult(imported.message);
+        setIsError(imported.successCount === 0 || imported.failCount > 0);
+        if (imported.successCount > 0) {
+          setCompleted(true);
+          if (imported.failCount > 0) toast.warning(imported.message);
+          else toast.success(imported.message);
+          onSuccess();
+        } else {
+          toast.error(imported.message);
+        }
       } else {
         // toast 由 request.ts 统一提示
         setResult(res.msg || "导入失败");
@@ -65,6 +83,7 @@ export function ImportProjectDialog({
       setResult("网络异常，请稍后重试");
       setIsError(true);
     } finally {
+      importing.current = false;
       setUploading(false);
     }
   };
@@ -81,12 +100,13 @@ export function ImportProjectDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={(v) => {
-        if (!v) handleReset();
-        onOpenChange(v);
-      }}
+      onOpenChange={handleOpenChange}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent
+        className={cn("max-w-lg", busy && "[&>button]:hidden")}
+        onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }}
+        onPointerDownOutside={(event) => { if (busy) event.preventDefault(); }}
+      >
         <DialogHeader>
           <DialogTitle>导入项目</DialogTitle>
           <DialogDescription>
@@ -108,20 +128,35 @@ export function ImportProjectDialog({
             <Button
               variant="outline"
               className="text-blue-600 border-blue-200 hover:bg-blue-100"
+              disabled={busy}
               onClick={handleDownloadTemplate}
             >
               <Download className="w-4 h-4 mr-1" /> 下载模板
             </Button>
           </div>
 
-          <FileUploadField purpose="import" maxFiles={1} accept=".xlsx,.xls" value={file ? [file] : []}
-            disabled={uploading} onBusyChange={setFileBusy} onChange={(files) => { setFile(files[0] ?? null); setResult(""); }} />
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Excel 项目文件</p>
+            <FileUploadField purpose="import" maxFiles={1} accept=".xlsx,.xls" value={file ? [file] : []}
+              disabled={busy} onBusyChange={setFileBusy}
+              onChange={(files) => { setFile(files[0] ?? null); setResult(""); setCompleted(false); }} />
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium">合同主文件（Excel 列：合同主文件名）</p>
+            <FileUploadField purpose="contract" value={contractFiles} label="选择合同文件"
+              disabled={busy} onBusyChange={setContractBusy}
+              onChange={(files) => { setContractFiles(files); setResult(""); }} />
+            {duplicateNames.length > 0 && <p role="alert" className="text-sm text-rose-600 break-all">
+              合同文件名重复：{duplicateNames.join("、")}
+            </p>}
+          </div>
 
           {/* 导入结果 */}
           {result && (
             <div
               className={cn(
-                "p-3 rounded-xl text-sm",
+                "p-3 rounded-xl text-sm break-words",
                 isError
                   ? "bg-rose-50 border border-rose-200 text-rose-600"
                   : "bg-emerald-50 border border-emerald-200 text-emerald-600"
@@ -134,12 +169,12 @@ export function ImportProjectDialog({
 
         {/* 操作按钮 */}
         <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 mt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" disabled={busy} onClick={() => handleOpenChange(false)}>
             关闭
           </Button>
           <Button
             className="bg-blue-600 hover:bg-blue-700 text-white"
-            disabled={!file || uploading || fileBusy}
+            disabled={!file || !contractFiles.length || busy || completed || duplicateNames.length > 0}
             onClick={handleImport}
           >
             {uploading ? (
@@ -148,7 +183,7 @@ export function ImportProjectDialog({
                 导入中...
               </>
             ) : (
-              "开始导入"
+              completed ? "已导入" : "开始导入"
             )}
           </Button>
         </div>

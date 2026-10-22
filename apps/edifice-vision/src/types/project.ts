@@ -114,6 +114,36 @@ export interface ProjectStatisticsVo {
   totalContractAmount: number;
 }
 
+export interface ProjectTreeNode {
+  projectId: string;
+  childCount: number;
+  selfMatches: boolean;
+  project: ProjectListVo | null;
+}
+
+export interface ProjectTreeStatistics {
+  allCount: number;
+  notStartedCount: number;
+  processingCount: number;
+  pendingAcceptanceCount: number;
+  completedCount: number;
+  archivedCount: number;
+  summary: ProjectTreeSummary;
+}
+
+export interface ProjectTreeSummary {
+  totalCount: number;
+  childCount: number;
+  processingCount: number;
+  pendingAcceptanceCount: number;
+  completedCount: number;
+  rootContractAmount: number;
+  childContractAmount: number;
+}
+
+export type ProjectTreeScope = "mine" | "all";
+export type ProjectTreeQuery = Omit<GetAllProjectListParams, "parentProjectId">;
+
 // ==================== 查询参数 ====================
 
 export interface GetMyProjectListParams {

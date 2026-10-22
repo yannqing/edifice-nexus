@@ -1,6 +1,7 @@
 package com.qsy.edifice.service;
 
-import com.qsy.edifice.domain.excel.ProjectExcelData;
+import com.qsy.edifice.domain.vo.ProjectImportResultVo;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -30,9 +31,12 @@ public interface ProjectExcelService {
     /**
      * 导入项目
      * @param file Excel文件
+     * @param contractFileIds 通过统一上传获取的合同主文件ID
      * @param userId 当前登录用户id
-     * @return 导入结果描述
+     * @param request 当前请求，用于文件访问权限校验
+     * @return 导入计数、错误及描述
      * @throws IOException IO异常
      */
-    String importProjects(MultipartFile file, Long userId) throws IOException;
+    ProjectImportResultVo importProjects(MultipartFile file, List<Long> contractFileIds, Long userId,
+                                        HttpServletRequest request) throws IOException;
 }

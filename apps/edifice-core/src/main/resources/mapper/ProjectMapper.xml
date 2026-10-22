@@ -2,6 +2,91 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.qsy.edifice.mapper.ProjectMapper">
 
+    <sql id="treeVisibility">
+        p.is_delete = 0
+        <if test="!canViewAll">
+            AND EXISTS (SELECT 1 FROM project_member pm WHERE pm.project_id=p.project_id
+                        AND pm.user_id=#{userId} AND pm.is_delete=0)
+        </if>
+        <if test="q.keywords != null and q.keywords != ''">
+            AND (p.project_name LIKE CONCAT('%', #{q.keywords}, '%') OR p.project_code LIKE CONCAT('%', #{q.keywords}, '%')
+                 OR (p.parent_project_id IS NOT NULL
+                     AND (root.project_name LIKE CONCAT('%', #{q.keywords}, '%') OR root.project_code LIKE CONCAT('%', #{q.keywords}, '%'))
+                     <if test="!canViewAll">AND EXISTS (SELECT 1 FROM project_member rpm WHERE rpm.project_id=root.project_id
+                         AND rpm.user_id=#{userId} AND rpm.is_delete=0)</if>))
+        </if>
+        <if test="q.projectType != null">AND p.project_type=#{q.projectType}</if>
+        <if test="q.projectLevel != null and q.projectLevel == 0">AND p.parent_project_id IS NULL</if>
+        <if test="q.projectLevel != null and q.projectLevel == 1">AND p.parent_project_id IS NOT NULL</if>
+    </sql>
+
+    <sql id="treeFilters">
+        <include refid="treeVisibility"/>
+        <if test="q.projectStatus != null">AND p.project_status=#{q.projectStatus}</if>
+        <if test="q.archiveStatus != null and q.archiveStatus == 1">AND p.archive_status=1</if>
+        <if test="q.archiveStatus != null and q.archiveStatus == 0">AND COALESCE(p.archive_status,0)!=1</if>
+    </sql>
+
+    <!-- Group before pagination: a matching child must never be separated from its parent. -->
+    <select id="selectTreeRoots" resultType="com.qsy.edifice.domain.vo.ProjectTreeNodeVo">
+        SELECT root.project_id AS projectId,
+               SUM(CASE WHEN p.parent_project_id IS NOT NULL THEN 1 ELSE 0 END) AS childCount,
+               MAX(CASE WHEN p.parent_project_id IS NULL THEN 1 ELSE 0 END) AS selfMatches
+        FROM project p
+        JOIN project root ON root.project_id=COALESCE(p.parent_project_id,p.project_id)
+             AND root.parent_project_id IS NULL AND root.is_delete=0
+        WHERE <include refid="treeFilters"/>
+        GROUP BY root.project_id, root.created_time
+        ORDER BY root.created_time DESC, root.project_id DESC
+    </select>
+
+    <select id="selectTreeChildren" resultMap="BaseResultMap">
+        SELECT p.* FROM project p
+        JOIN project root ON root.project_id=p.parent_project_id AND root.parent_project_id IS NULL AND root.is_delete=0
+        WHERE p.parent_project_id=#{parentId} AND <include refid="treeFilters"/>
+        ORDER BY p.created_time DESC, p.project_id DESC
+    </select>
+
+    <select id="selectVisibleTreeProjectIds" resultType="java.lang.Long">
+        SELECT DISTINCT pm.project_id FROM project_member pm WHERE pm.user_id=#{userId} AND pm.is_delete=0
+        AND pm.project_id IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+    </select>
+
+    <select id="hasTreeAccess" resultType="boolean">
+        SELECT EXISTS (SELECT 1 FROM project p JOIN project_member pm ON pm.project_id=p.project_id
+            AND pm.user_id=#{userId} AND pm.is_delete=0
+            WHERE p.is_delete=0 AND (p.project_id=#{parentId} OR p.parent_project_id=#{parentId}))
+    </select>
+
+    <select id="selectTreeStatistics" resultType="com.qsy.edifice.domain.vo.ProjectTreeStatisticsVo">
+        SELECT COUNT(DISTINCT root.project_id) AS allCount,
+               COUNT(DISTINCT CASE WHEN COALESCE(p.archive_status,0)!=1 AND p.project_status=0 THEN root.project_id END) AS notStartedCount,
+               COUNT(DISTINCT CASE WHEN COALESCE(p.archive_status,0)!=1 AND p.project_status=1 THEN root.project_id END) AS processingCount,
+               COUNT(DISTINCT CASE WHEN COALESCE(p.archive_status,0)!=1 AND p.project_status=2 THEN root.project_id END) AS pendingAcceptanceCount,
+               COUNT(DISTINCT CASE WHEN COALESCE(p.archive_status,0)!=1 AND p.project_status=4 THEN root.project_id END) AS completedCount,
+               COUNT(DISTINCT CASE WHEN p.archive_status=1 THEN root.project_id END) AS archivedCount
+        FROM project p
+        JOIN project root ON root.project_id=COALESCE(p.parent_project_id,p.project_id)
+             AND root.parent_project_id IS NULL AND root.is_delete=0
+        WHERE <include refid="treeVisibility"/>
+    </select>
+
+    <select id="selectTreeSummary" resultType="com.qsy.edifice.domain.vo.ProjectTreeSummaryVo">
+        SELECT COUNT(DISTINCT root.project_id) AS totalCount,
+               COUNT(DISTINCT CASE WHEN p.parent_project_id IS NOT NULL THEN p.project_id END) AS childCount,
+               COUNT(DISTINCT CASE WHEN p.project_status=1 THEN root.project_id END) AS processingCount,
+               COUNT(DISTINCT CASE WHEN p.project_status=2 THEN root.project_id END) AS pendingAcceptanceCount,
+               COUNT(DISTINCT CASE WHEN p.project_status=4 THEN root.project_id END) AS completedCount,
+               COALESCE(SUM(CASE WHEN p.parent_project_id IS NULL THEN c.amount ELSE 0 END),0) AS rootContractAmount,
+               COALESCE(SUM(CASE WHEN p.parent_project_id IS NOT NULL THEN c.amount ELSE 0 END),0) AS childContractAmount
+        FROM project p
+        JOIN project root ON root.project_id=COALESCE(p.parent_project_id,p.project_id)
+             AND root.parent_project_id IS NULL AND root.is_delete=0
+        LEFT JOIN (SELECT project_id, SUM(contract_amount) AS amount FROM contract WHERE is_delete=0 GROUP BY project_id) c
+             ON c.project_id=p.project_id
+        WHERE <include refid="treeFilters"/>
+    </select>
+
     <!-- 结果映射 -->
     <resultMap id="BaseResultMap" type="com.qsy.edifice.domain.entity.Project">
         <id column="project_id" property="projectId" jdbcType="BIGINT"/>

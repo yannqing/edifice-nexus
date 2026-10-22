@@ -57,4 +57,8 @@ public class ProjectExcelData {
     @ExcelProperty("预计结束日期")
     @ColumnWidth(15)
     private String preEndDate;
+
+    @ExcelProperty("合同主文件名")
+    @ColumnWidth(30)
+    private String contractFileName;
 }

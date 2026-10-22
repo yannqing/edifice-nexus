@@ -322,6 +322,180 @@ class SettlementProjectTests {
         assertEquals(1240000d, mapper.selectProjectStatistics().getTotalContractAmount());
     }
 
+    @Test void treeGroupsBeforePaginationAndDoesNotChangeFlatSelectors() {
+        Long parent = root("A", "1000000");
+        child(parent, "A1", "120000", 7L); child(parent, "A2", "80000", 7L);
+        root("B", "300000");
+        var q = new GetAllProjectListDto(); q.setPageSize(1);
+        var first = projects.getProjectTree(q, 7L, false);
+        assertEquals(2, first.getTotal()); assertEquals(1, first.getRecords().size());
+        q.setCurrent(2);
+        var second = projects.getProjectTree(q, 7L, false);
+        assertEquals(parent, second.getRecords().get(0).getProjectId());
+        assertEquals(2, second.getRecords().get(0).getChildCount());
+        assertEquals(4, projects.getMyProjectPage(7L, new GetMyProjectListDto()).getTotal());
+        var children = projects.getProjectTreeChildren(parent, new GetAllProjectListDto(), 7L, false);
+        assertEquals(2, children.getTotal());
+        assertTrue(children.getRecords().stream().allMatch(p -> parent.equals(p.getParentProjectId())));
+    }
+
+    @Test void treeChildSearchKeepsParentContextAndUsesTheSameChildFilters() {
+        Long parent = root("Parent", "1000000");
+        Long child = child(parent, "Needle", "120000", 7L);
+        child(parent, "Other", "80000", 7L);
+        jdbc.update("UPDATE project SET project_status=1, project_type=2 WHERE project_id=?", child);
+        var q = new GetAllProjectListDto(); q.setKeywords("Needle"); q.setProjectStatus(1); q.setProjectType(2L);
+        var groups = projects.getProjectTree(q, 7L, false);
+        assertEquals(1, groups.getTotal()); assertEquals(parent, groups.getRecords().get(0).getProjectId());
+        assertFalse(groups.getRecords().get(0).isSelfMatches());
+        assertEquals(1, groups.getRecords().get(0).getChildCount());
+        assertEquals("Parent", groups.getRecords().get(0).getProject().getProjectName());
+        var children = projects.getProjectTreeChildren(parent, q, 7L, false);
+        assertEquals(1, children.getTotal()); assertEquals(child, children.getRecords().get(0).getProjectId());
+        q.setProjectStatus(4);
+        assertEquals(0, projects.getProjectTree(q, 7L, false).getTotal());
+        q.setProjectStatus(null); q.setProjectType(null); q.setKeywords("Parent");
+        assertEquals(2, projects.getProjectTree(q, 7L, false).getRecords().get(0).getChildCount());
+        assertEquals(2, projects.getProjectTreeChildren(parent, q, 7L, false).getTotal());
+    }
+
+    @Test void treeChildOnlyMemberGetsNoParentBusinessFieldsOrSiblingAccess() {
+        Long parent = root("Private parent", "1000000");
+        Long own = child(parent, "Own", "120000", 8L);
+        child(parent, "Sibling", "990000", 9L);
+        var result = projects.getProjectTree(new GetAllProjectListDto(), 8L, false);
+        assertEquals(1, result.getTotal());
+        var node = result.getRecords().get(0);
+        assertEquals(parent, node.getProjectId()); assertNull(node.getProject());
+        assertFalse(node.isSelfMatches()); assertEquals(1, node.getChildCount());
+        var children = projects.getProjectTreeChildren(parent, new GetAllProjectListDto(), 8L, false);
+        assertEquals(1, children.getTotal()); assertEquals(own, children.getRecords().get(0).getProjectId());
+        assertThrows(BusinessException.class, () -> projects.getProjectDetailById(parent, 8L, false));
+        assertThrows(BusinessException.class, () -> projects.getProjectTreeChildren(parent, new GetAllProjectListDto(), 99L, false));
+        var search = new GetAllProjectListDto(); search.setKeywords("Private parent");
+        assertEquals(0, projects.getProjectTree(search, 8L, false).getTotal());
+        var all = projects.getProjectTree(new GetAllProjectListDto(), 99L, true);
+        assertNotNull(all.getRecords().get(0).getProject()); assertEquals(2, all.getRecords().get(0).getChildCount());
+    }
+
+    @Test void treeArchiveAndLevelFiltersKeepContextWithoutBroadeningAccess() {
+        Long parent = root("A", "1000000");
+        Long child = child(parent, "Archived", "120000", 8L);
+        jdbc.update("UPDATE project SET archive_status=1 WHERE project_id=?", child);
+        var q = new GetAllProjectListDto(); q.setArchiveStatus(0);
+        assertEquals(0, projects.getProjectTree(q, 8L, false).getTotal());
+        q.setArchiveStatus(1);
+        assertEquals(1, projects.getProjectTree(q, 8L, false).getTotal());
+        assertEquals(1, projects.getProjectTreeChildren(parent, q, 8L, false).getTotal());
+        q.setProjectLevel(0);
+        assertEquals(0, projects.getProjectTree(q, 8L, false).getTotal());
+        q.setProjectLevel(1);
+        assertEquals(1, projects.getProjectTree(q, 8L, false).getTotal());
+        jdbc.update("UPDATE project SET is_delete=1 WHERE project_id=?", child);
+        assertEquals(0, projects.getProjectTree(q, 8L, false).getTotal());
+    }
+
+    @Test void treeStatisticsSeparateGroupsChildrenAndTheirOwnMoney() {
+        Long parent = root("A", "1000000");
+        Long child = child(parent, "A1", "120000", 8L);
+        child(parent, "A2", "80000", 7L);
+        jdbc.update("UPDATE project SET project_status=1 WHERE project_id=?", child);
+        var all = projects.getProjectTreeStatistics(new GetAllProjectListDto(), 99L, true);
+        assertEquals(1, all.getAllCount()); assertEquals(1, all.getSummary().getTotalCount());
+        assertEquals(2, all.getSummary().getChildCount()); assertEquals(1, all.getProcessingCount());
+        assertEquals(new BigDecimal("1000000.00"), all.getSummary().getRootContractAmount());
+        assertEquals(new BigDecimal("200000.00"), all.getSummary().getChildContractAmount());
+        var own = projects.getProjectTreeStatistics(new GetAllProjectListDto(), 8L, false).getSummary();
+        assertEquals(1, own.getTotalCount()); assertEquals(1, own.getChildCount());
+        assertEquals(0, own.getRootContractAmount().signum());
+        assertEquals(new BigDecimal("120000.00"), own.getChildContractAmount());
+    }
+
+    @Test void treeSummaryUsesStatusFilterWhileFacetsKeepOtherStatuses() {
+        Long parent = root("A", "1000000");
+        Long completed = child(parent, "A1", "100000", 7L);
+        child(parent, "A2", "200000", 7L);
+        jdbc.update("UPDATE project SET project_status=4 WHERE project_id=?", completed);
+        var q = new GetAllProjectListDto(); q.setProjectStatus(4); q.setArchiveStatus(0);
+        var stats = projects.getProjectTreeStatistics(q, 7L, false);
+        var summary = stats.getSummary();
+        assertEquals(projects.getProjectTree(q, 7L, false).getTotal(), summary.getTotalCount());
+        assertEquals(projects.getProjectTreeChildren(parent, q, 7L, false).getTotal(), summary.getChildCount());
+        assertEquals(1, summary.getCompletedCount()); assertEquals(0, summary.getProcessingCount());
+        assertEquals(new BigDecimal("100000.00"), summary.getChildContractAmount());
+        assertEquals(0, summary.getRootContractAmount().signum());
+        assertEquals(1, stats.getNotStartedCount()); assertEquals(1, stats.getCompletedCount());
+        q.setProjectStatus(2);
+        var empty = projects.getProjectTreeStatistics(q, 7L, false).getSummary();
+        assertEquals(0, empty.getTotalCount()); assertEquals(0, empty.getChildCount());
+        assertEquals(0, empty.getRootContractAmount().signum()); assertEquals(0, empty.getChildContractAmount().signum());
+    }
+
+    @Test void treeSummaryHonorsArchiveScopeIncludingArchivedChildMoney() {
+        Long parent = root("A", "1000000");
+        Long archived = child(parent, "Archived", "100000", 7L);
+        child(parent, "Active", "200000", 7L);
+        jdbc.update("UPDATE project SET archive_status=1 WHERE project_id=?", archived);
+        var q = new GetAllProjectListDto(); q.setArchiveStatus(1);
+        var stats = projects.getProjectTreeStatistics(q, 7L, false);
+        assertEquals(1, stats.getSummary().getTotalCount()); assertEquals(1, stats.getSummary().getChildCount());
+        assertEquals(new BigDecimal("100000.00"), stats.getSummary().getChildContractAmount());
+        assertEquals(0, stats.getSummary().getRootContractAmount().signum());
+        assertEquals(1, stats.getArchivedCount()); assertEquals(1, stats.getNotStartedCount());
+        q.setArchiveStatus(0);
+        var active = projects.getProjectTreeStatistics(q, 7L, false).getSummary();
+        assertEquals(1, active.getChildCount());
+        assertEquals(new BigDecimal("200000.00"), active.getChildContractAmount());
+        q.setArchiveStatus(null);
+        var both = projects.getProjectTreeStatistics(q, 7L, false).getSummary();
+        assertEquals(2, both.getChildCount());
+        assertEquals(new BigDecimal("300000.00"), both.getChildContractAmount());
+    }
+
+    @Test void treeSummaryRetainsSearchLevelTypeAndMembershipAcrossAllPages() {
+        Long parent = root("A", "1000000");
+        child(parent, "Needle1", "100000", 8L);
+        Long otherType = child(parent, "Needle2", "200000", 8L);
+        child(parent, "NeedlePrivate", "900000", 9L);
+        child(parent, "Other", "400000", 8L);
+        jdbc.update("UPDATE project SET project_type=2 WHERE project_id=?", otherType);
+        var q = new GetAllProjectListDto(); q.setKeywords("Needle"); q.setProjectLevel(1);
+        q.setProjectType(1L); q.setCurrent(99); q.setPageSize(1);
+        var own = projects.getProjectTreeStatistics(q, 8L, false).getSummary();
+        assertEquals(1, own.getTotalCount()); assertEquals(1, own.getChildCount());
+        assertEquals(new BigDecimal("100000.00"), own.getChildContractAmount());
+        assertEquals(0, own.getRootContractAmount().signum());
+        q.setProjectType(null);
+        var allOwn = projects.getProjectTreeStatistics(q, 8L, false).getSummary();
+        assertEquals(2, allOwn.getChildCount());
+        assertEquals(new BigDecimal("300000.00"), allOwn.getChildContractAmount());
+        q.setProjectLevel(0);
+        assertEquals(0, projects.getProjectTreeStatistics(q, 8L, false).getSummary().getTotalCount());
+    }
+
+    @Test void treeRejectsInvalidQueryAndNonRootChildPage() {
+        Long parent = root("A", "1000000"); Long child = child(parent, "A1", "120000", 7L);
+        var q = new GetAllProjectListDto(); q.setProjectLevel(7);
+        assertThrows(BusinessException.class, () -> projects.getProjectTree(q, 7L, false));
+        assertThrows(BusinessException.class, () -> projects.getProjectTree(null, 7L, false));
+        assertThrows(BusinessException.class, () -> projects.getProjectTree(new GetAllProjectListDto(), null, true));
+        assertThrows(BusinessException.class, () -> projects.getProjectTreeChildren(child, new GetAllProjectListDto(), 7L, true));
+        q.setProjectLevel(null); q.setPageSize(10000); q.setCurrent(0);
+        assertEquals(100, projects.getProjectTree(q, 7L, true).getSize());
+        assertEquals(1, q.getCurrent());
+    }
+
+    @Test void restrictedTreeJsonPreservesSnowflakeIdAndOmitsParentBusinessData() throws Exception {
+        Long parent = root("Private parent", "1000000"); child(parent, "Own", "120000", 8L);
+        var node = projects.getProjectTree(new GetAllProjectListDto(), 8L, false).getRecords().get(0);
+        var json = new com.fasterxml.jackson.databind.ObjectMapper().valueToTree(node);
+        assertTrue(json.get("projectId").isTextual());
+        assertEquals(String.valueOf(parent), json.get("projectId").asText());
+        assertTrue(json.get("project").isNull());
+        assertFalse(json.toString().contains("Private parent"));
+        assertFalse(json.toString().contains("1000000"));
+    }
+
     Long root(String name, String amount) { return tx.execute(status -> projects.createProject(dto(name, amount, 7L), 7L)); }
     Long child(Long parent, String name, String amount, Long manager) {
         return tx.execute(status -> settlements.create(parent, dto(name, amount, manager), manager, true));

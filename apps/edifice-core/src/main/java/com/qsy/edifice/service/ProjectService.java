@@ -13,6 +13,8 @@ import com.qsy.edifice.domain.vo.ProjectArchiveDetailVo;
 import com.qsy.edifice.domain.vo.ProjectListVo;
 import com.qsy.edifice.domain.vo.ProjectLifecycleVo;
 import com.qsy.edifice.domain.vo.ProjectStatisticsVo;
+import com.qsy.edifice.domain.vo.ProjectTreeNodeVo;
+import com.qsy.edifice.domain.vo.ProjectTreeStatisticsVo;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
@@ -22,6 +24,12 @@ import java.util.List;
  * 项目服务接口
  */
 public interface ProjectService {
+
+    Page<ProjectTreeNodeVo> getProjectTree(GetAllProjectListDto dto, Long userId, boolean canViewAll);
+
+    Page<ProjectListVo> getProjectTreeChildren(Long parentId, GetAllProjectListDto dto, Long userId, boolean canViewAll);
+
+    ProjectTreeStatisticsVo getProjectTreeStatistics(GetAllProjectListDto dto, Long userId, boolean canViewAll);
 
     /**
      * 根据项目id查询项目

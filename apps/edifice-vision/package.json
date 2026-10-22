@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:folders": "node --experimental-strip-types --test tests/project-file-folders.test.mjs"
+    "test:folders": "node --experimental-strip-types --test tests/project-file-folders.test.mjs",
+    "test:project-tree:browser": "node tests/project-tree.browser.mjs",
+    "test:project-import:browser": "node tests/project-import.browser.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

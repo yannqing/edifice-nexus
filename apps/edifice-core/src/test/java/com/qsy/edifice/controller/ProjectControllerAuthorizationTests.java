@@ -51,6 +51,8 @@ class ProjectControllerAuthorizationTests {
     @Autowired
     private ProjectController projectController;
 
+    @Autowired private ProjectTreeController projectTreeController;
+
     @Autowired
     private ProjectService projectService;
 
@@ -214,6 +216,51 @@ class ProjectControllerAuthorizationTests {
         verifyNoInteractions(projectService, projectStageService, jwtUtils);
     }
 
+    @Test void treeAllEndpointsRequireGlobalPermission() {
+        authenticateWith("menu:my-projects");
+        var q = new com.qsy.edifice.domain.dto.GetAllProjectListDto();
+        var request = mock(HttpServletRequest.class);
+        assertThrows(AccessDeniedException.class, () -> projectTreeController.all(q, request));
+        assertThrows(AccessDeniedException.class, () -> projectTreeController.allChildren(1L, q, request));
+        assertThrows(AccessDeniedException.class, () -> projectTreeController.allStatistics(q, request));
+        verifyNoInteractions(projectService, jwtUtils);
+    }
+
+    @Test void mineTreeNeverUsesGlobalVisibilityEvenForAdministrator() throws Exception {
+        authenticateWith("ROLE_SUPER_ADMIN");
+        var q = new com.qsy.edifice.domain.dto.GetAllProjectListDto();
+        var request = authenticatedRequest();
+        projectTreeController.mine(q, request);
+        projectTreeController.mineChildren(1L, q, request);
+        projectTreeController.mineStatistics(q, request);
+        verify(projectService).getProjectTree(q, 42L, false);
+        verify(projectService).getProjectTreeChildren(1L, q, 42L, false);
+        verify(projectService).getProjectTreeStatistics(q, 42L, false);
+    }
+
+    @Test void allTreeUsesAuthenticatedIdentityAndExistingGlobalPermission() throws Exception {
+        authenticateWith("menu:all-projects");
+        var q = new com.qsy.edifice.domain.dto.GetAllProjectListDto();
+        var request = authenticatedRequest();
+        projectTreeController.all(q, request);
+        projectTreeController.allChildren(1L, q, request);
+        projectTreeController.allStatistics(q, request);
+        verify(projectService).getProjectTree(q, 42L, true);
+        verify(projectService).getProjectTreeChildren(1L, q, 42L, true);
+        verify(projectService).getProjectTreeStatistics(q, 42L, true);
+    }
+
+    @Test void anonymousCannotReadMineTreeOrItsCounts() {
+        SecurityContextHolder.getContext().setAuthentication(new org.springframework.security.authentication.AnonymousAuthenticationToken(
+                "test-key", "anonymousUser", List.of(new SimpleGrantedAuthority("ROLE_ANONYMOUS"))));
+        var q = new com.qsy.edifice.domain.dto.GetAllProjectListDto();
+        var request = mock(HttpServletRequest.class);
+        assertThrows(AccessDeniedException.class, () -> projectTreeController.mine(q, request));
+        assertThrows(AccessDeniedException.class, () -> projectTreeController.mineChildren(1L, q, request));
+        assertThrows(AccessDeniedException.class, () -> projectTreeController.mineStatistics(q, request));
+        verifyNoInteractions(projectService, jwtUtils);
+    }
+
     private HttpServletRequest authenticatedRequest() throws Exception {
         var request = mock(HttpServletRequest.class);
         when(request.getHeader("token")).thenReturn("access-token");
@@ -233,6 +280,8 @@ class ProjectControllerAuthorizationTests {
     @Configuration(proxyBeanMethods = false)
     @EnableMethodSecurity
     static class TestConfig {
+
+        @Bean ProjectTreeController projectTreeController() { return new ProjectTreeController(); }
 
         @Bean
         ProjectController projectController() {

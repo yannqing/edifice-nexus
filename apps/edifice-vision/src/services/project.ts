@@ -14,7 +14,27 @@ import type {
   FilesVo,
   UserListItem,
   SettlementProjectPage,
+  ProjectTreeNode,
+  ProjectTreeStatistics,
+  ProjectTreeScope,
+  ProjectTreeQuery,
 } from "@/types/project";
+
+function treeQuery(params: ProjectTreeQuery): Record<string, string> {
+  return Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)]));
+}
+
+export function getProjectTree(scope: ProjectTreeScope, params: ProjectTreeQuery, signal?: AbortSignal) {
+  return get<PageResult<ProjectTreeNode>>(`/project/${scope}/tree`, {params: treeQuery(params), signal});
+}
+
+export function getProjectTreeChildren(scope: ProjectTreeScope, parentId: string, params: ProjectTreeQuery, signal?: AbortSignal) {
+  return get<PageResult<ProjectListVo>>(`/project/${scope}/tree/${parentId}/children`, {params: treeQuery(params), signal});
+}
+
+export function getProjectTreeStatistics(scope: ProjectTreeScope, params: ProjectTreeQuery, signal?: AbortSignal) {
+  return get<ProjectTreeStatistics>(`/project/${scope}/tree/statistics`, {params: treeQuery(params), signal});
+}
 
 /**
  * 新建项目
@@ -225,8 +245,8 @@ export async function uploadProjectAttachment(file: File, onProgress?: (percent:
   return { code: 200, msg: "上传成功", data: await uploadFile(file, "project", { onProgress }) };
 }
 
-export function importProjectsByFileId(fileId: string) {
-  return post<string>("/project/import-file", { body: { fileId } });
+export function importProjectsByFileId(fileId: string, contractFileIds: string[] = []) {
+  return post<import("@/types/project-import").ProjectImportResult>("/project/import-file", { body: { fileId, contractFileIds } });
 }
 
 // ==================== 导入导出 ====================
@@ -256,12 +276,14 @@ export function getTemplateUrl(): string {
  * 导入项目
  */
 export async function importProjects(
-  file: File
-): Promise<BaseResponse<string>> {
+  file: File,
+  contractFileIds: string[] = []
+): Promise<BaseResponse<import("@/types/project-import").ProjectImportResult>> {
   const formData = new FormData();
   formData.append("file", file);
+  contractFileIds.forEach((fileId) => formData.append("contractFileIds", fileId));
 
-  return post<string>("/project/import", {
+  return post<import("@/types/project-import").ProjectImportResult>("/project/import", {
     body: formData,
     headers: {},
   });

@@ -8,15 +8,18 @@ import com.alibaba.excel.event.AnalysisEventListener;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.service.support.FileUploadPolicy;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.qsy.edifice.domain.dto.CreateProjectDto;
 import com.qsy.edifice.domain.entity.*;
 import com.qsy.edifice.domain.excel.ProjectExcelData;
 import com.qsy.edifice.domain.excel.ProjectMemberExcelData;
+import com.qsy.edifice.domain.vo.ProjectImportResultVo;
 
 import com.qsy.edifice.mapper.ProjectMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
 import com.qsy.edifice.service.*;
 import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -63,6 +66,9 @@ public class ProjectExcelServiceImpl implements ProjectExcelService {
 
     @Resource
     private SysUserMapper sysUserMapper;
+
+    @Resource
+    private FileService fileService;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
@@ -147,6 +153,7 @@ public class ProjectExcelServiceImpl implements ProjectExcelService {
                         .benefitRules("按审减额5%")
                         .preStartDate("2026-01-01")
                         .preEndDate("2026-12-31")
+                        .contractFileName("示例合同.pdf")
                         .build()
         );
 
@@ -183,14 +190,24 @@ public class ProjectExcelServiceImpl implements ProjectExcelService {
     // ==================== 导入 ====================
 
     @Override
-    public String importProjects(MultipartFile file, Long userId) throws IOException {
+    public ProjectImportResultVo importProjects(MultipartFile file, List<Long> contractFileIds, Long userId,
+                                              HttpServletRequest request) throws IOException {
+        if (userId == null || request == null) {
+            throw new BusinessException("导入用户不能为空");
+        }
         FileUploadPolicy.validate(file.getOriginalFilename(), file.getSize(), "import");
+        Map<String, Long> contractsByName = authorizedContracts(contractFileIds, userId, request);
         List<ProjectExcelData> projectDataList = readBounded(file, ProjectExcelData.class, 0, 5000);
         List<ProjectMemberExcelData> memberDataList = readBounded(file, ProjectMemberExcelData.class, 1, 20000);
 
         if (projectDataList == null || projectDataList.isEmpty()) {
-            return "Excel 项目信息为空";
+            return new ProjectImportResultVo(0, 0, List.of(), "Excel 项目信息为空");
         }
+
+        Map<String, Long> projectCodeCounts = projectDataList.stream()
+                .map(ProjectExcelData::getProjectCode)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.groupingBy(String::trim, Collectors.counting()));
 
         // 按项目编码分组成员
         Map<String, List<ProjectMemberExcelData>> membersByCode = new HashMap<>();
@@ -246,11 +263,16 @@ public class ProjectExcelServiceImpl implements ProjectExcelService {
                     continue;
                 }
 
+                String projectCode = StringUtils.hasText(data.getProjectCode()) ? data.getProjectCode().trim() : null;
+                if (projectCode != null && (projectCodeCounts.getOrDefault(projectCode, 0L) > 1
+                        || projectMapper.selectByProjectCode(projectCode) != null)) {
+                    throw new BusinessException("项目编码重复或已存在：" + projectCode);
+                }
+                Long contractFileId = resolveContract(data.getContractFileName(), contractsByName, projectDataList.size());
                 Integer contractType = CONTRACT_TYPE_REVERSE_MAP.getOrDefault(
                         data.getContractType() != null ? data.getContractType().trim() : "", 0);
 
                 // 解析该项目的成员
-                String projectCode = StringUtils.hasText(data.getProjectCode()) ? data.getProjectCode().trim() : null;
                 List<Long> chargeIds = new ArrayList<>();
                 List<Long> memberIds = new ArrayList<>();
 
@@ -277,9 +299,10 @@ public class ProjectExcelServiceImpl implements ProjectExcelService {
 
                 CreateProjectDto dto = new CreateProjectDto();
                 dto.setProjectName(data.getProjectName().trim());
-                dto.setProjectCode(projectCode);
+                dto.setProjectCode(projectCode != null ? projectCode : "PJ" + IdWorker.getIdStr());
                 dto.setProjectType(typeId);
                 dto.setContractType(contractType);
+                dto.setContractFile(contractFileId);
                 dto.setContractAmount(data.getContractAmount() != null ? data.getContractAmount() : java.math.BigDecimal.ZERO);
                 dto.setBaseAmount(data.getBaseAmount());
                 dto.setBenefitRule(data.getBenefitRules());
@@ -306,7 +329,44 @@ public class ProjectExcelServiceImpl implements ProjectExcelService {
                 result.append("。").append(String.join("；", errors.subList(0, Math.min(errors.size(), 5))));
             }
         }
-        return result.toString();
+        return new ProjectImportResultVo(successCount, failCount,
+                List.copyOf(errors.subList(0, Math.min(errors.size(), 5))), result.toString());
+    }
+
+    private Map<String, Long> authorizedContracts(List<Long> fileIds, Long userId, HttpServletRequest request) {
+        if (fileIds == null || fileIds.isEmpty()) return Map.of();
+        if (fileIds.size() > 20 || fileIds.stream().anyMatch(id -> id == null || id <= 0)
+                || new HashSet<>(fileIds).size() != fileIds.size()) {
+            throw new BusinessException("合同主文件ID无效、重复或超过20个");
+        }
+        Map<String, Long> contracts = new HashMap<>();
+        for (Long id : fileIds) {
+            Files contract = fileService.authorizedFile(id, request);
+            // Download access (including administrator/public access) does not grant ownership for association.
+            if (!Objects.equals(contract.getUploadUserId(), userId)) {
+                throw new BusinessException("合同主文件必须由当前用户上传");
+            }
+            if (!Integer.valueOf(1).equals(contract.getStatus()) || !Integer.valueOf(0).equals(contract.getIsDeleted())) {
+                throw new BusinessException("合同主文件未上传成功或已删除");
+            }
+            FileUploadPolicy.validate(contract.getOriginalName(), contract.getFileSize() == null ? 0 : contract.getFileSize(), "contract");
+            String name = contract.getOriginalName().trim();
+            if (contracts.putIfAbsent(name, id) != null) {
+                throw new BusinessException("合同主文件名重复：" + name);
+            }
+        }
+        return contracts;
+    }
+
+    private Long resolveContract(String name, Map<String, Long> contracts, int projectCount) {
+        if (!StringUtils.hasText(name)) {
+            if (projectCount == 1 && contracts.size() == 1) return contracts.values().iterator().next();
+            throw new BusinessException("请上传合同主文件，并在Excel的合同主文件名列明确对应（仅单项目单合同可省略）");
+        }
+        String fileName = name.trim();
+        Long fileId = contracts.get(fileName);
+        if (fileId == null) throw new BusinessException("未找到已上传的合同主文件：" + fileName);
+        return fileId;
     }
 
     private <T> List<T> readBounded(MultipartFile file, Class<T> model, int sheet, int limit) throws IOException {

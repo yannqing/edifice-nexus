@@ -1,6 +1,7 @@
 package com.qsy.edifice.service;
 
 import com.qsy.edifice.domain.entity.Files;
+import com.qsy.edifice.domain.vo.ProjectImportResultVo;
 import com.qsy.edifice.exception.BusinessException;
 import com.qsy.edifice.service.support.FileObjectStorage;
 import com.qsy.edifice.utils.PathMultipartFile;
@@ -9,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Semaphore;
@@ -19,7 +21,7 @@ public class StoredProjectImportService {
     @Resource private FileObjectStorage storage;
     @Resource private ProjectExcelService excel;
     private final Semaphore imports = new Semaphore(1);
-    public String importFile(Long fileId, Long userId, HttpServletRequest request) throws Exception {
+    public ProjectImportResultVo importFile(Long fileId, List<Long> contractFileIds, Long userId, HttpServletRequest request) throws Exception {
         Files file = files.authorizedFile(fileId, request);
         if (!Objects.equals(file.getUploadUserId(), userId)
                 || !Set.of("xls", "xlsx").contains(file.getFileExtension())) {
@@ -32,7 +34,8 @@ public class StoredProjectImportService {
             try (InputStream input = storage.open(file)) {
                 java.nio.file.Files.copy(input, temporary, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             }
-            return excel.importProjects(new PathMultipartFile(temporary, file.getOriginalName(), file.getMimeType()), userId);
+            return excel.importProjects(new PathMultipartFile(temporary, file.getOriginalName(), file.getMimeType()),
+                    contractFileIds, userId, request);
         } finally {
             if (temporary != null) java.nio.file.Files.deleteIfExists(temporary);
             imports.release();

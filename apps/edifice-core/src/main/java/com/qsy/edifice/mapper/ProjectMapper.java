@@ -4,6 +4,11 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.qsy.edifice.domain.entity.Project;
 import com.qsy.edifice.domain.vo.ProjectStatisticsVo;
 import com.qsy.edifice.domain.vo.SettlementProjectSummaryVo;
+import com.qsy.edifice.domain.dto.GetAllProjectListDto;
+import com.qsy.edifice.domain.vo.ProjectTreeNodeVo;
+import com.qsy.edifice.domain.vo.ProjectTreeStatisticsVo;
+import com.qsy.edifice.domain.vo.ProjectTreeSummaryVo;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -14,6 +19,23 @@ import java.util.List;
  */
 @Mapper
 public interface ProjectMapper extends BaseMapper<Project> {
+
+    Page<ProjectTreeNodeVo> selectTreeRoots(Page<ProjectTreeNodeVo> page, @Param("q") GetAllProjectListDto query,
+                                           @Param("userId") Long userId, @Param("canViewAll") boolean canViewAll);
+
+    Page<Project> selectTreeChildren(Page<Project> page, @Param("parentId") Long parentId,
+                                     @Param("q") GetAllProjectListDto query, @Param("userId") Long userId,
+                                     @Param("canViewAll") boolean canViewAll);
+
+    List<Long> selectVisibleTreeProjectIds(@Param("ids") List<Long> ids, @Param("userId") Long userId);
+
+    boolean hasTreeAccess(@Param("parentId") Long parentId, @Param("userId") Long userId);
+
+    ProjectTreeStatisticsVo selectTreeStatistics(@Param("q") GetAllProjectListDto query,
+                                                @Param("userId") Long userId, @Param("canViewAll") boolean canViewAll);
+
+    ProjectTreeSummaryVo selectTreeSummary(@Param("q") GetAllProjectListDto query,
+                                          @Param("userId") Long userId, @Param("canViewAll") boolean canViewAll);
 
     Project selectByIdForUpdate(@Param("id") Long id);
 
