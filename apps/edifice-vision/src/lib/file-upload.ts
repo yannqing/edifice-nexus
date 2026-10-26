@@ -90,7 +90,16 @@ export async function uploadFile(file: File, purpose: UploadPurpose, options?: {
   const signal = options?.signal;
   const key = sessionKey(file, purpose, options?.scope);
   let session: UploadSession | null = null;
-  const savedId = cached(key);
+  let savedId = cached(key);
+  if (!savedId && options?.scope) {
+    const legacyKey = sessionKey(file, purpose);
+    savedId = cached(legacyKey);
+    if (savedId) {
+      // Claim old, unscoped resumable uploads once; other project windows get their own sessions.
+      cache(key, savedId);
+      cache(legacyKey);
+    }
+  }
   if (savedId) {
     try {
       const response = await get<UploadSession>(`/file/uploads/${savedId}`, { signal, toastOnBizError: false });

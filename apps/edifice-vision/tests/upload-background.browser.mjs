@@ -167,6 +167,25 @@ try {
   assert(saves.slice(1).every((batch) => batch.every((item) => item.projectId === projects[1].projectId)));
   assert.equal(submissions.length, 0);
   await restore(projects[1]);
+  hold("旧版断点.GBQ7");
+  const legacyName = "旧版断点.GBQ7";
+  const legacyBody = "legacy scoped upgrade fixture";
+  sessions.set("qa-999", { uploadId: "qa-999", totalSize: Buffer.byteLength(legacyBody), chunkSize: 5242880,
+    totalParts: 1, status: "uploading", uploadedParts: [], partHashes: {}, file: {
+      fileId: "2111111111111111999", displayName: legacyName, fileSize: String(Buffer.byteLength(legacyBody)),
+      fileExtension: "gbq7", fileType: "project", status: 1, fileUrl: "" } });
+  const sessionsBeforeResume = sessions.size;
+  await uploadDialog.locator('input[type="file"]').first().evaluate((input, { legacyName, legacyBody }) => {
+    const file = new File([legacyBody], legacyName, { type: "application/octet-stream", lastModified: 123456 });
+    sessionStorage.setItem(`edifice:upload:v1:project:${file.name}:${file.size}:${file.lastModified}`, "qa-999");
+    const transfer = new DataTransfer(); transfer.items.add(file); input.files = transfer.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }, { legacyName, legacyBody });
+  await uploadDialog.getByText("校验中", { exact: true }).waitFor();
+  assert.equal(sessions.size, sessionsBeforeResume, "Upgrading must resume the existing upload, not initialize a new one");
+  assert(await page.evaluate(() => !Object.keys(sessionStorage).some((key) => key.includes("旧版断点.GBQ7") && !key.includes(":scope:"))));
+  release(legacyName);
+  await uploadDialog.locator("button:not([disabled])").filter({ hasText: "保存到草稿" }).waitFor();
   hold("退出时上传.pdf");
   await uploadDialog.locator('input[type="file"]').first().setInputFiles(inputFile("退出时上传.pdf"));
   await uploadDialog.getByText("校验中", { exact: true }).waitFor();
@@ -178,7 +197,7 @@ try {
   release("退出时上传.pdf");
   assert.deepEqual(errors, []); assert.deepEqual(unexpected, []);
   console.log(JSON.stringify({ allApisMocked: true, multipleProjects: true, crossRoute: true, hideRestore: true, backgroundResultsRetained: true,
-    correctDraftAssociations: true, retryCancel: true, logoutClearsTasks: true, noAutomaticApproval: true, mobileBounds: bounds, errors, output }));
+    correctDraftAssociations: true, retryCancel: true, legacyResumePreserved: true, logoutClearsTasks: true, noAutomaticApproval: true, mobileBounds: bounds, errors, output }));
 } finally {
   for (const item of holds.values()) item.resolve();
   await context.close(); await browser.close();
