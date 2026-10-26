@@ -1,4 +1,5 @@
 "use client";
+import { useUploadBusinessRefresh } from "@/components/file/upload-workspace";
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -94,6 +95,7 @@ export default function BidsPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+  useUploadBusinessRefresh(fetchData);
 
   const handleEdit = async (id: string) => {
     const res = await getBidDetail(id);

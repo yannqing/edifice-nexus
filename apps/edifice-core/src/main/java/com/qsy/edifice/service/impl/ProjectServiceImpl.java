@@ -22,6 +22,7 @@ import com.qsy.edifice.mapper.ProjectMapper;
 import com.qsy.edifice.mapper.SysUserMapper;
 import com.qsy.edifice.service.*;
 import com.qsy.edifice.service.support.FileObjectStorage;
+import com.qsy.edifice.service.support.FileUploadPolicy;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
@@ -150,13 +151,13 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void updateProjectFull(UpdateProjectDto dto) {
+    public void updateProjectFull(UpdateProjectDto dto, Long userId) {
         if (dto == null || dto.getProjectId() == null) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "项目ID不能为空");
         }
 
         // 1. 查询并更新项目基本信息
-        Project project = projectMapper.selectById(dto.getProjectId());
+        Project project = projectMapper.selectByIdForUpdate(dto.getProjectId());
         if (project == null) {
             throw new BusinessException(ErrorType.PROJECT_CANNOT_NULL);
         }
@@ -187,10 +188,35 @@ public class ProjectServiceImpl implements ProjectService {
         // 2. 更新合同信息
         // v0.4：benefitAmount 不在此处更新——必须走"效益修正"流程（写 revision 历史）；
         //        即使前端绕过 UI 传了 benefitAmount，也会在这里被忽略。
+        boolean hasNewAttachments = dto.getContractOtherFiles() != null && !dto.getContractOtherFiles().isEmpty();
         if (dto.getContractType() != null || dto.getContractAmount() != null
-                || dto.getBaseAmount() != null || dto.getBenefitRule() != null) {
+                || dto.getBaseAmount() != null || dto.getBenefitRule() != null
+                || dto.getContractFile() != null || hasNewAttachments) {
             Contract contract = contractService.getContractByProjectId(dto.getProjectId());
+            if (contract == null && (dto.getContractFile() != null || hasNewAttachments)) {
+                throw new BusinessException(ErrorType.OPERATION_FAILED, "项目合同信息不存在，无法补充合同文件");
+            }
             if (contract != null) {
+                if (dto.getContractFile() != null && !Objects.equals(dto.getContractFile(), contract.getContractFile())) {
+                    validateNewContractFile(dto.getContractFile(), userId);
+                    contract.setContractFile(dto.getContractFile());
+                }
+                if (hasNewAttachments) {
+                    List<Long> attachmentIds = new ArrayList<>(parseFileIds(contract.getContractOtherFiles()));
+                    if (dto.getContractOtherFiles().size() > 20) {
+                        throw new BusinessException(ErrorType.ARGS_INVALID, "合同附件最多20个");
+                    }
+                    for (Long fileId : dto.getContractOtherFiles()) {
+                        if (fileId == null || !attachmentIds.contains(fileId)) {
+                            validateNewContractFile(fileId, userId);
+                            attachmentIds.add(fileId);
+                        }
+                    }
+                    if (attachmentIds.size() > 20) {
+                        throw new BusinessException(ErrorType.ARGS_INVALID, "合同附件最多20个");
+                    }
+                    contract.setContractOtherFiles(attachmentIds.toString());
+                }
                 if (dto.getContractType() != null) contract.setContractType(dto.getContractType());
                 if (dto.getContractAmount() != null) contract.setContractAmount(dto.getContractAmount());
                 if (dto.getBaseAmount() != null) contract.setBaseAmount(dto.getBaseAmount());
@@ -211,6 +237,17 @@ public class ProjectServiceImpl implements ProjectService {
                     dto.getProjectCharges() != null ? dto.getProjectCharges() : Collections.emptyList(),
                     dto.getProjectMembers() != null ? dto.getProjectMembers() : Collections.emptyList());
         }
+    }
+
+    private void validateNewContractFile(Long fileId, Long userId) {
+        Files file = fileId == null || fileId <= 0 ? null : filesMapper.selectById(fileId);
+        if (file == null || !Objects.equals(file.getStatus(), 1) || !Objects.equals(file.getIsDeleted(), 0)) {
+            throw new BusinessException(ErrorType.ARGS_INVALID, "合同文件不存在、未上传完成或已删除");
+        }
+        if (userId == null || !Objects.equals(file.getUploadUserId(), userId)) {
+            throw new BusinessException(ErrorType.NO_AUTH_ERROR, "新增合同文件必须由当前用户上传");
+        }
+        FileUploadPolicy.validate(file.getOriginalName(), file.getFileSize() == null ? 0 : file.getFileSize(), "contract");
     }
 
     /**
@@ -504,9 +541,6 @@ public class ProjectServiceImpl implements ProjectService {
         }
         if (dto.getContractAmount() == null || dto.getContractAmount().signum() <= 0) {
             throw new BusinessException(ErrorType.ARGS_INVALID, "合同金额必须大于0");
-        }
-        if (dto.getContractFile() == null) {
-            throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请上传合同主文件");
         }
         if (dto.getProjectCharges() == null || dto.getProjectCharges().isEmpty()) {
             throw new BusinessException(ErrorType.ARGS_NOT_NULL, "请至少选择一位项目经理");

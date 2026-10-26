@@ -360,8 +360,9 @@ public class ProjectExcelServiceImpl implements ProjectExcelService {
 
     private Long resolveContract(String name, Map<String, Long> contracts, int projectCount) {
         if (!StringUtils.hasText(name)) {
+            if (contracts.isEmpty()) return null;
             if (projectCount == 1 && contracts.size() == 1) return contracts.values().iterator().next();
-            throw new BusinessException("请上传合同主文件，并在Excel的合同主文件名列明确对应（仅单项目单合同可省略）");
+            throw new BusinessException("已上传合同文件时，请在Excel的合同主文件名列明确对应（仅单项目单合同可省略）");
         }
         String fileName = name.trim();
         Long fileId = contracts.get(fileName);

@@ -110,7 +110,7 @@ public class ProjectController {
         }
         Long userId = jwtUtils.getUserFromToken(request.getHeader("token")).getUserId();
         projectService.ensureProjectManager(dto.getProjectId(), userId, canManageAllProjects());
-        projectService.updateProjectFull(dto);
+        projectService.updateProjectFull(dto, userId);
         return ResultUtils.success(Code.SUCCESS, true, "更新成功");
     }
 

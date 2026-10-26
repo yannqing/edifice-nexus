@@ -4,8 +4,6 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -19,9 +17,13 @@ import {
   updateProject,
 } from "@/services/project";
 import { ResponseCode } from "@/types/api";
-import type { UpdateProjectParams, UserListItem } from "@/types/project";
+import type { FilesVo, UpdateProjectParams, UserListItem } from "@/types/project";
 import { PROJECT_STATUS_MAP } from "@/types/project";
 import { AmountInput } from "@/components/ui/amount-input";
+import { FileUploadField } from "@/components/file/file-upload-field";
+import { AttachmentFileList, parseFileIdList } from "@/components/file/attachment-file-list";
+import { MAX_BATCH_FILES } from "@/lib/file-upload";
+import { UploadWindowDialog as Dialog, UploadWindowContent as DialogContent, useUploadWindowStatus, withUploadWindow } from "@/components/file/upload-workspace";
 
 interface EditProjectDialogProps {
   projectId: string | null;
@@ -36,7 +38,12 @@ interface ProjectTypeOption {
   projectTypeCode: string;
 }
 
-export function EditProjectDialog({
+export const EditProjectDialog = withUploadWindow(EditProjectDialogSession, {
+  key: (props) => `project-edit:${props.projectId}`,
+  title: () => "编辑项目",
+});
+
+function EditProjectDialogSession({
   projectId,
   open,
   onOpenChange,
@@ -49,6 +56,17 @@ export function EditProjectDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [step, setStep] = useState(1);
+  const [existingMainFile, setExistingMainFile] = useState<string | null>(null);
+  const [existingAttachments, setExistingAttachments] = useState<string[]>([]);
+  const [contractMainFile, setContractMainFile] = useState<FilesVo | null>(null);
+  const [contractAttachments, setContractAttachments] = useState<FilesVo[]>([]);
+  const [uploadingMain, setUploadingMain] = useState(false);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const busy = submitting || uploadingMain || uploadingAttachments;
+  useUploadWindowStatus(form.projectName ? `编辑项目 · ${form.projectName}` : undefined, submitting);
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!busy) onOpenChange(nextOpen);
+  };
 
   const fetchOptions = useCallback(async () => {
     try {
@@ -72,6 +90,11 @@ export function EditProjectDialog({
     if (!open || !projectId) return;
     setStep(1);
     setError("");
+    setForm({ projectId });
+    setExistingMainFile(null);
+    setExistingAttachments([]);
+    setContractMainFile(null);
+    setContractAttachments([]);
 
     let cancelled = false;
 
@@ -84,6 +107,8 @@ export function EditProjectDialog({
         if (cancelled) return;
         if (res.code === ResponseCode.SUCCESS && res.data) {
           const d = res.data;
+          setExistingMainFile(d.contract?.contractFile ?? null);
+          setExistingAttachments(parseFileIdList(d.contract?.contractOtherFiles));
           const chargeIds: string[] = [];
           const memberIds: string[] = [];
           (d.projectMemberList ?? []).forEach((m) => {
@@ -145,6 +170,7 @@ export function EditProjectDialog({
   };
 
   const handleSubmit = async () => {
+    if (busy || loading) return;
     if (!form.projectName?.trim()) {
       setError("项目名称不能为空");
       return;
@@ -155,6 +181,8 @@ export function EditProjectDialog({
     try {
       const params: UpdateProjectParams = {
         ...form,
+        contractFile: contractMainFile?.fileId,
+        contractOtherFiles: contractAttachments.length ? contractAttachments.map((file) => file.fileId) : undefined,
         preStartTime: form.preStartTime ? `${form.preStartTime}T00:00:00` : undefined,
         preEndTime: form.preEndTime ? `${form.preEndTime}T00:00:00` : undefined,
       };
@@ -176,7 +204,7 @@ export function EditProjectDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>编辑项目</DialogTitle>
@@ -206,6 +234,7 @@ export function EditProjectDialog({
               ].map(({ n, label }) => (
                 <button
                   key={n}
+                  disabled={busy}
                   onClick={() => setStep(n)}
                   className={cn(
                     "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
@@ -343,6 +372,27 @@ export function EditProjectDialog({
                     </div>
                   </>
                 )}
+
+                <FormField label="合同文件（选填）">
+                  {existingMainFile && !contractMainFile && (
+                    <AttachmentFileList fileIds={[existingMainFile]} labelPrefix="已上传合同主文件" />
+                  )}
+                  <FileUploadField fieldKey="contract-main" purpose="contract" maxFiles={1}
+                    label={existingMainFile ? "选择替换的合同主文件" : "选择合同主文件"}
+                    value={contractMainFile ? [contractMainFile] : []} disabled={submitting}
+                    onBusyChange={setUploadingMain}
+                    onChange={(files) => setContractMainFile(files[0] ?? null)} />
+                </FormField>
+
+                <FormField label="其他附件">
+                  <AttachmentFileList fileIds={existingAttachments} labelPrefix="已上传合同附件" />
+                  {existingAttachments.length < MAX_BATCH_FILES && (
+                    <FileUploadField fieldKey="contract-attachments" purpose="contract" label="补充合同附件"
+                      maxFiles={MAX_BATCH_FILES - existingAttachments.length}
+                      value={contractAttachments} disabled={submitting}
+                      onBusyChange={setUploadingAttachments} onChange={setContractAttachments} />
+                  )}
+                </FormField>
               </div>
             )}
 
@@ -379,17 +429,18 @@ export function EditProjectDialog({
             <div className="flex justify-between pt-4 border-t border-slate-100 mt-4">
               <div>
                 {step > 1 && (
-                  <Button variant="outline" onClick={() => setStep(step - 1)}>
+                  <Button variant="outline" disabled={busy} onClick={() => setStep(step - 1)}>
                     上一步
                   </Button>
                 )}
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                <Button variant="outline" disabled={busy} onClick={() => handleOpenChange(false)}>
                   取消
                 </Button>
                 {step < 3 ? (
                   <Button
+                    disabled={busy}
                     className="bg-blue-600 hover:bg-blue-700 text-white"
                     onClick={() => setStep(step + 1)}
                   >
@@ -398,7 +449,7 @@ export function EditProjectDialog({
                 ) : (
                   <Button
                     className="bg-blue-600 hover:bg-blue-700 text-white"
-                    disabled={submitting}
+                    disabled={busy}
                     onClick={handleSubmit}
                   >
                     {submitting ? (

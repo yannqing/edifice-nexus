@@ -1,4 +1,5 @@
 "use client";
+import { useUploadBusinessRefresh } from "@/components/file/upload-workspace";
 
 import { useState, useEffect, useCallback } from "react";
 import {
@@ -167,6 +168,7 @@ export default function InspectionManagementPage() {
       }
     } catch { /* 静默 */ }
   }, []);
+  useUploadBusinessRefresh(() => { void fetchList(); void fetchStats(); });
 
   useEffect(() => {
     const controller = new AbortController();

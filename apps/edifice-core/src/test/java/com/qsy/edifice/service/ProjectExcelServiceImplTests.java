@@ -4,6 +4,7 @@ import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.ExcelWriter;
 import com.qsy.edifice.controller.ProjectController;
 import com.qsy.edifice.domain.dto.CreateProjectDto;
+import com.qsy.edifice.domain.dto.UpdateProjectDto;
 import com.qsy.edifice.domain.entity.*;
 import com.qsy.edifice.domain.excel.ProjectExcelData;
 import com.qsy.edifice.domain.excel.ProjectMemberExcelData;
@@ -23,6 +24,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -65,7 +68,7 @@ class ProjectExcelServiceImplTests {
         source.setUrl(source.getUrl() + ";DB_CLOSE_DELAY=-1");
         jdbc = new JdbcTemplate(source);
         jdbc.execute("CREATE TABLE import_project (id BIGINT PRIMARY KEY, code VARCHAR(100), name VARCHAR(255))");
-        jdbc.execute("CREATE TABLE import_contract (project_id BIGINT, file_id BIGINT)");
+        jdbc.execute("CREATE TABLE import_contract (project_id BIGINT, file_id BIGINT, attachments VARCHAR(4000))");
         jdbc.execute("CREATE TABLE import_stage (project_id BIGINT)");
         jdbc.execute("CREATE TABLE import_member (project_id BIGINT, user_id BIGINT)");
         projects = mock(ProjectMapper.class);
@@ -80,12 +83,33 @@ class ProjectExcelServiceImplTests {
                 "SELECT id, code FROM import_project WHERE code = ?", (rs, row) -> Project.builder()
                         .projectId(rs.getLong("id")).projectCode(rs.getString("code")).build(),
                 call.<String>getArgument(0)).stream().findFirst().orElse(null));
+        when(projects.selectByIdForUpdate(anyLong())).thenAnswer(call -> jdbc.query(
+                "SELECT id, code, name FROM import_project WHERE id = ?", (rs, row) -> Project.builder()
+                        .projectId(rs.getLong("id")).projectCode(rs.getString("code")).projectName(rs.getString("name")).build(),
+                call.<Long>getArgument(0)).stream().findFirst().orElse(null));
+        when(projects.updateById(any(Project.class))).thenAnswer(call -> {
+            Project project = call.getArgument(0);
+            return jdbc.update("UPDATE import_project SET name = ?, code = ? WHERE id = ?",
+                    project.getProjectName(), project.getProjectCode(), project.getProjectId());
+        });
 
         var contracts = mock(ContractService.class);
         when(contracts.saveContract(any())).thenAnswer(call -> {
             Contract contract = call.getArgument(0);
-            jdbc.update("INSERT INTO import_contract VALUES (?, ?)", contract.getProjectId(), contract.getContractFile());
+            jdbc.update("INSERT INTO import_contract VALUES (?, ?, ?)", contract.getProjectId(), contract.getContractFile(), contract.getContractOtherFiles());
             return true;
+        });
+        when(contracts.getContractByProjectId(anyLong())).thenAnswer(call -> jdbc.query(
+                "SELECT project_id, file_id, attachments FROM import_contract WHERE project_id = ?", (rs, row) -> {
+                    Contract contract = Contract.builder().contractFile(rs.getObject("file_id", Long.class))
+                            .contractOtherFiles(rs.getString("attachments")).build();
+                    contract.setProjectId(rs.getLong("project_id"));
+                    return contract;
+                }, call.<Long>getArgument(0)).stream().findFirst().orElse(null));
+        when(contracts.updateContract(any())).thenAnswer(call -> {
+            Contract contract = call.getArgument(0);
+            return jdbc.update("UPDATE import_contract SET file_id = ?, attachments = ? WHERE project_id = ?",
+                    contract.getContractFile(), contract.getContractOtherFiles(), contract.getProjectId()) > 0;
         });
         var templates = mock(ProjectStageTemplateService.class);
         when(templates.getEnabledByProjectTypeId(1L)).thenReturn(List.of(ProjectStageTemplate.builder()
@@ -119,6 +143,7 @@ class ProjectExcelServiceImplTests {
         files = new FileServiceImpl();
         var fileMapper = mock(FilesMapper.class);
         when(fileMapper.selectById(anyLong())).thenAnswer(call -> uploaded.get(call.getArgument(0)));
+        ReflectionTestUtils.setField(target, "filesMapper", fileMapper);
         ReflectionTestUtils.setField(files, "baseMapper", fileMapper);
         var jwt = mock(JwtUtils.class);
         request.addHeader("token", "import-token");
@@ -311,13 +336,91 @@ class ProjectExcelServiceImplTests {
         assertEquals(2L, jdbc.queryForObject("SELECT file_id FROM import_contract", Long.class));
     }
 
-    @Test void normalProjectCreationStillRequiresContractMainFile() {
+    @Test void normalProjectCreationAllowsMissingContractAndCanAddItLater() {
         CreateProjectDto dto = new CreateProjectDto();
         dto.setProjectName("Project"); dto.setProjectType(1L); dto.setContractType(0);
         dto.setContractAmount(BigDecimal.TEN); dto.setProjectCharges(List.of(42L));
-        var error = assertThrows(BusinessException.class, () -> creator.createProject(dto, 42L));
-        assertEquals("请上传合同主文件", error.getMessage());
-        assertNoProjects();
+        Long id = creator.createProject(dto, 42L);
+        assertEquals(1, count("import_contract"));
+        assertNull(jdbc.queryForObject("SELECT file_id FROM import_contract", Long.class));
+        assertEquals(1, count("import_member"));
+        assertEquals(1, count("import_stage"));
+
+        var update = new UpdateProjectDto();
+        update.setProjectId(id); update.setContractFile(1L); update.setContractOtherFiles(List.of(2L));
+        creator.updateProjectFull(update, 42L);
+        assertEquals(1L, jdbc.queryForObject("SELECT file_id FROM import_contract", Long.class));
+        assertEquals("[2]", jdbc.queryForObject("SELECT attachments FROM import_contract", String.class));
+
+        update = new UpdateProjectDto(); update.setProjectId(id); update.setProjectName("Renamed");
+        update.setContractAmount(BigDecimal.ONE); update.setContractOtherFiles(List.of());
+        update.setBenefitAmount(new BigDecimal("99999"));
+        creator.updateProjectFull(update, 42L);
+        assertEquals("Renamed", jdbc.queryForObject("SELECT name FROM import_project", String.class));
+        assertEquals(1L, jdbc.queryForObject("SELECT file_id FROM import_contract", Long.class));
+        assertEquals("[2]", jdbc.queryForObject("SELECT attachments FROM import_contract", String.class));
+
+        var extra = addFile(3L, "补充.pdf");
+        update.setContractFile(extra.getFileId()); update.setContractOtherFiles(List.of(2L, 3L, 3L));
+        creator.updateProjectFull(update, 42L);
+        assertEquals(3L, jdbc.queryForObject("SELECT file_id FROM import_contract", Long.class));
+        assertEquals("[2, 3]", jdbc.queryForObject("SELECT attachments FROM import_contract", String.class));
+    }
+
+    @Test void newContractFilesMustBeCompleteUndeletedAndOwnedByOperatorAndFailureRollsBack() {
+        CreateProjectDto dto = new CreateProjectDto();
+        dto.setProjectName("Project"); dto.setProjectType(1L); dto.setContractType(0);
+        dto.setContractAmount(BigDecimal.TEN); dto.setProjectCharges(List.of(42L));
+        Long id = creator.createProject(dto, 42L);
+        var update = new UpdateProjectDto(); update.setProjectId(id); update.setProjectName("Should roll back");
+        update.setContractFile(1L);
+        Files file = uploaded.get(1L);
+        file.setUploadUserId(99L);
+        assertThrows(BusinessException.class, () -> creator.updateProjectFull(update, 42L));
+        file.setUploadUserId(42L); file.setStatus(0);
+        assertThrows(BusinessException.class, () -> creator.updateProjectFull(update, 42L));
+        file.setStatus(1); file.setIsDeleted(1);
+        assertThrows(BusinessException.class, () -> creator.updateProjectFull(update, 42L));
+        update.setContractFile(999L);
+        assertThrows(BusinessException.class, () -> creator.updateProjectFull(update, 42L));
+        update.setContractFile(null); update.setContractOtherFiles(Arrays.asList((Long) null));
+        assertThrows(BusinessException.class, () -> creator.updateProjectFull(update, 42L));
+        assertEquals("Project", jdbc.queryForObject("SELECT name FROM import_project", String.class));
+        assertNull(jdbc.queryForObject("SELECT file_id FROM import_contract", Long.class));
+        assertNull(jdbc.queryForObject("SELECT attachments FROM import_contract", String.class));
+    }
+
+    @Test void contractFileMigrationPreservesExistingIdsAndAllowsNullAndRerun() {
+        jdbc.execute("CREATE TABLE contract (contract_id BIGINT PRIMARY KEY, contract_file BIGINT NOT NULL)");
+        jdbc.update("INSERT INTO contract VALUES (1, 123)");
+        var migration = new ResourceDatabasePopulator(new FileSystemResource("../../database/migrations/v15/optional_project_contract_file.sql"));
+        migration.execute(Objects.requireNonNull(jdbc.getDataSource()));
+        jdbc.update("INSERT INTO contract VALUES (2, NULL)");
+        migration.execute(jdbc.getDataSource());
+        assertEquals(123L, jdbc.queryForObject("SELECT contract_file FROM contract WHERE contract_id = 1", Long.class));
+        assertNull(jdbc.queryForObject("SELECT contract_file FROM contract WHERE contract_id = 2", Long.class));
+    }
+
+    @Test void attachmentLimitIncludesExistingFilesAndFailureDoesNotReplaceMainContract() {
+        CreateProjectDto dto = new CreateProjectDto();
+        dto.setProjectName("Project"); dto.setProjectType(1L); dto.setContractType(0);
+        dto.setContractAmount(BigDecimal.TEN); dto.setProjectCharges(List.of(42L));
+        Long id = creator.createProject(dto, 42L);
+        String savedAttachments = LongStream.rangeClosed(1, 20).boxed().toList().toString();
+        jdbc.update("UPDATE import_contract SET file_id = ?, attachments = ?", 1L, savedAttachments);
+        addFile(21L, "第21个附件.pdf");
+        var update = new UpdateProjectDto(); update.setProjectId(id); update.setContractFile(2L);
+        update.setContractOtherFiles(List.of(21L));
+        var error = assertThrows(BusinessException.class, () -> creator.updateProjectFull(update, 42L));
+        assertEquals("合同附件最多20个", error.getMessage());
+        assertEquals(1L, jdbc.queryForObject("SELECT file_id FROM import_contract", Long.class));
+        assertEquals(savedAttachments, jdbc.queryForObject("SELECT attachments FROM import_contract", String.class));
+    }
+
+    @Test void batchImportAllowsBlankContractColumnWhenNoFilesProvided() throws Exception {
+        assertCounts(importRows(List.of(row("P1", null), row("P2", null)), List.of(), false), 2, 0);
+        assertEquals(2, count("import_contract"));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM import_contract WHERE file_id IS NOT NULL", Integer.class));
     }
 
     @Test void storedExcelUsesTheSameContractMappingAndAuthorization() throws Exception {

@@ -60,6 +60,12 @@ public class UpdateProjectDto {
     @Schema(description = "合同金额")
     private BigDecimal contractAmount;
 
+    @Schema(description = "补充或替换合同主文件ID；未传或为null时保留原文件")
+    private Long contractFile;
+
+    @Schema(description = "本次新增的合同附件ID；未传或为空时保留原附件")
+    private List<Long> contractOtherFiles;
+
     /**
      * 基础金额
      */

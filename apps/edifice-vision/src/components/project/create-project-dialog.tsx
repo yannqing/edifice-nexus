@@ -4,8 +4,6 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -29,6 +27,7 @@ import type {
 } from "@/types/project";
 import { FileUploadField } from "@/components/file/file-upload-field";
 import { AmountInput } from "@/components/ui/amount-input";
+import { UploadWindowDialog as Dialog, UploadWindowContent as DialogContent, useUploadWindowStatus, withUploadWindow } from "@/components/file/upload-workspace";
 
 interface CreateProjectDialogProps {
   open: boolean;
@@ -58,7 +57,12 @@ const initialForm: CreateProjectParams = {
   preEndTime: "",
 };
 
-export function CreateProjectDialog({
+export const CreateProjectDialog = withUploadWindow(CreateProjectDialogSession, {
+  key: (props) => `project-create:${props.parentProject?.projectId ?? "new"}`,
+  title: (props) => props.parentProject ? `新建结算子项目 · ${props.parentProject.projectName}` : "新建项目",
+});
+
+function CreateProjectDialogSession({
   open,
   onOpenChange,
   onSuccess,
@@ -76,6 +80,7 @@ export function CreateProjectDialog({
   const [uploadingMain, setUploadingMain] = useState(false);
   const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const uploading = uploadingMain || uploadingAttachments;
+  useUploadWindowStatus(form.projectName ? `新建项目 · ${form.projectName}` : undefined, submitting);
 
   // 加载下拉数据
   const fetchOptions = useCallback(async () => {
@@ -156,19 +161,18 @@ export function CreateProjectDialog({
     if (!form.projectName.trim()) return "请输入项目名称";
     if (!form.projectType) return "请选择项目类型";
     if (form.contractAmount <= 0) return "请输入合同金额";
-    if (!form.contractFile) return "请上传合同主文件";
     if (form.projectCharges.length === 0) return "请至少选择一位项目经理";
     return "";
   };
 
   const handleSubmit = async () => {
-    if (uploading) return;
+    if (uploading || submitting) return;
     const msg = validate();
     if (msg) {
       toast.error(msg);
       // 自动跳转到对应步骤
       if (!form.projectName.trim() || !form.projectType) setStep(1);
-      else if (form.contractAmount <= 0 || !form.contractFile) setStep(2);
+      else if (form.contractAmount <= 0) setStep(2);
       else if (form.projectCharges.length === 0) setStep(3);
       setError(msg);
       return;
@@ -203,7 +207,7 @@ export function CreateProjectDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!uploading && !submitting) onOpenChange(nextOpen); }}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{parentProject ? "新建结算子项目" : "新建项目"}</DialogTitle>
@@ -221,6 +225,7 @@ export function CreateProjectDialog({
           ].map(({ n, label }) => (
             <button
               key={n}
+              disabled={uploading || submitting}
               onClick={() => setStep(n)}
               className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
@@ -378,15 +383,15 @@ export function CreateProjectDialog({
             </FormField>
 
             {/* 合同主文件 */}
-            <FormField label="合同文件" required>
-              <FileUploadField purpose="contract" maxFiles={1} value={contractMainFile ? [contractMainFile] : []}
+            <FormField label="合同文件（选填）">
+              <FileUploadField fieldKey="contract-main" purpose="contract" maxFiles={1} value={contractMainFile ? [contractMainFile] : []}
                 disabled={submitting} onBusyChange={setUploadingMain}
                 onChange={(files) => { setContractMainFile(files[0] ?? null); updateField("contractFile", files[0]?.fileId); }} />
             </FormField>
 
             {/* 合同附件 */}
             <FormField label="其他附件">
-              <FileUploadField purpose="contract" value={contractAttachments} disabled={submitting}
+              <FileUploadField fieldKey="contract-attachments" purpose="contract" value={contractAttachments} disabled={submitting}
                 onBusyChange={setUploadingAttachments} onChange={(files) => {
                   setContractAttachments(files); updateField("contractOtherFiles", files.map((file) => file.fileId));
                 }} />
@@ -437,7 +442,7 @@ export function CreateProjectDialog({
             )}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" disabled={uploading || submitting} onClick={() => onOpenChange(false)}>
               取消
             </Button>
             {step < 3 ? (

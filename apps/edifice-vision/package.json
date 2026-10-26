@@ -9,7 +9,10 @@
     "lint": "eslint",
     "test:folders": "node --experimental-strip-types --test tests/project-file-folders.test.mjs",
     "test:project-tree:browser": "node tests/project-tree.browser.mjs",
-    "test:project-import:browser": "node tests/project-import.browser.mjs"
+    "test:project-import:browser": "node tests/project-import.browser.mjs",
+    "test:project-contract:browser": "node tests/project-contract.browser.mjs",
+    "test:upload-queue": "node --experimental-strip-types --test tests/upload-queue.test.mjs",
+    "test:upload-background:browser": "node tests/upload-background.browser.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

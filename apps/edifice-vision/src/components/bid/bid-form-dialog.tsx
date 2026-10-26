@@ -4,8 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Paperclip } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
@@ -19,6 +17,7 @@ import type { BidFileVo, BidVo } from "@/types/bid";
 import { BID_FILE_CATEGORIES } from "@/types/bid";
 
 import { FileUploadField } from "@/components/file/file-upload-field";
+import { UploadWindowDialog as Dialog, UploadWindowContent as DialogContent, useUploadWindowStatus, withUploadWindow } from "@/components/file/upload-workspace";
 
 interface Props {
   open: boolean;
@@ -44,7 +43,12 @@ const newAttachment = (overrides?: Partial<AttachmentDraft>): AttachmentDraft =>
   ...overrides,
 });
 
-export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
+export const BidFormDialog = withUploadWindow(BidFormDialogSession, {
+  key: (props) => `bid:${props.bid?.bidId ?? "new"}`,
+  title: (props) => props.bid ? `编辑投标 · ${props.bid.bidName}` : "新建投标",
+});
+
+function BidFormDialogSession({ open, onOpenChange, bid, onSuccess }: Props) {
   const editing = !!bid;
 
   const [users, setUsers] = useState<UserListItem[]>([]);
@@ -60,6 +64,7 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
+  useUploadWindowStatus(bidName ? `${editing ? "编辑" : "新建"}投标 · ${bidName}` : undefined, submitting);
 
   const reset = useCallback(() => {
     if (bid) {
@@ -270,7 +275,7 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
               <span className="text-xs font-medium text-slate-600">附件</span>
 
             </div>
-            <FileUploadField purpose="bid" disabled={submitting} onBusyChange={setUploading}
+            <FileUploadField fieldKey="bid-files" purpose="bid" disabled={submitting} onBusyChange={setUploading}
               renderExtra={(file) => <label className="my-2 flex items-center justify-end gap-2 text-xs text-slate-500">
                 文件分类
                 <select disabled={submitting} className="rounded border border-slate-200 bg-white px-2 py-1"
@@ -303,7 +308,7 @@ export function BidFormDialog({ open, onOpenChange, bid, onSuccess }: Props) {
         </div>
 
         <div className="flex justify-end gap-2 pt-4 mt-4 border-t border-slate-100">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting || uploading}>
             取消
           </Button>
           <Button

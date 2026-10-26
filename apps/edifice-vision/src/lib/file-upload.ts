@@ -49,9 +49,9 @@ async function retry<T>(action: () => Promise<T>, signal?: AbortSignal): Promise
   throw error;
 }
 
-function sessionKey(file: File, purpose: UploadPurpose) {
+function sessionKey(file: File, purpose: UploadPurpose, scope?: string) {
   const directory = file.webkitRelativePath ? `:${encodeURIComponent(file.webkitRelativePath)}` : "";
-  return `edifice:upload:v1:${purpose}:${file.name}:${file.size}:${file.lastModified}${directory}`;
+  return `edifice:upload:v1:${purpose}:${file.name}:${file.size}:${file.lastModified}${directory}${scope ? `:scope:${encodeURIComponent(scope)}` : ""}`;
 }
 function cached(key: string) { try { return sessionStorage.getItem(key); } catch { return null; } }
 function cache(key: string, id?: string) {
@@ -82,12 +82,13 @@ async function finishUpload(id: string, totalSize: number, signal?: AbortSignal)
 
 export async function uploadFile(file: File, purpose: UploadPurpose, options?: {
   signal?: AbortSignal;
+  scope?: string;
   onProgress?: (value: number) => void;
   onSession?: (id: string) => void;
 }): Promise<FilesVo> {
   if (!file.size || file.size > MAX_FILE_SIZE) throw new Error(`单个文件必须大于0且不能超过${MAX_FILE_SIZE_LABEL}`);
   const signal = options?.signal;
-  const key = sessionKey(file, purpose);
+  const key = sessionKey(file, purpose, options?.scope);
   let session: UploadSession | null = null;
   const savedId = cached(key);
   if (savedId) {

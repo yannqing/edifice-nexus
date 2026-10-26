@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { ResponseCode } from "@/types/api";
 import type { FilesVo, ProjectListVo, ProjectStageVo } from "@/types/project";
 import { FILE_CATEGORY_OPTIONS, type ProjectFileVo, type ProjectFileFolder } from "@/types/project-file";
+import { UploadWindowDialog, UploadWindowContent, useUploadWindowStatus, withUploadWindow } from "@/components/file/upload-workspace";
 
 interface Props {
   open: boolean;
@@ -30,7 +31,12 @@ interface Props {
 const fieldClass = "h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-sm disabled:bg-slate-50";
 const dateText = (value?: string | null) => value?.replace("T", " ").slice(0, 16) ?? "-";
 
-export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedProjectId, lockedProjectName, initialTab = "upload", initialFolderId = "0" }: Props) {
+export const UploadProjectFileDialog = withUploadWindow(UploadProjectFileDialogSession, {
+  key: (props) => `project-files:${props.lockedProjectId ?? "select"}:${props.initialFolderId ?? "0"}`,
+  title: (props) => `项目文件 · ${props.lockedProjectName ?? "选择项目"}`,
+});
+
+function UploadProjectFileDialogSession({ open, onOpenChange, onSuccess, lockedProjectId, lockedProjectName, initialTab = "upload", initialFolderId = "0" }: Props) {
   const [tab, setTab] = useState<"upload" | "drafts">(initialTab);
   const [projects, setProjects] = useState<ProjectListVo[]>([]);
   const [projectId, setProjectId] = useState(lockedProjectId ?? "");
@@ -64,6 +70,7 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
   const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState<ProjectFileVo | null>(null);
   const pageCount = Math.max(1, Math.ceil(total / 10));
+  const visible = useUploadWindowStatus(`项目文件 · ${lockedProjectName || projects.find((project) => project.projectId === projectId)?.projectName || "选择项目"}`, busy);
 
   useEffect(() => {
     if (!open) return;
@@ -218,8 +225,8 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
   };
 
   return <>
-    <Dialog open={open} onOpenChange={close}>
-      <DialogContent className="flex h-[min(820px,calc(100dvh_-_2rem))] max-h-[calc(100dvh_-_2rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 transition-[opacity,transform]">
+    <UploadWindowDialog open={open} onOpenChange={close}>
+      <UploadWindowContent className="flex h-[min(820px,calc(100dvh_-_2rem))] max-h-[calc(100dvh_-_2rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 transition-[opacity,transform]">
         <DialogHeader className="shrink-0 border-b border-slate-100 px-5 pb-3 pt-5 pr-12">
           <DialogTitle>项目文件申请</DialogTitle>
           <DialogDescription>草稿自保存起保留 {retention} 天，到期失效；已提交文件不受影响。</DialogDescription>
@@ -266,7 +273,7 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
                 <input className={fieldClass} value={description} maxLength={512} disabled={busy} onChange={(e) => setDescription(e.target.value)} />
               </label>
             </div>
-            <div className="mt-4"><FileUploadField purpose="project" value={files} onChange={setFiles} onBusyChange={setUploading}
+            <div className="mt-4"><FileUploadField fieldKey="project-files" purpose="project" value={files} onChange={setFiles} onBusyChange={setUploading}
               allowDirectory maxDirectoryDepth={20 - folderAncestors(folders, folderId).length}
               maxFiles={maxBatchFiles} disabled={busy || !projectId || !foldersReady} /></div>
           </div> : <div className="flex min-h-0 flex-1 flex-col px-5 pt-3">
@@ -322,11 +329,11 @@ export function UploadProjectFileDialog({ open, onOpenChange, onSuccess, lockedP
             </Button>}
           </div>
         </>}
-      </DialogContent>
-    </Dialog>
-    <UserPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} value={approver?.id} title="选择首审人"
+      </UploadWindowContent>
+    </UploadWindowDialog>
+    <UserPickerDialog open={pickerOpen && visible} onOpenChange={setPickerOpen} value={approver?.id} title="选择首审人"
       onSelect={(user) => setApprover({ id: user.userId, name: user.realName || user.username })} />
-    <Dialog open={!!editing} onOpenChange={(value) => { if (!value && !busy) setEditing(null); }}>
+    <Dialog open={!!editing && visible} onOpenChange={(value) => { if (!value && !busy) setEditing(null); }}>
       <DialogContent className="max-w-lg">
         <DialogHeader><DialogTitle>编辑文件草稿</DialogTitle><DialogDescription>到期时间：{dateText(editing?.draftExpiresAt)}</DialogDescription></DialogHeader>
         {editing && <div className="mt-4 space-y-3">

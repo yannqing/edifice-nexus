@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { CreateInspectionDialog } from "@/components/inspection/create-inspection-dialog";
 import { CreateProjectDialog } from "@/components/project/create-project-dialog";
+import { useUploadBusinessRefresh } from "@/components/file/upload-workspace";
 import { EditProjectDialog } from "@/components/project/edit-project-dialog";
 import { ImportProjectDialog } from "@/components/project/import-project-dialog";
 import { ProjectDetailDialog } from "@/components/project/project-detail-dialog";
@@ -106,6 +107,7 @@ export function ProjectBrowser({ scope }: { scope: ProjectTreeScope }) {
     refresh,
     queryKey,
   } = useProjectTree(scope, query);
+  useUploadBusinessRefresh(refresh);
   useEffect(() => {
     if (search.trim() === keyword) return;
     const timer = window.setTimeout(() => {

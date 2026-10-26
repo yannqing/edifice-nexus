@@ -69,7 +69,7 @@ public class CreateProjectDto {
     /**
      * 合同主文件id（通过文件上传接口获取）
      */
-    @Schema(description = "合同主文件id")
+    @Schema(description = "合同主文件id（选填，可在编辑项目时补充）")
     private Long contractFile;
 
     /**

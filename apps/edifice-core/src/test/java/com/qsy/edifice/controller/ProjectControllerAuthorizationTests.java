@@ -158,7 +158,7 @@ class ProjectControllerAuthorizationTests {
         var dto = new UpdateProjectDto(); dto.setProjectId(10L);
         projectController.updateProjectFull(dto, authenticatedRequest());
         verify(projectService).ensureProjectManager(10L, 42L, false);
-        verify(projectService).updateProjectFull(dto);
+        verify(projectService).updateProjectFull(dto, 42L);
     }
 
     @Test
@@ -167,7 +167,7 @@ class ProjectControllerAuthorizationTests {
         var dto = new UpdateProjectDto(); dto.setProjectId(10L);
         doThrow(new BusinessException("not a manager")).when(projectService).ensureProjectManager(10L, 42L, false);
         assertThrows(BusinessException.class, () -> projectController.updateProjectFull(dto, authenticatedRequest()));
-        verify(projectService, never()).updateProjectFull(any());
+        verify(projectService, never()).updateProjectFull(any(), any());
     }
 
     @Test
@@ -203,7 +203,7 @@ class ProjectControllerAuthorizationTests {
         var dto = new UpdateProjectDto(); dto.setProjectId(10L);
         projectController.updateProjectFull(dto, authenticatedRequest());
         verify(projectService).ensureProjectManager(10L, 42L, true);
-        verify(projectService).updateProjectFull(dto);
+        verify(projectService).updateProjectFull(dto, 42L);
     }
 
     @Test

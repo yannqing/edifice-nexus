@@ -36,8 +36,8 @@ export interface ContractVo {
   /** 0-基本收费/1-基本+效益 */
   contractType: number;
   contractAmount: number;
-  contractFile: string;
-  contractOtherFiles: string;
+  contractFile: string | null;
+  contractOtherFiles: string | null;
   baseAmount: number;
   benefitRules: string;
   /** 当前预计效益金额（v0.4 新增，contract_type=1 才有意义） */
@@ -199,6 +199,10 @@ export interface UpdateProjectParams {
   projectStatus?: number;
   contractType?: number;
   contractAmount?: number;
+  /** 补充或替换主文件；未传则保留原文件。 */
+  contractFile?: string;
+  /** 本次新增的附件，不包含原有附件。 */
+  contractOtherFiles?: string[];
   baseAmount?: number;
   benefitRule?: string;
   /** 预计效益金额（v0.4，仅 contractType=1） */

@@ -92,8 +92,9 @@ public interface ProjectService {
     /**
      * 更新项目（含合同、成员）
      * @param dto 更新参数
+     * @param userId 当前操作人，用于校验新增合同文件的归属
      */
-    void updateProjectFull(UpdateProjectDto dto);
+    void updateProjectFull(UpdateProjectDto dto, Long userId);
 
     /**
      * 删除项目

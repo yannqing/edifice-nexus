@@ -27,6 +27,7 @@ import {
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
+import { UPLOAD_WINDOW_MINIMIZED, useUploadBusinessRefresh } from "@/components/file/upload-workspace";
 import { DialogSkeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -223,6 +224,12 @@ export function ProjectDetailDialog({
   const [stageActionLoading, setStageActionLoading] = useState(false);
   const [editingCoeffStageId, setEditingCoeffStageId] = useState<string | null>(null);
   const [editingCoeffValue, setEditingCoeffValue] = useState<string>("1");
+  useEffect(() => {
+    if (!open) return;
+    const minimize = () => onOpenChange(false);
+    window.addEventListener(UPLOAD_WINDOW_MINIMIZED, minimize);
+    return () => window.removeEventListener(UPLOAD_WINDOW_MINIMIZED, minimize);
+  }, [open, onOpenChange]);
 
   const reloadDetail = async () => {
     if (!activeProjectId || !activeViewRef.current.open || activeViewRef.current.id !== activeProjectId) return;
@@ -236,6 +243,8 @@ export function ProjectDetailDialog({
       // 静默
     }
   };
+
+  useUploadBusinessRefresh(reloadDetail);
 
   // 启动阶段
   const handleStartStages = async (stageIds: string[]) => {
@@ -450,6 +459,7 @@ function ProjectFilesSection({
       if (!signal?.aborted) setLoading(false);
     }
   }, [projectId, folderId, debouncedKeyword, fileCategory, currentPage]);
+  useUploadBusinessRefresh(() => { void fetchData(); });
 
   useEffect(() => {
     const controller = new AbortController();

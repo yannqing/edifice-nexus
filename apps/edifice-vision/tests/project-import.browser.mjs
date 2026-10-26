@@ -69,7 +69,8 @@ try {
   assert(await start().isDisabled());
   await dialog.locator('input[type="file"]').nth(0).setInputFiles(file("projects.xlsx"));
   await dialog.getByText("projects.xlsx", { exact: true }).waitFor();
-  assert(await start().isDisabled(), "Excel alone must not enable import");
+  await page.waitForFunction(() => !Array.from(document.querySelectorAll('button')).find((button) => button.textContent === "开始导入")?.disabled);
+  assert(await start().isEnabled(), "Excel alone must enable import when contracts are optional");
 
   let releaseUpload;
   holdUpload = new Promise((resolve) => { releaseUpload = resolve; });
@@ -143,9 +144,18 @@ try {
     assert([...sessions.values()].some((session) => session.file.displayName === "estimate." + extension && session.file.fileType === "contract"));
   }
   assert(await start().isDisabled(), "Engineering attachments must not replace the Excel workbook");
+  await dialog.getByRole("button", { name: "关闭", exact: true }).last().click();
+  await dialog.waitFor({ state: "hidden" });
+  await page.getByRole("button", { name: "导入", exact: true }).click();
+  await dialog.locator('input[type="file"]').first().setInputFiles(file("without-contract.xlsx"));
+  await dialog.getByText("without-contract.xlsx", { exact: true }).waitFor();
+  failNextImport = false;
+  await start().click();
+  await dialog.getByText("导入完成：成功 1 条", { exact: true }).waitFor();
+  assert.deepEqual(imports.at(-1).contractFileIds, [], "Optional contracts must also work in the actual import request");
   assert.deepEqual(errors, []);
   assert.deepEqual(unexpected, []);
-  console.log(JSON.stringify({ uploadsAndImportMocked: true, contractRequired: true, unfinishedUploadBlocked: true,
+  console.log(JSON.stringify({ uploadsAndImportMocked: true, contractOptional: true, unfinishedUploadBlocked: true,
     importCloseBlocked: true, repeatedImportBlocked: true, contractIdsSubmitted: true, resetsOnClose: true, duplicateNamesBlocked: true, failedImportMarked: true,
     engineeringFormatsAccepted: engineeringFormats, excelRestrictionPreserved: true, errors, output }));
 } finally {

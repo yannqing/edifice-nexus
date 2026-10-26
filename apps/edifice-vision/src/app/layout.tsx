@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/store/auth-context";
+import { UploadWorkspaceProvider } from "@/components/file/upload-workspace";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -30,7 +31,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider>
-          {children}
+          <UploadWorkspaceProvider>{children}</UploadWorkspaceProvider>
           <Toaster position="top-center" richColors closeButton />
         </AuthProvider>
       </body>

@@ -4,8 +4,6 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Loader2, Download } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -18,6 +16,7 @@ import { getAccessToken } from "@/lib/token";
 
 import { FileUploadField } from "@/components/file/file-upload-field";
 import type { FilesVo } from "@/types/project";
+import { UploadWindowDialog as Dialog, UploadWindowContent as DialogContent, useUploadWindowStatus, withUploadWindow } from "@/components/file/upload-workspace";
 
 interface ImportProjectDialogProps {
   open: boolean;
@@ -25,9 +24,10 @@ interface ImportProjectDialogProps {
   onSuccess: () => void;
 }
 
-export function ImportProjectDialog(props: ImportProjectDialogProps) {
-  return <ImportProjectDialogSession key={props.open ? "open" : "closed"} {...props} />;
-}
+export const ImportProjectDialog = withUploadWindow(ImportProjectDialogSession, {
+  key: () => "project-import",
+  title: () => "导入项目",
+});
 
 function ImportProjectDialogSession({
   open,
@@ -44,6 +44,7 @@ function ImportProjectDialogSession({
   const [completed, setCompleted] = useState(false);
   const importing = useRef(false);
   const busy = uploading || fileBusy || contractBusy;
+  useUploadWindowStatus(undefined, uploading, completed);
   const contractNames = contractFiles.map((item) => item.displayName.trim());
   const duplicateNames = [...new Set(contractNames.filter((name, index) => contractNames.indexOf(name) !== index))];
 
@@ -53,7 +54,7 @@ function ImportProjectDialogSession({
   };
 
   const handleImport = async () => {
-    if (!file || !contractFiles.length || busy || completed || duplicateNames.length || importing.current) return;
+    if (!file || busy || completed || duplicateNames.length || importing.current) return;
 
     importing.current = true;
     setUploading(true);
@@ -137,14 +138,14 @@ function ImportProjectDialogSession({
 
           <div className="space-y-2">
             <p className="text-sm font-medium">Excel 项目文件</p>
-            <FileUploadField purpose="import" maxFiles={1} accept=".xlsx,.xls" value={file ? [file] : []}
+            <FileUploadField fieldKey="import-workbook" purpose="import" maxFiles={1} accept=".xlsx,.xls" value={file ? [file] : []}
               disabled={busy} onBusyChange={setFileBusy}
               onChange={(files) => { setFile(files[0] ?? null); setResult(""); setCompleted(false); }} />
           </div>
 
           <div className="space-y-2">
-            <p className="text-sm font-medium">合同主文件（Excel 列：合同主文件名）</p>
-            <FileUploadField purpose="contract" value={contractFiles} label="选择合同文件"
+            <p className="text-sm font-medium">合同主文件（选填，Excel 列：合同主文件名）</p>
+            <FileUploadField fieldKey="import-contracts" purpose="contract" value={contractFiles} label="选择合同文件"
               disabled={busy} onBusyChange={setContractBusy}
               onChange={(files) => { setContractFiles(files); setResult(""); }} />
             {duplicateNames.length > 0 && <p role="alert" className="text-sm text-rose-600 break-all">
@@ -174,7 +175,7 @@ function ImportProjectDialogSession({
           </Button>
           <Button
             className="bg-blue-600 hover:bg-blue-700 text-white"
-            disabled={!file || !contractFiles.length || busy || completed || duplicateNames.length > 0}
+            disabled={!file || busy || completed || duplicateNames.length > 0}
             onClick={handleImport}
           >
             {uploading ? (

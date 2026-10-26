@@ -5,8 +5,6 @@ import { Loader2, RefreshCw, UserRoundSearch } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
@@ -25,6 +23,7 @@ import {
 import { FileUploadField } from "@/components/file/file-upload-field";
 import { UserPickerDialog } from "@/components/user/user-picker-dialog";
 import { notifySidebarCountsUpdated } from "@/lib/sidebar-counts";
+import { UploadWindowDialog as Dialog, UploadWindowContent as DialogContent, useUploadWindowStatus, withUploadWindow } from "@/components/file/upload-workspace";
 
 type InitialInspectionProject = Pick<ProjectListVo, "projectId" | "projectName" | "projectCode">;
 
@@ -68,7 +67,12 @@ function formatPercentage(value: number) {
   return String(Math.round(value * 100) / 100);
 }
 
-export function CreateInspectionDialog({
+export const CreateInspectionDialog = withUploadWindow(CreateInspectionDialogSession, {
+  key: (props) => `inspection:${props.initialInspection?.inspectionFormId ?? props.initialProject?.projectId ?? "new"}`,
+  title: (props) => `验工申请${props.initialProject?.projectName ? ` · ${props.initialProject.projectName}` : ""}`,
+});
+
+function CreateInspectionDialogSession({
   open,
   onOpenChange,
   onSuccess,
@@ -114,6 +118,7 @@ export function CreateInspectionDialog({
   const [stageLoading, setStageLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [reloadVersion, setReloadVersion] = useState(0);
+  const visible = useUploadWindowStatus(`验工申请${projectLabel ? ` · ${projectLabel}` : ""}`, submitting);
   const selectedStage = useMemo(
     () => stages.find((stage) => String(stage.projectStageId) === selectedStageId),
     [stages, selectedStageId]
@@ -478,7 +483,7 @@ export function CreateInspectionDialog({
             <label className="text-sm font-medium text-slate-700 mb-1.5 block">
               验收材料 <span className="text-rose-500">*</span>
             </label>
-            <FileUploadField purpose="inspection" value={files} onChange={setFiles}
+            <FileUploadField fieldKey="inspection-files" purpose="inspection" value={files} onChange={setFiles}
               onBusyChange={setUploading} disabled={submitting} />
           </div>
         </div>
@@ -490,7 +495,7 @@ export function CreateInspectionDialog({
               : "hidden"
           }
         >
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" disabled={uploading || submitting} onClick={() => onOpenChange(false)}>
             取消
           </Button>
           <Button
@@ -512,7 +517,7 @@ export function CreateInspectionDialog({
       </Dialog>
 
       <UserPickerDialog
-        open={approverPickerOpen}
+        open={approverPickerOpen && visible}
         onOpenChange={setApproverPickerOpen}
         value={firstApproverId}
         title="选择一级审批人"

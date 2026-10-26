@@ -35,6 +35,7 @@ import { useDetailLink } from "@/hooks/use-detail-link";
 import { copyProjectFileToDrafts } from "@/services/project-file";
 import { UploadProjectFileDialog } from "@/components/project-file/upload-project-file-dialog";
 import { toast } from "sonner";
+import { useUploadBusinessRefresh } from "@/components/file/upload-workspace";
 
 type Tab = "pending" | "all" | "mine";
 const PAGE_SIZE = 10;
@@ -150,6 +151,7 @@ export default function ProjectFilesApprovalPage() {
   }, []);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
+  useUploadBusinessRefresh(() => { void fetchData(); void fetchStats(); });
 
   const handleOpenApprove = async (id: string) => {
     const res = await getProjectFileDetail(id);

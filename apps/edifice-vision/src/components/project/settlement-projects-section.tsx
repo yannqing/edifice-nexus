@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Eye, FolderTree, Loader2, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CreateProjectDialog } from "@/components/project/create-project-dialog";
+import { useUploadBusinessRefresh } from "@/components/file/upload-workspace";
 import { getSettlementProjects } from "@/services/project";
 import { isAbortError } from "@/lib/request";
 import { ResponseCode } from "@/types/api";
@@ -27,6 +28,7 @@ export function SettlementProjectsSection({ project, onSelect, onChange }: {
   const data = result?.data ?? null;
   const loading = result?.key !== requestKey;
   const error = !loading && !!result?.error;
+  useUploadBusinessRefresh(() => setRevision((value) => value + 1));
 
   useEffect(() => {
     const timer = window.setTimeout(() => setKeyword(search.trim()), 300);
